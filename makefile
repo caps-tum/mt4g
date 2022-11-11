@@ -1,6 +1,6 @@
 all: c15 MemTop
 
-CXXARGS = -std=c++14 -g -ICUDASAMPLES/Common #-gencode arch=compute_35,code=sm_35
+CXXARGS = -std=c++14 -g -ICUDASAMPLES/Common -gencode arch=compute_60,code=sm_60
 CXXARGSDEBUG = -Xcompiler -DNDEBUG
 UNAME = $(shell uname)
 
