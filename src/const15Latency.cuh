@@ -6,7 +6,21 @@
 #define CUDATEST_CONST15LATENCY_CUH
 
 #include "GPU_resources.cuh"
-#include <filesystem>
+
+#ifndef __has_include
+  static_assert(false, "__has_include not supported");
+#else
+#  if __cplusplus >= 201703L && __has_include(<filesystem>)
+#    include <filesystem>
+     namespace fs = std::filesystem;
+#  elif __has_include(<experimental/filesystem>)
+#    include <experimental/filesystem>
+     namespace fs = std::experimental::filesystem;
+#  elif __has_include(<boost/filesystem.hpp>)
+#    include <boost/filesystem.hpp>
+     namespace fs = boost::filesystem;
+#  endif
+#endif
 
 // Call external helper exe for Constant L1.5 Latency due to Constant Memory limit of 64 KiB
 LatencyTuple getC15Latency(int deviceID) {
@@ -21,10 +35,10 @@ LatencyTuple getC15Latency(int deviceID) {
     std::cout << "Executing c15.exe - if it does not exist in the current directory, it may crash. " << std::endl;
     snprintf(cmd, 1024, "c15.exe -d:%d", deviceID);
 #else
-    std::filesystem::path path = std::filesystem::canonical("/proc/self/exe").parent_path();
-    std::filesystem::path file("c15");
+    fs::path path = fs::canonical("/proc/self/exe").parent_path();
+    fs::path file("c15");
     path = path / file;
-    if(std::filesystem::exists(path))
+    if(fs::exists(path))
     {
         std::cerr << "Epath " << path << "does not exist. Skipping..." << std::endl;
         snprintf(cmd, 1024, "%s -d:%d", path.u8string().c_str(), deviceID);
