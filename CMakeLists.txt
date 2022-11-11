@@ -2,10 +2,9 @@ cmake_minimum_required(VERSION 3.22)
 project(mt4g CUDA)
 enable_language(CUDA CXX)
 
-set(CMAKE_CUDA_STANDARD 14)
+set(CMAKE_CUDA_STANDARD 17)
 
 find_package(CUDA 11 REQUIRED)
-
 
 string(TOUPPER ${NVIDIA_UARCH} NVIDIA_UARCH)
 if(NVIDIA_UARCH STREQUAL "KEPLER")
