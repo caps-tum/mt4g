@@ -1,3 +1,8 @@
+build/*
+inst-dir/*
+*GPU_Memory_Topology.csv
+
+
 # Prerequisites
 *.d
 
