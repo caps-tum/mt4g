@@ -54,4 +54,4 @@ if ("${IsDebug}" STREQUAL "1")
 endif()
 
 
-install(TARGETS mt4g c15 DESTINATION .)
+install(TARGETS mt4g c15 DESTINATION bin)
