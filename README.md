@@ -1,4 +1,4 @@
-# GPUplayground
+# mt4g -- Memory Topology for GPUs
 
 This project tries to capture the memory topology of Nvidia GPUs, specifically all GPUs since the Kepler microarchitecture.
 
