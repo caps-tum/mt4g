@@ -1,23 +1,19 @@
 
-#ifndef CUDATEST_L1
-#define CUDATEST_L1
+#ifndef CUDATEST_L2_SEGMENTSIZE
+#define CUDATEST_L2_SEGMENTSIZE
 
-# include <cstdio>
 
-# include "binarySearch.h"
-# include "cuda.h"
-# include "eval.h"
-# include "GPU_resources.cuh"
 
-__global__ void l1_size (unsigned int * my_array, int array_length, unsigned int * duration, unsigned int *index, bool* isDisturbed);
 
-bool launchL1KernelBenchmark(int N, int stride, double *avgOut, unsigned int* potMissesOut, unsigned int** time, int* error);
+__global__ void l2_segment_size (unsigned int * my_array, int array_length, unsigned int * duration, unsigned int *index, bool* isDisturbed);
 
-CacheSizeResult measure_L1() {
+bool launchL2SegmentSizeBenchmark(int N, int stride, double *avgOut, unsigned int* potMissesOut, unsigned int** time, int* error);
+
+CacheSizeResult measure_L2_segment_size() {
 // 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024
-    int absoluteLowerBoundary = 1024;
-    int absoluteUpperBoundary = 1024 << 10; // 1024 * 1024
-    int widenBounds = 8;
+    int absoluteLowerBoundary = 1024 * 1024; //1MB
+    int absoluteUpperBoundary = 1024 * 1024 << 10; // 1GB
+    int widenBounds = 0;
 
     //Start with 1K integers until 1000K integers
     int bounds[2] = {absoluteLowerBoundary, absoluteUpperBoundary};
@@ -31,10 +27,10 @@ CacheSizeResult measure_L1() {
     int begin = bounds[0] - widenBounds;
     int end = bounds[1] + widenBounds;
     int stride = 1;
-    int arrayIncrease = 1;
+    int arrayIncrease = 100000;
 
     while (cp == -1 && begin >= absoluteLowerBoundary / sizeof(int) - widenBounds && end <= absoluteUpperBoundary / sizeof(int) + widenBounds) {
-        cp = wrapBenchmarkLaunch(launchL1KernelBenchmark, begin, end, stride, arrayIncrease, "L1");
+        cp = wrapBenchmarkLaunch(launchL2SegmentSizeBenchmark, begin, end, stride, arrayIncrease, "L2");
 
         if (cp == -1) {
             begin = begin - (end - begin);
@@ -55,7 +51,7 @@ CacheSizeResult measure_L1() {
 }
 
 
-bool launchL1KernelBenchmark(int N, int stride, double *avgOut, unsigned int* potMissesOut, unsigned int** time, int* error) {
+bool launchL2SegmentSizeBenchmark(int N, int stride, double *avgOut, unsigned int* potMissesOut, unsigned int** time, int* error) {
     //cudaDeviceReset();
     cudaError_t error_id;
 
@@ -67,28 +63,28 @@ bool launchL1KernelBenchmark(int N, int stride, double *avgOut, unsigned int* po
         // Allocate Memory on Host
         h_a = (unsigned int *) malloc(sizeof(unsigned int) * (N));
         if (h_a == nullptr) {
-            printf("[L1.CUH]: malloc h_a Error\n");
+            printf("[L2_SEGMENT_SIZE.CUH]: malloc h_a Error\n");
             *error = 1;
             break;
         }
 
         h_index = (unsigned int *) malloc(sizeof(unsigned int) * MEASURE_SIZE);
         if (h_index == nullptr) {
-            printf("[L1.CUH]: malloc h_index Error\n");
+            printf("[L2_SEGMENT_SIZE.CUH]: malloc h_index Error\n");
             *error = 1;
             break;
         }
 
         h_timeinfo = (unsigned int *) malloc(sizeof(unsigned int) * MEASURE_SIZE);
         if (h_timeinfo == nullptr) {
-            printf("[L1.CUH]: malloc h_timeinfo Error\n");
+            printf("[L2_SEGMENT_SIZE.CUH]: malloc h_timeinfo Error\n");
             *error = 1;
             break;
         }
 
         disturb = (bool *) malloc(sizeof(bool));
         if (disturb == nullptr) {
-            printf("[L1.CUH]: malloc disturb Error\n");
+            printf("[L2_SEGMENT_SIZE.CUH]: malloc disturb Error\n");
             *error = 1;
             break;
         }
@@ -96,28 +92,28 @@ bool launchL1KernelBenchmark(int N, int stride, double *avgOut, unsigned int* po
         // Allocate Memory on GPU
         error_id = cudaMalloc((void **) &d_a, sizeof(unsigned int) * (N));
         if (error_id != cudaSuccess) {
-            printf("[L1.CUH]: cudaMalloc d_a Error: %s\n", cudaGetErrorString(error_id));
+            printf("[L2_SEGMENT_SIZE.CUH]: cudaMalloc d_a Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
         error_id = cudaMalloc((void **) &duration, sizeof(unsigned int) * MEASURE_SIZE);
         if (error_id != cudaSuccess) {
-            printf("[L1.CUH]: cudaMalloc duration Error: %s\n", cudaGetErrorString(error_id));
+            printf("[L2_SEGMENT_SIZE.CUH]: cudaMalloc duration Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
         error_id = cudaMalloc((void **) &d_index, sizeof(unsigned int) * MEASURE_SIZE);
         if (error_id != cudaSuccess) {
-            printf("[L1.CUH]: cudaMalloc d_index Error: %s\n", cudaGetErrorString(error_id));
+            printf("[L2_SEGMENT_SIZE.CUH]: cudaMalloc d_index Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
         error_id = cudaMalloc((void **) &d_disturb, sizeof(bool));
         if (error_id != cudaSuccess) {
-            printf("[L1.CUH]: cudaMalloc disturb Error: %s\n", cudaGetErrorString(error_id));
+            printf("[L2_SEGMENT_SIZE.CUH]: cudaMalloc disturb Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
@@ -130,7 +126,7 @@ bool launchL1KernelBenchmark(int N, int stride, double *avgOut, unsigned int* po
         // Copy array from Host to GPU
         error_id = cudaMemcpy(d_a, h_a, sizeof(unsigned int) * N, cudaMemcpyHostToDevice);
         if (error_id != cudaSuccess) {
-            printf("[L1.CUH]: cudaMemcpy d_a Error: %s\n", cudaGetErrorString(error_id));
+            printf("[L2_SEGMENT_SIZE.CUH]: cudaMemcpy d_a Error: %s\n", cudaGetErrorString(error_id));
             *error = 3;
             break;
         }
@@ -139,13 +135,13 @@ bool launchL1KernelBenchmark(int N, int stride, double *avgOut, unsigned int* po
         // Launch Kernel function
         dim3 Db = dim3(1);
         dim3 Dg = dim3(1, 1, 1);
-        l1_size <<<Dg, Db>>>(d_a, N, duration, d_index, d_disturb);
+        l2_segment_size <<<Dg, Db>>>(d_a, N, duration, d_index, d_disturb);
 
         cudaDeviceSynchronize();
 
         error_id = cudaGetLastError();
         if (error_id != cudaSuccess) {
-            printf("[L1.CUH]: Kernel launch/execution Error: %s\n", cudaGetErrorString(error_id));
+            printf("[L2_SEGMENT_SIZE.CUH]: Kernel launch/execution Error: %s\n", cudaGetErrorString(error_id));
             *error = 5;
             break;
         }
@@ -154,21 +150,21 @@ bool launchL1KernelBenchmark(int N, int stride, double *avgOut, unsigned int* po
         // Copy results from GPU to Host
         error_id = cudaMemcpy((void *) h_timeinfo, (void *) duration, sizeof(unsigned int) * MEASURE_SIZE,cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
-            printf("[L1.CUH]: cudaMemcpy duration Error: %s\n", cudaGetErrorString(error_id));
+            printf("[L2_SEGMENT_SIZE.CUH]: cudaMemcpy duration Error: %s\n", cudaGetErrorString(error_id));
             *error = 6;
             break;
         }
 
         error_id = cudaMemcpy((void *) h_index, (void *) d_index, sizeof(unsigned int) * MEASURE_SIZE,cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
-            printf("[L1.CUH]: cudaMemcpy d_index Error: %s\n", cudaGetErrorString(error_id));
+            printf("[L2_SEGMENT_SIZE.CUH]: cudaMemcpy d_index Error: %s\n", cudaGetErrorString(error_id));
             *error = 6;
             break;
         }
 
         error_id = cudaMemcpy((void *) disturb, (void *) d_disturb, sizeof(bool), cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
-            printf("[L1.CUH]: cudaMemcpy disturb Error: %s\n", cudaGetErrorString(error_id));
+            printf("[L2_SEGMENT_SIZE.CUH]: cudaMemcpy disturb Error: %s\n", cudaGetErrorString(error_id));
             *error = 6;
             break;
         }
@@ -224,7 +220,7 @@ bool launchL1KernelBenchmark(int N, int stride, double *avgOut, unsigned int* po
     return ret;
 }
 
-__global__ void l1_size (unsigned int * my_array, int array_length, unsigned int * duration, unsigned int *index, bool* isDisturbed) {
+__global__ void l2_segment_size (unsigned int * my_array, int array_length, unsigned int * duration, unsigned int *index, bool* isDisturbed) {
 
     unsigned int start_time, end_time;
     bool dist = false;
@@ -239,7 +235,7 @@ __global__ void l1_size (unsigned int * my_array, int array_length, unsigned int
     unsigned int* ptr;
 	for (int k = 0; k < array_length; k++) {
         ptr = my_array + j;
-        asm volatile("ld.global.ca.u32 %0, [%1];" : "=r"(j) : "l"(ptr) : "memory");
+        asm volatile("ld.global.cg.u32 %0, [%1];" : "=r"(j) : "l"(ptr) : "memory");
 	    //j = my_array[j];
 	}
 
@@ -250,7 +246,7 @@ __global__ void l1_size (unsigned int * my_array, int array_length, unsigned int
         ptr = my_array + j;
         //start_time = clock();
         asm volatile ("mov.u32 %0, %%clock;\n\t"
-                      "ld.global.ca.u32 %1, [%3];\n\t"
+                      "ld.global.cg.u32 %1, [%3];\n\t"
                       "st.shared.u32 [smem_ptr64], %1;"
                       "mov.u32 %2, %%clock;\n\t"
                       "add.u64 smem_ptr64, smem_ptr64, 4;" : "=r"(start_time), "=r"(j), "=r"(end_time) : "l"(ptr) : "memory");
@@ -271,4 +267,4 @@ __global__ void l1_size (unsigned int * my_array, int array_length, unsigned int
     *isDisturbed = dist;
 }
 
-#endif //CUDATEST_L1
+#endif //CUDATEST_L2_SEGMENTSIZE

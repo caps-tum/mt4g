@@ -23,15 +23,15 @@ __global__ void chkTwoCoreConst(unsigned int ConstN, unsigned int * durationTxt1
 
     unsigned int start_time, end_time;
     unsigned int j = 0;
-    __shared__ long long s_tvalueTxt1[lessSize];
-    __shared__ unsigned int s_indexTxt1[lessSize];
-    __shared__ long long s_tvalueTxt2[lessSize];
-    __shared__ unsigned int s_indexTxt2[lessSize];
+    __shared__ long long s_tvalueTxt1[LESS_SIZE];
+    __shared__ unsigned int s_indexTxt1[LESS_SIZE];
+    __shared__ long long s_tvalueTxt2[LESS_SIZE];
+    __shared__ unsigned int s_indexTxt2[LESS_SIZE];
 
     __syncthreads();
 
     if (threadIdx.x == baseCore) {
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             s_indexTxt1[k] = 0;
             s_tvalueTxt1[k] = 0;
         }
@@ -41,7 +41,7 @@ __global__ void chkTwoCoreConst(unsigned int ConstN, unsigned int * durationTxt1
     __syncthreads();
 
     if (threadIdx.x == testCore) {
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             s_indexTxt2[k] = 0;
             s_tvalueTxt2[k] = 0;
         }
@@ -71,7 +71,7 @@ __global__ void chkTwoCoreConst(unsigned int ConstN, unsigned int * durationTxt1
 
     if (threadIdx.x == baseCore) {
         //second round
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             start_time = clock();
             j = arr[j];
             s_indexTxt1[k] = j;
@@ -84,7 +84,7 @@ __global__ void chkTwoCoreConst(unsigned int ConstN, unsigned int * durationTxt1
     __syncthreads();
 
     if (threadIdx.x == testCore) {
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             start_time = clock();
             j = arr[j];
             s_indexTxt2[k] = j;
@@ -97,7 +97,7 @@ __global__ void chkTwoCoreConst(unsigned int ConstN, unsigned int * durationTxt1
     __syncthreads();
 
     if (threadIdx.x == baseCore) {
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             indexTxt1[k] = s_indexTxt1[k];
             durationTxt1[k] = s_tvalueTxt1[k];
             if (durationTxt1[k] > 3000) {
@@ -109,7 +109,7 @@ __global__ void chkTwoCoreConst(unsigned int ConstN, unsigned int * durationTxt1
     __syncthreads();
 
     if (threadIdx.x == testCore){
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             indexTxt2[k] = s_indexTxt2[k];
             durationTxt2[k] = s_tvalueTxt2[k];
             if (durationTxt2[k] > 3000) {
@@ -146,28 +146,28 @@ bool launchBenchmarkTwoCoreConst(unsigned int ConstN, double *avgOut1, double* a
 
     do {
         // Allocate Memory on Host
-        h_indexTexture1 = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_indexTexture1 = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_indexTexture1 == nullptr) {
             printf("[CHKALLCONST.CUH]: malloc h_indexTexture1 Error\n");
             *error = 1;
             break;
         }
 
-        h_indexTexture2 = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_indexTexture2 = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_indexTexture2 == nullptr) {
             printf("[CHKALLCONST.CUH]: malloc h_indexTexture2 Error\n");
             *error = 1;
             break;
         }
 
-        h_timeinfoTexture1 = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_timeinfoTexture1 = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_timeinfoTexture1 == nullptr) {
             printf("[CHKALLCONST.CUH]: malloc h_timeinfoTexture1 Error\n");
             *error = 1;
             break;
         }
 
-        h_timeinfoTexture2 = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_timeinfoTexture2 = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_timeinfoTexture2 == nullptr) {
             printf("[CHKALLCONST.CUH]: malloc h_timeinfoTexture2 Error\n");
             *error = 1;
@@ -182,28 +182,28 @@ bool launchBenchmarkTwoCoreConst(unsigned int ConstN, double *avgOut1, double* a
         }
 
         // Allocate Memory on GPU
-        error_id = cudaMalloc((void **) &durationTxt1, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &durationTxt1, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKALLCONST.CUH]: cudaMalloc durationTxt1 Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &durationTxt2, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &durationTxt2, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKALLCONST.CUH]: cudaMalloc durationTxt2 Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &d_indexTxt1, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &d_indexTxt1, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKALLCONST.CUH]: cudaMalloc d_indextxt1 Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &d_indexTxt2, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &d_indexTxt2, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKALLCONST.CUH]: cudaMalloc d_indexTxt2 Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
@@ -233,7 +233,7 @@ bool launchBenchmarkTwoCoreConst(unsigned int ConstN, double *avgOut1, double* a
         }
 
         // Copy results from GPU to Hosst
-        error_id = cudaMemcpy((void *) h_timeinfoTexture1, (void *) durationTxt1, sizeof(unsigned int) * lessSize,
+        error_id = cudaMemcpy((void *) h_timeinfoTexture1, (void *) durationTxt1, sizeof(unsigned int) * LESS_SIZE,
                               cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKALLCONST.CUH]: cudaMemcpy durationTxt1 Error: %s\n", cudaGetErrorString(error_id));
@@ -241,7 +241,7 @@ bool launchBenchmarkTwoCoreConst(unsigned int ConstN, double *avgOut1, double* a
             break;
         }
 
-        error_id = cudaMemcpy((void *) h_timeinfoTexture2, (void *) durationTxt2, sizeof(unsigned int) * lessSize,
+        error_id = cudaMemcpy((void *) h_timeinfoTexture2, (void *) durationTxt2, sizeof(unsigned int) * LESS_SIZE,
                               cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKALLCONST.CUH]: cudaMemcpy durationTxt2 Error: %s\n", cudaGetErrorString(error_id));
@@ -249,7 +249,7 @@ bool launchBenchmarkTwoCoreConst(unsigned int ConstN, double *avgOut1, double* a
             break;
         }
 
-        error_id = cudaMemcpy((void *) h_indexTexture1, (void *) d_indexTxt1, sizeof(unsigned int) * lessSize,
+        error_id = cudaMemcpy((void *) h_indexTexture1, (void *) d_indexTxt1, sizeof(unsigned int) * LESS_SIZE,
                               cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKALLCONST.CUH]: cudaMemcpy d_indexTxt1 Error: %s\n", cudaGetErrorString(error_id));
@@ -257,7 +257,7 @@ bool launchBenchmarkTwoCoreConst(unsigned int ConstN, double *avgOut1, double* a
             break;
         }
 
-        error_id = cudaMemcpy((void *) h_indexTexture2, (void *) d_indexTxt2, sizeof(unsigned int) * lessSize,
+        error_id = cudaMemcpy((void *) h_indexTexture2, (void *) d_indexTxt2, sizeof(unsigned int) * LESS_SIZE,
                               cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKALLCONST.CUH]: cudaMemcpy d_indexTxt2 Error: %s\n", cudaGetErrorString(error_id));
@@ -276,8 +276,8 @@ bool launchBenchmarkTwoCoreConst(unsigned int ConstN, double *avgOut1, double* a
         snprintf(prefix1, 64, "AllConst_T1_%d_%d", baseCore, testCore);
         snprintf(prefix2, 64, "AllConst_T2_%d_%d", baseCore, testCore);
 
-        createOutputFile((int) ConstN, lessSize, h_indexTexture1, h_timeinfoTexture1, avgOut1, potMissesOut1, prefix1);
-        createOutputFile((int) ConstN, lessSize, h_indexTexture2, h_timeinfoTexture2, avgOut2, potMissesOut2, prefix2);
+        createOutputFile((int) ConstN, LESS_SIZE, h_indexTexture1, h_timeinfoTexture1, avgOut1, potMissesOut1, prefix1);
+        createOutputFile((int) ConstN, LESS_SIZE, h_indexTexture2, h_timeinfoTexture2, avgOut2, potMissesOut2, prefix2);
     } while(false);
 
     bool ret = false;

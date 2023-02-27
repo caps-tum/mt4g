@@ -439,9 +439,9 @@ char cudaCoreQueryPath[coreQuerySize];
 
 void parseArgs(int argc, char *argv[]) {
 #ifdef _WIN32
-    printf("Usage: MemTop.exe [OPTIONS]\n"
+    printf("Usage: %s [OPTIONS]\n"
 #else
-    printf("Usage: ./MemTop [OPTIONS]\n"
+    printf("Usage: %s [OPTIONS]\n"
 #endif
            "\nOPTIONS\n=============================================\n"
            "\n-p:<path>: \n\tOverwrites the source of information for the number of Cuda Cores\n\t<path> specifies the path to the directory, that contains the \'deviceQuery\' executable"
@@ -452,7 +452,7 @@ void parseArgs(int argc, char *argv[]) {
            "\n-txt: Turns on benchmark for texture cache"
            "\n-ro: Turns on benchmark for read-only cache"
            "\n-c: Turns on benchmark for constant cache"
-           "\n\nIf none of the benchmark switches is used, every benchmark is executed!\n");
+           "\n\nIf none of the benchmark switches is used, every benchmark is executed!\n", argv[0]);
 
     bool bFlags = false;
 
@@ -552,14 +552,6 @@ int main(int argc, char *argv[]){
     }
 #endif //IsDebug
 
-    if (l2) {
-        // L2 Data Cache Checks
-        L2_results = executeL2DataCacheChecks(cudaInfo.L2CacheSize);
-        overallResults[L2] = L2_results;
-
-        cudaDeviceReset();
-    }
-
     if (L1_used_for_global_loads && l1) {
         // L1 Data Cache Checks
         L1_results = executeL1DataCacheChecks();
@@ -568,6 +560,14 @@ int main(int argc, char *argv[]){
         fprintf(out, "Detected L1 Latency in cycles: %d\n", L1_results.latencyCycles);
 #endif //IsDebug
         overallResults[L1] = L1_results;
+
+        cudaDeviceReset();
+    }
+
+    if (l2) {
+        // L2 Data Cache Checks
+        L2_results = executeL2DataCacheChecks(cudaInfo.L2CacheSize);
+        overallResults[L2] = L2_results;
 
         cudaDeviceReset();
     }

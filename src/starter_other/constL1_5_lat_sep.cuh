@@ -137,7 +137,7 @@ __global__ void constL1_5_lat_globaltimer (unsigned int *time) {
 
     // Second round
     asm volatile("mov.u64 %0, %%globaltimer;" : "=l"(start_time));
-    for (int k = 0; k < measureSize; k++) {
+    for (int k = 0; k < MEASURE_SIZE; k++) {
         j = arr[j];
     }
     s_index[1] = j;
@@ -145,7 +145,7 @@ __global__ void constL1_5_lat_globaltimer (unsigned int *time) {
 
     unsigned int diff = (unsigned int) (end_time - start_time);
 
-    time[0] = diff / measureSize;
+    time[0] = diff / MEASURE_SIZE;
 }
 
 __global__ void constL1_5_lat (unsigned int *time) {
@@ -159,7 +159,7 @@ __global__ void constL1_5_lat (unsigned int *time) {
 
     // Second round
     start_time = clock();
-    for (int k = 0; k < measureSize; k++) {
+    for (int k = 0; k < MEASURE_SIZE; k++) {
         j = arr[j];
     }
     s_index[1] = j;
@@ -167,7 +167,7 @@ __global__ void constL1_5_lat (unsigned int *time) {
 
     unsigned int diff = end_time - start_time;
 
-    time[0] = diff / measureSize;
+    time[0] = diff / MEASURE_SIZE;
 }
 
 #endif //CUDATEST_CONSTL1_5_LAT

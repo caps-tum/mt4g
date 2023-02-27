@@ -8,12 +8,12 @@
 #include "ErrorHandler.h"
 #include <map>
 
-#define measureSize 2048
-#define lessSize 1024
-#define LineMeasureSize 256
+#define MEASURE_SIZE 2048
+#define LESS_SIZE 1024
+#define LINE_MEASURE_SIZE 256
 
-__shared__ long long s_tvalue[measureSize];
-__shared__ unsigned int s_index[measureSize];
+__shared__ long long s_tvalue[MEASURE_SIZE];
+__shared__ unsigned int s_index[MEASURE_SIZE];
 
 typedef struct CacheSizeResult {
     size_t CacheSize = 1; //byte size
@@ -114,7 +114,7 @@ int wrapBenchmarkLaunch(bool (*launcher)(int, int, double*, unsigned int*, unsig
     printAvgFlow(avgFlow, sizeFlow, begin, stride, type);
     printMissesFlow(potMissesFlow, sizeFlow, begin, stride);
 
-    int result = detectChangePoint(time, sizeFlow, measureSize);
+    int result = detectChangePoint(time, sizeFlow, MEASURE_SIZE);
 
     FreeWrapBenchmarkLaunchResources()
 
@@ -183,7 +183,7 @@ unsigned int wrapperLineSize(unsigned int cacheSizeBytes, bool (*launcher)(int, 
         --n;
     }
 
-    unsigned int *h_missIndex = (unsigned int*) calloc(measureSize, sizeof(unsigned int));
+    unsigned int *h_missIndex = (unsigned int*) calloc(MEASURE_SIZE, sizeof(unsigned int));
     if (h_missIndex == nullptr) {
         free(time[0]);
         free(time);
@@ -191,16 +191,16 @@ unsigned int wrapperLineSize(unsigned int cacheSizeBytes, bool (*launcher)(int, 
         exit(1);
     }
     unsigned long long ref = 0;
-    for (int i = 0; i < measureSize; ++i) {
+    for (int i = 0; i < MEASURE_SIZE; ++i) {
         ref = ref + time[0][i];
     }
-    ref = ref / measureSize;
+    ref = ref / MEASURE_SIZE;
 
     int lastMissIndex = 0;
     int missPtr = 0;
     int tol = 50;
 
-    for (int i = 1; i < measureSize; ++i) {
+    for (int i = 1; i < MEASURE_SIZE; ++i) {
         if (time[0][i] > ref + tol) {
             h_missIndex[missPtr] = i - lastMissIndex;
             lastMissIndex = i;
@@ -209,7 +209,7 @@ unsigned int wrapperLineSize(unsigned int cacheSizeBytes, bool (*launcher)(int, 
     }
 
     cudaDeviceSynchronize();
-    lineSize = getMostValueInArray(h_missIndex, measureSize) * 4;
+    lineSize = getMostValueInArray(h_missIndex, MEASURE_SIZE) * 4;
 
     free(h_missIndex);
     free(time[0]);
