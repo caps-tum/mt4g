@@ -3,6 +3,7 @@
 #define CUDATEST_L2_SEGMENTSIZE
 
 
+#define L2_START_SIZE 500000 /*500kB a L1 size if none is given*/
 
 
 __global__ void l2_segment_size (unsigned int * my_array, int array_length, unsigned int * duration, unsigned int *index, bool* isDisturbed);
@@ -11,13 +12,13 @@ bool launchL2SegmentSizeBenchmark(int N, int stride, double *avgOut, unsigned in
 
 CacheSizeResult measure_L2_segment_size(unsigned int l1SizeBytes) {
 // 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024
-    int absoluteLowerBoundary = l1SizeBytes * 1.25;
+    int absoluteLowerBoundary =  l1SizeBytes * 2 > L2_START_SIZE ? l1SizeBytes * 2 : L2_START_SIZE ; // start at 2x L1 size, or at 500kB
     int absoluteUpperBoundary = 1024 * 1024 * 1024; // 1GB
     int widenBounds = 0;
 
     //Start with 1K integers until 1000K integers
     int bounds[2] = {absoluteLowerBoundary, absoluteUpperBoundary};
-    getBoundaries(launchL2SegmentSizeBenchmark, bounds, 5);
+    getBoundaries(launchL2SegmentSizeBenchmark, bounds, 5, 10);//TODO tolerance is 20 cycles -- refactor absolute cycles value to % increase
 #ifdef IsDebug
     fprintf(out, "Got Boundaries: %d...%d\n", bounds[0], bounds[1]);
 #endif //IsDebug
@@ -26,8 +27,8 @@ CacheSizeResult measure_L2_segment_size(unsigned int l1SizeBytes) {
     int cp = -1;
     int begin = bounds[0] - widenBounds;
     int end = bounds[1] + widenBounds;
-    int stride = 1;
-    int arrayIncrease = 1; //no need for precision -- jump by 1000 elems (4kB)
+    int stride = 8; //8*sizeof(int)=32B stride -> at least one access per cache line
+    int arrayIncrease = 1; //TODO: no need for precision here -- jump by 1000 elems (4kB), however there is an error to fix
 
     while (cp == -1 && begin >= absoluteLowerBoundary / sizeof(int) - widenBounds && end <= absoluteUpperBoundary / sizeof(int) + widenBounds) {
         cp = wrapBenchmarkLaunch(launchL2SegmentSizeBenchmark, begin, end, stride, arrayIncrease, "L2");
@@ -135,7 +136,7 @@ bool launchL2SegmentSizeBenchmark(int N, int stride, double *avgOut, unsigned in
         // Launch Kernel function
         dim3 Db = dim3(1);
         dim3 Dg = dim3(1, 1, 1);
-        l2_segment_size <<<Dg, Db>>>(d_a, N, duration, d_index, d_disturb);
+        l2_segment_size <<<Dg, Db>>>(d_a, N/stride, duration, d_index, d_disturb);
 
         cudaDeviceSynchronize();
 

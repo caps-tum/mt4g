@@ -426,7 +426,7 @@ void fillWithCUDAInfo(CudaDeviceInfo cudaInfo, size_t totalMem) {
             if(segment_size >= cuda_segment_size)
             {
                 //check if closer to old_cuda_segment_size or cuda_segment_size
-                size_t diff = segment_size - cuda_segment_size
+                size_t diff = segment_size - cuda_segment_size;
                 size_t diff_old = old_cuda_segment_size - segment_size;
                 if(diff < diff_old)//if the increased segment count is closer to the measured value, use the increased one.
                     num_segments++;
