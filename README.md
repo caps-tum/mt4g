@@ -23,7 +23,7 @@ git submodule update --init
 mkdir build && cd build
 cmake -DNVIDIA_UARCH="<version>" ..
 # build options:
-# -DNVIDIA_UARCH options are: KEPLER, MAXWELL, PASCAL, VOLTA, TURING, AMPERE
+# -DNVIDIA_UARCH options are: KEPLER, MAXWELL, PASCAL, VOLTA, TURING, AMPERE, HOPPER
 # -DIsDebug=1                           - turns on debug output
 # -DCMAKE_INSTALL_PREFIX=../inst-dir    - to install locally into the git repo folder
 make all install
