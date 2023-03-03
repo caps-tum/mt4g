@@ -63,14 +63,14 @@ bool launchL1LatTestKernelBenchmark(int N, int stride, double *avgOut, unsigned 
             break;
         }
 
-        h_index = (unsigned int *) malloc(sizeof(unsigned int) * measureSize);
+        h_index = (unsigned int *) malloc(sizeof(unsigned int) * MEASURE_SIZE);
         if (h_index == nullptr) {
             printf("[L1LATTEST.CUH]: malloc h_index Error\n");
             *error = 1;
             break;
         }
 
-        h_timeinfo = (unsigned int *) malloc(sizeof(unsigned int) * measureSize);
+        h_timeinfo = (unsigned int *) malloc(sizeof(unsigned int) * MEASURE_SIZE);
         if (h_timeinfo == nullptr) {
             printf("[L1LATTEST.CUH]: malloc h_timeinfo Error\n");
             *error = 1;
@@ -92,14 +92,14 @@ bool launchL1LatTestKernelBenchmark(int N, int stride, double *avgOut, unsigned 
             break;
         }
 
-        error_id = cudaMalloc((void **) &d_index, sizeof(unsigned int) * measureSize);
+        error_id = cudaMalloc((void **) &d_index, sizeof(unsigned int) * MEASURE_SIZE);
         if (error_id != cudaSuccess) {
             printf("[L1LATTEST.CUH]: cudaMalloc d_index Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &duration, sizeof(unsigned int) * measureSize);
+        error_id = cudaMalloc((void **) &duration, sizeof(unsigned int) * MEASURE_SIZE);
         if (error_id != cudaSuccess) {
             printf("[L1LATTEST.CUH]: cudaMalloc duration Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
@@ -143,14 +143,14 @@ bool launchL1LatTestKernelBenchmark(int N, int stride, double *avgOut, unsigned 
         cudaDeviceSynchronize();
 
         // Copy results from GPU to Host
-        error_id = cudaMemcpy((void *) h_timeinfo, (void *) duration, sizeof(unsigned int) * measureSize,cudaMemcpyDeviceToHost);
+        error_id = cudaMemcpy((void *) h_timeinfo, (void *) duration, sizeof(unsigned int) * MEASURE_SIZE,cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[L1LATTEST.CUH]: cudaMemcpy duration Error: %s\n", cudaGetErrorString(error_id));
             *error = 6;
             break;
         }
 
-        error_id = cudaMemcpy((void *) h_index, (void *) d_index, sizeof(unsigned int) * measureSize,cudaMemcpyDeviceToHost);
+        error_id = cudaMemcpy((void *) h_index, (void *) d_index, sizeof(unsigned int) * MEASURE_SIZE,cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[L1LATTEST.CUH]: cudaMemcpy d_index Error: %s\n", cudaGetErrorString(error_id));
             *error = 6;
@@ -165,7 +165,7 @@ bool launchL1LatTestKernelBenchmark(int N, int stride, double *avgOut, unsigned 
         }
         cudaDeviceSynchronize();
 
-        createOutputFile(N, measureSize, h_index, h_timeinfo, avgOut, potMissesOut, "L1Lat_");
+        createOutputFile(N, MEASURE_SIZE, h_index, h_timeinfo, avgOut, potMissesOut, "L1Lat_");
     } while(false);
 
     // Free Memory on GPU
@@ -217,7 +217,7 @@ __global__ void l1_lat_test (unsigned int * my_array, int array_length, unsigned
     bool dist = false;
     unsigned int j = 0;
 
-    for(int k=0; k<measureSize; k++){
+    for(int k=0; k<MEASURE_SIZE; k++){
         s_index[k] = 0;
         s_tvalue[k] = 0;
     }
@@ -227,7 +227,7 @@ __global__ void l1_lat_test (unsigned int * my_array, int array_length, unsigned
         asm volatile ("ld.global.ca.u32 %0, [%1];" : "=r"(j) : "l"(ptr) : "memory");
     }
 
-    for (int k = 0; k < measureSize; k++) {
+    for (int k = 0; k < MEASURE_SIZE; k++) {
         ptr = my_array + j;
         start_time = clock();
         asm volatile ("ld.global.ca.u32 %0, [%1];" : "=r"(j) : "l"(ptr) : "memory");
@@ -236,7 +236,7 @@ __global__ void l1_lat_test (unsigned int * my_array, int array_length, unsigned
         s_tvalue[k] = end_time - start_time;
     }
 
-    for(int k=0; k<measureSize; k++){
+    for(int k=0; k<MEASURE_SIZE; k++){
         if (s_tvalue[k] > 1200) {
             //printf("boom\n");
             dist = true;
@@ -249,4 +249,3 @@ __global__ void l1_lat_test (unsigned int * my_array, int array_length, unsigned
 }
 
 #endif //CUDATEST_L1LATTEST
-

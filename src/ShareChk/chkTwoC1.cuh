@@ -13,15 +13,15 @@ __global__ void chkTwoC1(unsigned int N, unsigned int *durationC1_1, unsigned in
 
     unsigned int start_time, end_time;
     unsigned int j = 0;
-    __shared__ long long s_tvalueC1_1[lessSize];
-    __shared__ unsigned int s_indexC1_1[lessSize];
-    __shared__ long long s_tvalueC1_2[lessSize];
-    __shared__ unsigned int s_indexC1_2[lessSize];
+    __shared__ long long s_tvalueC1_1[LESS_SIZE];
+    __shared__ unsigned int s_indexC1_1[LESS_SIZE];
+    __shared__ long long s_tvalueC1_2[LESS_SIZE];
+    __shared__ unsigned int s_indexC1_2[LESS_SIZE];
 
     __syncthreads();
 
     if (threadIdx.x == 0) {
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             s_indexC1_1[k] = 0;
             s_tvalueC1_1[k] = 0;
         }
@@ -31,7 +31,7 @@ __global__ void chkTwoC1(unsigned int N, unsigned int *durationC1_1, unsigned in
     __syncthreads();
 
     if (threadIdx.x == 1){
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             s_indexC1_2[k] = 0;
             s_tvalueC1_2[k] = 0;
         }
@@ -60,7 +60,7 @@ __global__ void chkTwoC1(unsigned int N, unsigned int *durationC1_1, unsigned in
 
     if (threadIdx.x == 0) {
         //second round
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             start_time = clock();
             j = arr[j];
             s_indexC1_1[k] = j;
@@ -73,7 +73,7 @@ __global__ void chkTwoC1(unsigned int N, unsigned int *durationC1_1, unsigned in
     __syncthreads();
 
     if (threadIdx.x == 1) {
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             start_time = clock();
             j = arr[j];
             s_indexC1_2[k] = j;
@@ -86,7 +86,7 @@ __global__ void chkTwoC1(unsigned int N, unsigned int *durationC1_1, unsigned in
     __syncthreads();
 
     if (threadIdx.x == 0) {
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             indexC1_1[k] = s_indexC1_1[k];
             durationC1_1[k] = s_tvalueC1_1[k];
             if (durationC1_1[k] > 3000) {
@@ -98,7 +98,7 @@ __global__ void chkTwoC1(unsigned int N, unsigned int *durationC1_1, unsigned in
     __syncthreads();
 
     if (threadIdx.x == 1) {
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             indexC1_2[k] = s_indexC1_2[k];
             durationC1_2[k] = s_tvalueC1_2[k];
             if (durationC1_2[k] > 3000) {
@@ -119,28 +119,28 @@ bool launchBenchmarkTwoC1(unsigned int N, double *avgOut1, double* avgOut2, unsi
 
     do {
         // Allocate Memory on Host
-        h_indexC1_1 = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_indexC1_1 = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_indexC1_1 == nullptr) {
             printf("[CHKTWOC1.CUH]: malloc h_indexC1_1 Error\n");
             *error = 1;
             break;
         }
 
-        h_indexC1_2 = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_indexC1_2 = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_indexC1_2 == nullptr) {
             printf("[CHKTWOC1.CUH]: malloc h_indexC1_2 Error\n");
             *error = 1;
             break;
         }
 
-        h_timeinfoC1_1 = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_timeinfoC1_1 = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_timeinfoC1_1 == nullptr) {
             printf("[CHKTWOC1.CUH]: malloc h_timeinfoC1_1 Error\n");
             *error = 1;
             break;
         }
 
-        h_timeinfoC1_2 = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_timeinfoC1_2 = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_timeinfoC1_2 == nullptr) {
             printf("[CHKTWOC1.CUH]: malloc h_timeinfoC1_2 Error\n");
             *error = 1;
@@ -155,28 +155,28 @@ bool launchBenchmarkTwoC1(unsigned int N, double *avgOut1, double* avgOut2, unsi
         }
 
         // Allocate Memory on GPU
-        error_id = cudaMalloc((void **) &durationC1_1, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &durationC1_1, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKTWOC1.CUH]: cudaMalloc durationC1_1 Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &durationC1_2, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &durationC1_2, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKTWOC1.CUH]: cudaMalloc durationC1_2 Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &d_indexC1_1, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &d_indexC1_1, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKTWOC1.CUH]: cudaMalloc d_indexC1_1 Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &d_indexC1_2, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &d_indexC1_2, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKTWOC1.CUH]: cudaMalloc d_indexC1_2 Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
@@ -214,7 +214,7 @@ bool launchBenchmarkTwoC1(unsigned int N, double *avgOut1, double* avgOut2, unsi
         }
 
         // Copy results from GPU to Host
-        error_id = cudaMemcpy((void *) h_timeinfoC1_1, (void *) durationC1_1, sizeof(unsigned int) * lessSize,
+        error_id = cudaMemcpy((void *) h_timeinfoC1_1, (void *) durationC1_1, sizeof(unsigned int) * LESS_SIZE,
                               cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKTWOC1.CUH]: cudaMemcpy durationC1_1 Error: %s\n", cudaGetErrorString(error_id));
@@ -222,7 +222,7 @@ bool launchBenchmarkTwoC1(unsigned int N, double *avgOut1, double* avgOut2, unsi
             break;
         }
 
-        error_id = cudaMemcpy((void *) h_timeinfoC1_2, (void *) durationC1_2, sizeof(unsigned int) * lessSize,
+        error_id = cudaMemcpy((void *) h_timeinfoC1_2, (void *) durationC1_2, sizeof(unsigned int) * LESS_SIZE,
                               cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKTWOC1.CUH]: cudaMemcpy durationC1_2 Error: %s\n", cudaGetErrorString(error_id));
@@ -230,7 +230,7 @@ bool launchBenchmarkTwoC1(unsigned int N, double *avgOut1, double* avgOut2, unsi
             break;
         }
 
-        error_id = cudaMemcpy((void *) h_indexC1_1, (void *) d_indexC1_1, sizeof(unsigned int) * lessSize,
+        error_id = cudaMemcpy((void *) h_indexC1_1, (void *) d_indexC1_1, sizeof(unsigned int) * LESS_SIZE,
                               cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKTWOC1.CUH]: cudaMemcpy d_indexC1_1 Error: %s\n", cudaGetErrorString(error_id));
@@ -238,7 +238,7 @@ bool launchBenchmarkTwoC1(unsigned int N, double *avgOut1, double* avgOut2, unsi
             break;
         }
 
-        error_id = cudaMemcpy((void *) h_indexC1_2, (void *) d_indexC1_2, sizeof(unsigned int) * lessSize,
+        error_id = cudaMemcpy((void *) h_indexC1_2, (void *) d_indexC1_2, sizeof(unsigned int) * LESS_SIZE,
                               cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKTWOC1.CUH]: cudaMemcpy d_indexC1_2 Error: %s\n", cudaGetErrorString(error_id));
@@ -253,8 +253,8 @@ bool launchBenchmarkTwoC1(unsigned int N, double *avgOut1, double* avgOut2, unsi
             break;
         }
 
-        createOutputFile((int) N, lessSize, h_indexC1_1, h_timeinfoC1_1, avgOut1, potMissesOut1, "TWOC1_1_");
-        createOutputFile((int) N, lessSize, h_indexC1_2, h_timeinfoC1_2, avgOut2, potMissesOut2, "TWOC1_2_");
+        createOutputFile((int) N, LESS_SIZE, h_indexC1_1, h_timeinfoC1_1, avgOut1, potMissesOut1, "TWOC1_1_");
+        createOutputFile((int) N, LESS_SIZE, h_indexC1_2, h_timeinfoC1_2, avgOut2, potMissesOut2, "TWOC1_2_");
     } while(false);
 
     bool ret = false;

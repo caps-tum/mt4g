@@ -13,15 +13,15 @@ __global__ void chkTwoRO(unsigned int N, const unsigned int* __restrict__ arrayR
 
     unsigned int start_time, end_time;
     unsigned int j = 0;
-    __shared__ long long s_tvalueRO1[lessSize];
-    __shared__ unsigned int s_indexRO1[lessSize];
-    __shared__ long long s_tvalueRO2[lessSize];
-    __shared__ unsigned int s_indexRO2[lessSize];
+    __shared__ long long s_tvalueRO1[LESS_SIZE];
+    __shared__ unsigned int s_indexRO1[LESS_SIZE];
+    __shared__ long long s_tvalueRO2[LESS_SIZE];
+    __shared__ unsigned int s_indexRO2[LESS_SIZE];
 
     __syncthreads();
 
     if (threadIdx.x == 0) {
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             s_indexRO1[k] = 0;
             s_tvalueRO1[k] = 0;
         }
@@ -30,7 +30,7 @@ __global__ void chkTwoRO(unsigned int N, const unsigned int* __restrict__ arrayR
     __syncthreads();
 
     if (threadIdx.x == 1){
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             s_indexRO2[k] = 0;
             s_tvalueRO2[k] = 0;
         }
@@ -56,7 +56,7 @@ __global__ void chkTwoRO(unsigned int N, const unsigned int* __restrict__ arrayR
 
     if (threadIdx.x == 0) {
         //second round
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             start_time = clock();
             j = __ldg(&arrayRO1[j]);
             s_indexRO1[k] = j;
@@ -68,7 +68,7 @@ __global__ void chkTwoRO(unsigned int N, const unsigned int* __restrict__ arrayR
     __syncthreads();
 
     if (threadIdx.x == 1){
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             start_time = clock();
             j = __ldg(&arrayRO2[j]);
             s_indexRO2[k] = j;
@@ -80,7 +80,7 @@ __global__ void chkTwoRO(unsigned int N, const unsigned int* __restrict__ arrayR
     __syncthreads();
 
     if (threadIdx.x == 0) {
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             indexRO1[k] = s_indexRO1[k];
             durationRO1[k] = s_tvalueRO1[k];
             if (durationRO1[k] > 3000) {
@@ -92,7 +92,7 @@ __global__ void chkTwoRO(unsigned int N, const unsigned int* __restrict__ arrayR
     __syncthreads();
 
     if (threadIdx.x == 1){
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             indexRO2[k] = s_indexRO2[k];
             durationRO2[k] = s_tvalueRO2[k];
             if (durationRO2[k] > 3000) {
@@ -112,28 +112,28 @@ bool launchBenchmarkTwoRO(unsigned int N, double *avgOut1, double* avgOut2, unsi
 
     do {
         // Allocate Memory on Host
-        h_indexReadOnly1 = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_indexReadOnly1 = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_indexReadOnly1 == nullptr) {
             printf("[CHKTWORO.CUH]: cudaMalloc h_indexReadOnly1 Error\n");
             *error = 1;
             break;
         }
 
-        h_indexReadOnly2 = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_indexReadOnly2 = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_indexReadOnly2 == nullptr) {
             printf("[CHKTWORO.CUH]: cudaMalloc h_indexReadOnly2 Error\n");
             *error = 1;
             break;
         }
 
-        h_timeinfoReadOnly1 = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_timeinfoReadOnly1 = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_timeinfoReadOnly1 == nullptr) {
             printf("[CHKTWORO.CUH]: cudaMalloc h_timeinfoReadOnly1 Error\n");
             *error = 1;
             break;
         }
 
-        h_timeinfoReadOnly2 = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_timeinfoReadOnly2 = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_timeinfoReadOnly2 == nullptr) {
             printf("[CHKTWORO.CUH]: cudaMalloc h_timeinfoReadOnly2 Error\n");
             *error = 1;
@@ -155,28 +155,28 @@ bool launchBenchmarkTwoRO(unsigned int N, double *avgOut1, double* avgOut2, unsi
         }
 
         // Allocate Memory on GPU
-        error_id = cudaMalloc((void **) &durationRO1, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &durationRO1, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKTWORO.CUH]: cudaMalloc durationRO1 Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &durationRO2, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &durationRO2, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKTWORO.CUH]: cudaMalloc durationRO2 Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &d_indexRO1, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &d_indexRO1, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKTWORO.CUH]: cudaMalloc d_indexRO1 Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &d_indexRO2, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &d_indexRO2, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKTWORO.CUH]: cudaMalloc d_indexRO2 Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
@@ -247,28 +247,28 @@ bool launchBenchmarkTwoRO(unsigned int N, double *avgOut1, double* avgOut2, unsi
         }
 
         // Copy results from GPU to Host
-        error_id = cudaMemcpy((void *) h_timeinfoReadOnly1, (void *) durationRO1, sizeof(unsigned int) * lessSize,cudaMemcpyDeviceToHost);
+        error_id = cudaMemcpy((void *) h_timeinfoReadOnly1, (void *) durationRO1, sizeof(unsigned int) * LESS_SIZE,cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKTWORO.CUH]: cudaMemcpy durationRO1 Error: %s\n", cudaGetErrorString(error_id));
             *error = 6;
             break;
         }
 
-        error_id = cudaMemcpy((void *) h_timeinfoReadOnly2, (void *) durationRO2, sizeof(unsigned int) * lessSize,cudaMemcpyDeviceToHost);
+        error_id = cudaMemcpy((void *) h_timeinfoReadOnly2, (void *) durationRO2, sizeof(unsigned int) * LESS_SIZE,cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKTWORO.CUH]: cudaMemcpy durationRO2 Error: %s\n", cudaGetErrorString(error_id));
             *error = 6;
             break;
         }
 
-        error_id = cudaMemcpy((void *) h_indexReadOnly1, (void *) d_indexRO1, sizeof(unsigned int) * lessSize,cudaMemcpyDeviceToHost);
+        error_id = cudaMemcpy((void *) h_indexReadOnly1, (void *) d_indexRO1, sizeof(unsigned int) * LESS_SIZE,cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKTWORO.CUH]: cudaMemcpy d_indexRO1 Error: %s\n", cudaGetErrorString(error_id));
             *error = 6;
             break;
         }
 
-        error_id = cudaMemcpy((void *) h_indexReadOnly2, (void *) d_indexRO2, sizeof(unsigned int) * lessSize,cudaMemcpyDeviceToHost);
+        error_id = cudaMemcpy((void *) h_indexReadOnly2, (void *) d_indexRO2, sizeof(unsigned int) * LESS_SIZE,cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKTWORO.CUH]: cudaMemcpy d_indexRO2 Error: %s\n", cudaGetErrorString(error_id));
             *error = 6;
@@ -282,8 +282,8 @@ bool launchBenchmarkTwoRO(unsigned int N, double *avgOut1, double* avgOut2, unsi
             break;
         }
 
-        createOutputFile((int) N, lessSize, h_indexReadOnly1, h_timeinfoReadOnly1, avgOut1, potMissesOut1, "TwoRO1_");
-        createOutputFile((int) N, lessSize, h_indexReadOnly2, h_timeinfoReadOnly2, avgOut2, potMissesOut2, "TwoRO2_");
+        createOutputFile((int) N, LESS_SIZE, h_indexReadOnly1, h_timeinfoReadOnly1, avgOut1, potMissesOut1, "TwoRO1_");
+        createOutputFile((int) N, LESS_SIZE, h_indexReadOnly2, h_timeinfoReadOnly2, avgOut2, potMissesOut2, "TwoRO2_");
     } while(false);
 
     bool ret = false;

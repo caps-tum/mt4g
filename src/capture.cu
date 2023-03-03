@@ -212,6 +212,8 @@ void printOverallBenchmarkResults(CacheResults* result, bool L1_global_load_enab
         fprintf(csv, "Load_Latency; %d; \"nanoseconds\"; ", result[L2].latencyNano);
         printf("L2 Cache Is Shared On %s-level\n\n", shared_where[L2]);
         fprintf(csv, "Shared_On; \"%s-level\"\n", shared_where[L2]);
+        printf("Detected L2 Data Cache Segments Per GPU: %d\n\n", result[L2].numberPerSM);
+        fprintf(csv, "Caches_Per_GPU; %d\n", result[L2].numberPerSM);
     } else {
         printf("L2 CACHE WAS NOT BENCHMARKED!\n\n");
         fprintf(csv, "\"N/A\"\n");
@@ -411,7 +413,33 @@ void fillWithCUDAInfo(CudaDeviceInfo cudaInfo, size_t totalMem) {
     overallResults[SHARED].CacheSize.realCP = true;
     overallResults[SHARED].CacheSize.maxSizeBenchmarked = cudaInfo.sharedMemPerSM;
 
-    overallResults[L2].CacheSize.CacheSize = cudaInfo.L2CacheSize;
+    //for L2 cache, check the measured value segment size, and compute the respective number of segments
+    size_t segment_size = overallResults[L2].CacheSize.CacheSize;
+    size_t L2_total_sz = cudaInfo.L2CacheSize;
+    unsigned int num_segments = 1;
+    if(segment_size > 1)
+    {
+        size_t old_cuda_segment_size = L2_total_sz/num_segments;
+        while(true)
+        {
+            size_t cuda_segment_size = L2_total_sz/(num_segments+1);
+            if(segment_size >= cuda_segment_size)
+            {
+                //check if closer to old_cuda_segment_size or cuda_segment_size
+                size_t diff = segment_size - cuda_segment_size
+                size_t diff_old = old_cuda_segment_size - segment_size;
+                if(diff < diff_old)//if the increased segment count is closer to the measured value, use the increased one.
+                    num_segments++;
+                break;
+            }
+            num_segments ++;
+            old_cuda_segment_size = cuda_segment_size;
+        }
+    }
+    num_segments ++;//TODO
+    printf("-- L2 num segments: %u \n", num_segments);
+    overallResults[L2].numberPerSM = num_segments;
+    overallResults[L2].CacheSize.CacheSize = cudaInfo.L2CacheSize / num_segments;
     overallResults[L2].CacheSize.realCP = true;
     overallResults[L2].CacheSize.maxSizeBenchmarked = cudaInfo.L2CacheSize;
 
@@ -566,7 +594,10 @@ int main(int argc, char *argv[]){
 
     if (l2) {
         // L2 Data Cache Checks
-        L2_results = executeL2DataCacheChecks(cudaInfo.L2CacheSize);
+        if(L1_used_for_global_loads && l1) //use L1 cache size as starting point if available
+            L2_results = executeL2DataCacheChecks(cudaInfo.L2CacheSize, L1_results.CacheSize.CacheSize);
+        else
+            L2_results = executeL2DataCacheChecks(cudaInfo.L2CacheSize);
         overallResults[L2] = L2_results;
 
         cudaDeviceReset();

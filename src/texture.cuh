@@ -71,14 +71,14 @@ bool launchTextureBenchmark(int N, int stride, double* avgOut, unsigned int* pot
             break;
         }
 
-        h_duration = (unsigned int *) malloc(measureSize * sizeof(unsigned int));
+        h_duration = (unsigned int *) malloc(MEASURE_SIZE * sizeof(unsigned int));
         if (h_duration == nullptr) {
             printf("[TEXTURE.CUH]: malloc h_duration Error\n");
             *error = 1;
             break;
         }
 
-        h_index = (unsigned int *) malloc(measureSize * sizeof(unsigned int));
+        h_index = (unsigned int *) malloc(MEASURE_SIZE * sizeof(unsigned int));
         if (h_index == nullptr) {
             printf("[TEXTURE.CUH]: malloc h_index Error\n");
             *error = 1;
@@ -100,14 +100,14 @@ bool launchTextureBenchmark(int N, int stride, double* avgOut, unsigned int* pot
             break;
         }
 
-        error_id = cudaMalloc(&d_index, measureSize * sizeof(unsigned int));
+        error_id = cudaMalloc(&d_index, MEASURE_SIZE * sizeof(unsigned int));
         if (error_id != cudaSuccess) {
             printf("[TEXTURE.CUH]: cudaMalloc d_index Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc(&d_duration, measureSize * sizeof(unsigned int));
+        error_id = cudaMalloc(&d_duration, MEASURE_SIZE * sizeof(unsigned int));
         if (error_id != cudaSuccess) {
             printf("[TEXTURE.CUH]: cudaMalloc duration Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
@@ -177,13 +177,13 @@ bool launchTextureBenchmark(int N, int stride, double* avgOut, unsigned int* pot
         cudaDeviceSynchronize();
 
         // Copy results from GPU to Host
-        error_id = cudaMemcpy((void *) h_index, (void *) d_index, measureSize * sizeof(unsigned int), cudaMemcpyDeviceToHost);
+        error_id = cudaMemcpy((void *) h_index, (void *) d_index, MEASURE_SIZE * sizeof(unsigned int), cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[TEXTURE.CUH]: cudaMemcpy d_index Error: %s\n", cudaGetErrorString(error_id));
             *error = 6;
             break;
         }
-        error_id = cudaMemcpy((void *) h_duration, (void *) d_duration, measureSize * sizeof(unsigned int),cudaMemcpyDeviceToHost);
+        error_id = cudaMemcpy((void *) h_duration, (void *) d_duration, MEASURE_SIZE * sizeof(unsigned int),cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[TEXTURE.CUH]: cudaMemcpy duration Error: %s\n", cudaGetErrorString(error_id));
             *error = 6;
@@ -197,7 +197,7 @@ bool launchTextureBenchmark(int N, int stride, double* avgOut, unsigned int* pot
         }
 
         if (!*disturb)
-            createOutputFile(N, measureSize, h_index, h_duration, avgOut, potMissesOut, "Texture_");
+            createOutputFile(N, MEASURE_SIZE, h_index, h_duration, avgOut, potMissesOut, "Texture_");
 
     } while(false);
 
@@ -258,7 +258,7 @@ __global__ void texture_size (cudaTextureObject_t tex, unsigned int size, unsign
    unsigned int start, end;
    int j = 0;
 
-	for (int k=0; k< measureSize; k++) {
+	for (int k=0; k< MEASURE_SIZE; k++) {
         s_index[k] = 0;
         s_tvalue[k] = 0;
     }
@@ -269,7 +269,7 @@ __global__ void texture_size (cudaTextureObject_t tex, unsigned int size, unsign
     }
 
     // Second round
-	for (int k=0; k < measureSize; k++) {
+	for (int k=0; k < MEASURE_SIZE; k++) {
         start=clock();
         j=tex1Dfetch<int>(tex, j);
         s_index[k] = j;
@@ -277,7 +277,7 @@ __global__ void texture_size (cudaTextureObject_t tex, unsigned int size, unsign
         s_tvalue[k] = (end -start);
     }
 
-    for (int k=0; k < measureSize; k++){
+    for (int k=0; k < MEASURE_SIZE; k++){
         if (s_tvalue[k] > 2000) {
             dist = true;
         }

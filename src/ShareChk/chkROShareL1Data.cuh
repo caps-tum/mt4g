@@ -14,15 +14,15 @@ __global__ void chkROShareL1Data(unsigned int RON, unsigned int DataN, const uns
 
     unsigned int start_time, end_time;
     unsigned int j = 0;
-    __shared__ long long s_tvalueRO[lessSize];
-    __shared__ unsigned int s_indexRO[lessSize];
-    __shared__ long long s_tvalueData[lessSize];
-    __shared__ unsigned int s_indexData[lessSize];
+    __shared__ long long s_tvalueRO[LESS_SIZE];
+    __shared__ unsigned int s_indexRO[LESS_SIZE];
+    __shared__ long long s_tvalueData[LESS_SIZE];
+    __shared__ unsigned int s_indexData[LESS_SIZE];
 
     __syncthreads();
 
     if (threadIdx.x == 0) {
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             s_indexRO[k] = 0;
             s_tvalueRO[k] = 0;
         }
@@ -31,7 +31,7 @@ __global__ void chkROShareL1Data(unsigned int RON, unsigned int DataN, const uns
     __syncthreads();
 
     if (threadIdx.x == 1) {
-        for(int k=0; k<lessSize; k++){
+        for(int k=0; k<LESS_SIZE; k++){
             s_indexData[k] = 0;
             s_tvalueData[k] = 0;
         }
@@ -58,7 +58,7 @@ __global__ void chkROShareL1Data(unsigned int RON, unsigned int DataN, const uns
 
     if (threadIdx.x == 0) {
         //second round
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             start_time = clock();
             j = __ldg(&myArrayReadOnly[j]);
             s_indexRO[k] = j;
@@ -72,7 +72,7 @@ __global__ void chkROShareL1Data(unsigned int RON, unsigned int DataN, const uns
     if (threadIdx.x == 1) {
         asm volatile(" .reg .u64 smem_ptr64;\n\t"
                      " cvta.to.shared.u64 smem_ptr64, %0;\n\t" :: "l"(s_indexData));
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             ptr = my_array + j;
             asm volatile ("mov.u32 %0, %%clock;\n\t"
                           "ld.global.ca.u32 %1, [%3];\n\t"
@@ -86,7 +86,7 @@ __global__ void chkROShareL1Data(unsigned int RON, unsigned int DataN, const uns
     __syncthreads();
 
     if (threadIdx.x == 0) {
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             indexRO[k] = s_indexRO[k];
             durationRO[k] = s_tvalueRO[k];
             if (durationRO[k] > 3000) {
@@ -98,7 +98,7 @@ __global__ void chkROShareL1Data(unsigned int RON, unsigned int DataN, const uns
     __syncthreads();
 
     if (threadIdx.x == 1) {
-        for(int k=0; k<lessSize; k++){
+        for(int k=0; k<LESS_SIZE; k++){
             indexData[k]= s_indexData[k];
             durationData[k] = s_tvalueData[k];
             if (durationData[k] > 3000) {
@@ -119,28 +119,28 @@ bool launchBenchmarkChkROShareL1Data(unsigned int RO_N, unsigned int DataN, doub
 
     do {
         // Allocate Memory on Host
-        h_indexRO = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_indexRO = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_indexRO == nullptr) {
             printf("[CHKROSHAREL1DATA.CUH]: malloc h_indexRO Error\n");
             *error = 1;
             break;
         }
 
-        h_indexData = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_indexData = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_indexData == nullptr) {
             printf("[CHKROSHAREL1DATA.CUH]: malloc h_indexData Error\n");
             *error = 1;
             break;
         }
 
-        h_timeinfoRO = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_timeinfoRO = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_timeinfoRO == nullptr) {
             printf("[CHKROSHAREL1DATA.CUH]: malloc h_timeinfoRO Error\n");
             *error = 1;
             break;
         }
 
-        h_timeinfoData = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_timeinfoData = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_timeinfoData == nullptr) {
             printf("[CHKROSHAREL1DATA.CUH]: malloc h_timeinfoData Error\n");
             *error = 1;
@@ -169,28 +169,28 @@ bool launchBenchmarkChkROShareL1Data(unsigned int RO_N, unsigned int DataN, doub
         }
 
         // Allocate Memory on GPU
-        error_id = cudaMalloc((void **) &durationRO, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &durationRO, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKROSHAREL1DATA.CUH]: cudaMalloc durationRO Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &durationData, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &durationData, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKROSHAREL1DATA.CUH]: cudaMalloc durationData Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &d_indexRO, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &d_indexRO, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKROSHAREL1DATA.CUH]: cudaMalloc d_indexRO Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &d_indexData, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &d_indexData, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKROSHAREL1DATA.CUH]: cudaMalloc d_indexData Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
@@ -266,7 +266,7 @@ bool launchBenchmarkChkROShareL1Data(unsigned int RO_N, unsigned int DataN, doub
         }
 
         // Copy results from GPU to Host
-        error_id = cudaMemcpy((void *) h_timeinfoRO, (void *) durationRO, sizeof(unsigned int) * lessSize,
+        error_id = cudaMemcpy((void *) h_timeinfoRO, (void *) durationRO, sizeof(unsigned int) * LESS_SIZE,
                               cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKROSHAREL1DATA.CUH]: cudaMemcpy durationRO Error: %s\n", cudaGetErrorString(error_id));
@@ -274,7 +274,7 @@ bool launchBenchmarkChkROShareL1Data(unsigned int RO_N, unsigned int DataN, doub
             break;
         }
 
-        error_id = cudaMemcpy((void *) h_timeinfoData, (void *) durationData, sizeof(unsigned int) * lessSize,
+        error_id = cudaMemcpy((void *) h_timeinfoData, (void *) durationData, sizeof(unsigned int) * LESS_SIZE,
                               cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKROSHAREL1DATA.CUH]: cudaMemcpy durationData Error: %s\n", cudaGetErrorString(error_id));
@@ -282,14 +282,14 @@ bool launchBenchmarkChkROShareL1Data(unsigned int RO_N, unsigned int DataN, doub
             break;
         }
 
-        error_id = cudaMemcpy((void *) h_indexRO, (void *) d_indexRO, sizeof(unsigned int) * lessSize, cudaMemcpyDeviceToHost);
+        error_id = cudaMemcpy((void *) h_indexRO, (void *) d_indexRO, sizeof(unsigned int) * LESS_SIZE, cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKROSHAREL1DATA.CUH]: cudaMemcpy d_indexRO Error: %s\n", cudaGetErrorString(error_id));
             *error = 6;
             break;
         }
 
-        error_id = cudaMemcpy((void *) h_indexData, (void *) d_indexData, sizeof(unsigned int) * lessSize,
+        error_id = cudaMemcpy((void *) h_indexData, (void *) d_indexData, sizeof(unsigned int) * LESS_SIZE,
                               cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKROSHAREL1DATA.CUH]: cudaMemcpy d_indexData Error: %s\n", cudaGetErrorString(error_id));
@@ -304,8 +304,8 @@ bool launchBenchmarkChkROShareL1Data(unsigned int RO_N, unsigned int DataN, doub
             break;
         }
 
-        createOutputFile((int) RO_N, lessSize, h_indexRO, h_timeinfoRO, avgOutRO, potMissesOutRO, "ShareRODataRO_");
-        createOutputFile((int) DataN, lessSize, h_indexData, h_timeinfoData, avgOutData, potMissesOutData, "ShareRODataData_");
+        createOutputFile((int) RO_N, LESS_SIZE, h_indexRO, h_timeinfoRO, avgOutRO, potMissesOutRO, "ShareRODataRO_");
+        createOutputFile((int) DataN, LESS_SIZE, h_indexData, h_timeinfoData, avgOutData, potMissesOutData, "ShareRODataData_");
     } while(false);
 
     bool ret = false;

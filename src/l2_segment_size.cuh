@@ -9,15 +9,15 @@ __global__ void l2_segment_size (unsigned int * my_array, int array_length, unsi
 
 bool launchL2SegmentSizeBenchmark(int N, int stride, double *avgOut, unsigned int* potMissesOut, unsigned int** time, int* error);
 
-CacheSizeResult measure_L2_segment_size() {
+CacheSizeResult measure_L2_segment_size(unsigned int l1SizeBytes) {
 // 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024
-    int absoluteLowerBoundary = 1024 * 1024; //1MB
-    int absoluteUpperBoundary = 1024 * 1024 << 10; // 1GB
+    int absoluteLowerBoundary = l1SizeBytes * 1.25;
+    int absoluteUpperBoundary = 1024 * 1024 * 1024; // 1GB
     int widenBounds = 0;
 
     //Start with 1K integers until 1000K integers
     int bounds[2] = {absoluteLowerBoundary, absoluteUpperBoundary};
-    getBoundaries(launchL1KernelBenchmark, bounds, 5);
+    getBoundaries(launchL2SegmentSizeBenchmark, bounds, 5);
 #ifdef IsDebug
     fprintf(out, "Got Boundaries: %d...%d\n", bounds[0], bounds[1]);
 #endif //IsDebug
@@ -27,7 +27,7 @@ CacheSizeResult measure_L2_segment_size() {
     int begin = bounds[0] - widenBounds;
     int end = bounds[1] + widenBounds;
     int stride = 1;
-    int arrayIncrease = 100000;
+    int arrayIncrease = 1; //no need for precision -- jump by 1000 elems (4kB)
 
     while (cp == -1 && begin >= absoluteLowerBoundary / sizeof(int) - widenBounds && end <= absoluteUpperBoundary / sizeof(int) + widenBounds) {
         cp = wrapBenchmarkLaunch(launchL2SegmentSizeBenchmark, begin, end, stride, arrayIncrease, "L2");

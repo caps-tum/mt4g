@@ -15,15 +15,15 @@ __global__ void chkROShareTexture(cudaTextureObject_t tex, unsigned int RON, uns
     unsigned int start_time, end_time;
     unsigned int j = 0;
     int j2 = 0;
-    __shared__ long long s_tvalueRO[lessSize];
-    __shared__ unsigned int s_indexRO[lessSize];
-    __shared__ long long s_tvalueTexture[lessSize];
-    __shared__ unsigned int s_indexTexture[lessSize];
+    __shared__ long long s_tvalueRO[LESS_SIZE];
+    __shared__ unsigned int s_indexRO[LESS_SIZE];
+    __shared__ long long s_tvalueTexture[LESS_SIZE];
+    __shared__ unsigned int s_indexTexture[LESS_SIZE];
 
     __syncthreads();
 
     if (threadIdx.x == 0) {
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             s_indexRO[k] = 0;
             s_tvalueRO[k] = 0;
         }
@@ -32,7 +32,7 @@ __global__ void chkROShareTexture(cudaTextureObject_t tex, unsigned int RON, uns
     __syncthreads();
 
     if (threadIdx.x == 1) {
-        for(int k=0; k < lessSize; k++) {
+        for(int k=0; k < LESS_SIZE; k++) {
             s_indexTexture[k] = 0;
             s_tvalueTexture[k] = 0;
         }
@@ -57,7 +57,7 @@ __global__ void chkROShareTexture(cudaTextureObject_t tex, unsigned int RON, uns
 
     if (threadIdx.x == 0) {
         //second round
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             start_time = clock();
             j = __ldg(&myArrayReadOnly[j]);
             s_indexRO[k] = j;
@@ -69,7 +69,7 @@ __global__ void chkROShareTexture(cudaTextureObject_t tex, unsigned int RON, uns
     __syncthreads();
 
     if (threadIdx.x == 1){
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             start_time=clock();
             j2=tex1Dfetch<int>(tex, j2);
             s_indexTexture[k] = j2;
@@ -81,7 +81,7 @@ __global__ void chkROShareTexture(cudaTextureObject_t tex, unsigned int RON, uns
     __syncthreads();
 
     if (threadIdx.x == 0) {
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             indexRO[k] = s_indexRO[k];
             durationRO[k] = s_tvalueRO[k];
             if (durationRO[k] > 3000) {
@@ -93,7 +93,7 @@ __global__ void chkROShareTexture(cudaTextureObject_t tex, unsigned int RON, uns
     __syncthreads();
 
     if (threadIdx.x == 1) {
-        for(int k=0; k<lessSize; k++){
+        for(int k=0; k<LESS_SIZE; k++){
             indexTexture[k]= s_indexTexture[k];
             durationTexture[k] = s_tvalueTexture[k];
             if (durationTexture[k] > 3000) {
@@ -125,28 +125,28 @@ bool launchBenchmarkChkROShareTexture(unsigned int RO_N, unsigned int TextureN, 
 
     do {
         // Allocate Memory on Host
-        h_indexRO = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_indexRO = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_indexRO == nullptr) {
             printf("[CHKROSHARETEXTURE.CUH]: malloc h_indexRO Error\n");
             *error = 1;
             break;
         }
 
-        h_indexTexture = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_indexTexture = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_indexTexture == nullptr) {
             printf("[CHKROSHARETEXTURE.CUH]: malloc h_indexTexture Error\n");
             *error = 1;
             break;
         }
 
-        h_timeinfoRO = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_timeinfoRO = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_timeinfoRO == nullptr) {
             printf("[CHKROSHARETEXTURE.CUH]: malloc h_timeinfoRO Error\n");
             *error = 1;
             break;
         }
 
-        h_timeinfoTexture = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_timeinfoTexture = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_timeinfoTexture == nullptr) {
             printf("[CHKROSHARETEXTURE.CUH]: malloc h_timeinfoTexture Error\n");
             *error = 1;
@@ -175,28 +175,28 @@ bool launchBenchmarkChkROShareTexture(unsigned int RO_N, unsigned int TextureN, 
         }
 
         // Allocate Memory on GPU
-        error_id = cudaMalloc((void **) &durationRO, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &durationRO, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKROSHARETEXTURE.CUH]: cudaMalloc durationRO Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &durationTexture, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &durationTexture, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKROSHARETEXTURE.CUH]: cudaMalloc durationTexture Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &d_indexRO, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &d_indexRO, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKROSHARETEXTURE.CUH]: cudaMalloc d_indexRO Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &d_indexTexture, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &d_indexTexture, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKROSHARETEXTURE.CUH]: cudaMalloc d_indexTexture Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
@@ -290,7 +290,7 @@ bool launchBenchmarkChkROShareTexture(unsigned int RO_N, unsigned int TextureN, 
         }
 
         // Copy results from GPU to Host
-        error_id = cudaMemcpy((void *) h_timeinfoRO, (void *) durationRO, sizeof(unsigned int) * lessSize,
+        error_id = cudaMemcpy((void *) h_timeinfoRO, (void *) durationRO, sizeof(unsigned int) * LESS_SIZE,
                               cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKROSHARETEXTURE.CUH]: cudaMemcpy durationRO Error: %s\n", cudaGetErrorString(error_id));
@@ -298,7 +298,7 @@ bool launchBenchmarkChkROShareTexture(unsigned int RO_N, unsigned int TextureN, 
             break;
         }
 
-        error_id = cudaMemcpy((void *) h_timeinfoTexture, (void *) durationTexture, sizeof(unsigned int) * lessSize,
+        error_id = cudaMemcpy((void *) h_timeinfoTexture, (void *) durationTexture, sizeof(unsigned int) * LESS_SIZE,
                               cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKROSHARETEXTURE.CUH]: cudaMemcpy durationTexture Error: %s\n", cudaGetErrorString(error_id));
@@ -306,14 +306,14 @@ bool launchBenchmarkChkROShareTexture(unsigned int RO_N, unsigned int TextureN, 
             break;
         }
 
-        error_id = cudaMemcpy((void *) h_indexRO, (void *) d_indexRO, sizeof(unsigned int) * lessSize, cudaMemcpyDeviceToHost);
+        error_id = cudaMemcpy((void *) h_indexRO, (void *) d_indexRO, sizeof(unsigned int) * LESS_SIZE, cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKROSHARETEXTURE.CUH]: cudaMemcpy d_indexRO Error: %s\n", cudaGetErrorString(error_id));
             *error = 6;
             break;
         }
 
-        error_id = cudaMemcpy((void *) h_indexTexture, (void *) d_indexTexture, sizeof(unsigned int) * lessSize,
+        error_id = cudaMemcpy((void *) h_indexTexture, (void *) d_indexTexture, sizeof(unsigned int) * LESS_SIZE,
                               cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKROSHARETEXTURE.CUH]: cudaMemcpy d_indexTexture Error: %s\n", cudaGetErrorString(error_id));
@@ -328,8 +328,8 @@ bool launchBenchmarkChkROShareTexture(unsigned int RO_N, unsigned int TextureN, 
             break;
         }
 
-        createOutputFile((int) RO_N, lessSize, h_indexRO, h_timeinfoRO, avgOutRO, potMissesOutRO, "ShareROTextureRO_");
-        createOutputFile((int) TextureN, lessSize, h_indexTexture, h_timeinfoTexture, avgOutTexture, potMissesOutTexture,
+        createOutputFile((int) RO_N, LESS_SIZE, h_indexRO, h_timeinfoRO, avgOutRO, potMissesOutRO, "ShareROTextureRO_");
+        createOutputFile((int) TextureN, LESS_SIZE, h_indexTexture, h_timeinfoTexture, avgOutTexture, potMissesOutTexture,
                          "ShareROTextureTexture_");
     } while(false);
 

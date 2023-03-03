@@ -13,15 +13,15 @@ __global__ void chkTwoTexture(cudaTextureObject_t tex1, cudaTextureObject_t tex2
 
     unsigned int start_time, end_time;
     int j = 0;
-    __shared__ long long s_tvalueTxt1[lessSize];
-    __shared__ unsigned int s_indexTxt1[lessSize];
-    __shared__ long long s_tvalueTxt2[lessSize];
-    __shared__ unsigned int s_indexTxt2[lessSize];
+    __shared__ long long s_tvalueTxt1[LESS_SIZE];
+    __shared__ unsigned int s_indexTxt1[LESS_SIZE];
+    __shared__ long long s_tvalueTxt2[LESS_SIZE];
+    __shared__ unsigned int s_indexTxt2[LESS_SIZE];
 
     __syncthreads();
 
     if (threadIdx.x == 0) {
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             s_indexTxt1[k] = 0;
             s_tvalueTxt1[k] = 0;
         }
@@ -30,7 +30,7 @@ __global__ void chkTwoTexture(cudaTextureObject_t tex1, cudaTextureObject_t tex2
     __syncthreads();
 
     if (threadIdx.x == 1){
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             s_indexTxt2[k] = 0;
             s_tvalueTxt2[k] = 0;
         }
@@ -56,7 +56,7 @@ __global__ void chkTwoTexture(cudaTextureObject_t tex1, cudaTextureObject_t tex2
 
     if (threadIdx.x == 0) {
         //second round
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             start_time = clock();
             j = tex1Dfetch<int>(tex1, j);
             s_indexTxt1[k] = j;
@@ -68,7 +68,7 @@ __global__ void chkTwoTexture(cudaTextureObject_t tex1, cudaTextureObject_t tex2
     __syncthreads();
 
     if (threadIdx.x == 1){
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             start_time = clock();
             j = tex1Dfetch<int>(tex2, j);
             s_indexTxt2[k] = j;
@@ -80,7 +80,7 @@ __global__ void chkTwoTexture(cudaTextureObject_t tex1, cudaTextureObject_t tex2
     __syncthreads();
 
     if (threadIdx.x == 0) {
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             indexTxt1[k] = s_indexTxt1[k];
             durationTxt1[k] = s_tvalueTxt1[k];
             if (durationTxt1[k] > 3000) {
@@ -92,7 +92,7 @@ __global__ void chkTwoTexture(cudaTextureObject_t tex1, cudaTextureObject_t tex2
     __syncthreads();
 
     if (threadIdx.x == 1){
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             indexTxt2[k] = s_indexTxt2[k];
             durationTxt2[k] = s_tvalueTxt2[k];
             if (durationTxt2[k] > 3000) {
@@ -115,28 +115,28 @@ bool launchBenchmarkTwoTexture(unsigned int TextureN, double *avgOutTxt1, double
 
     do {
         // Allocate Memory on Host
-        h_indexTexture1 = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_indexTexture1 = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_indexTexture1 == nullptr) {
             printf("[CHKTWOTEXTURE.CUH]: malloc h_indexTexture1 Error\n");
             *error = 1;
             break;
         }
 
-        h_indexTexture2 = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_indexTexture2 = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_indexTexture2 == nullptr) {
             printf("[CHKTWOTEXTURE.CUH]: malloc h_indexTexture2 Error\n");
             *error = 1;
             break;
         }
 
-        h_timeinfoTexture1 = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_timeinfoTexture1 = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_timeinfoTexture1 == nullptr) {
             printf("[CHKTWOTEXTURE.CUH]: malloc h_timeinfoTexture1 Error\n");
             *error = 1;
             break;
         }
 
-        h_timeinfoTexture2 = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_timeinfoTexture2 = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_timeinfoTexture2 == nullptr) {
             printf("[CHKTWOTEXTURE.CUH]: malloc h_timeinfoTexture2 Error\n");
             *error = 1;
@@ -158,28 +158,28 @@ bool launchBenchmarkTwoTexture(unsigned int TextureN, double *avgOutTxt1, double
         }
 
         // Allocate Memory on GPU
-        error_id = cudaMalloc((void **) &durationTxt1, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &durationTxt1, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKTWOTEXTURE.CUH]: cudaMalloc durationTxt1 Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &durationTxt2, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &durationTxt2, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKTWOTEXTURE.CUH]: cudaMalloc durationTxt2 Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &d_indexTxt1, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &d_indexTxt1, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKTWOTEXTURE.CUH]: cudaMalloc d_indextxt1 Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &d_indexTxt2, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &d_indexTxt2, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKTWOTEXTURE.CUH]: cudaMalloc d_indexTxt2 Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
@@ -255,28 +255,28 @@ bool launchBenchmarkTwoTexture(unsigned int TextureN, double *avgOutTxt1, double
         }
 
         // Copy results from GPU to Host
-        error_id = cudaMemcpy((void *) h_timeinfoTexture1, (void *) durationTxt1, sizeof(unsigned int) * lessSize,cudaMemcpyDeviceToHost);
+        error_id = cudaMemcpy((void *) h_timeinfoTexture1, (void *) durationTxt1, sizeof(unsigned int) * LESS_SIZE,cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKTWOTEXTURE.CUH]: cudaMemcpy durationTxt1 Error: %s\n", cudaGetErrorString(error_id));
             *error = 6;
             break;
         }
 
-        error_id = cudaMemcpy((void *) h_timeinfoTexture2, (void *) durationTxt2, sizeof(unsigned int) * lessSize,cudaMemcpyDeviceToHost);
+        error_id = cudaMemcpy((void *) h_timeinfoTexture2, (void *) durationTxt2, sizeof(unsigned int) * LESS_SIZE,cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKTWOTEXTURE.CUH]: cudaMemcpy durationTxt2 Error: %s\n", cudaGetErrorString(error_id));
             *error = 6;
             break;
         }
 
-        error_id = cudaMemcpy((void *) h_indexTexture1, (void *) d_indexTxt1, sizeof(unsigned int) * lessSize,cudaMemcpyDeviceToHost);
+        error_id = cudaMemcpy((void *) h_indexTexture1, (void *) d_indexTxt1, sizeof(unsigned int) * LESS_SIZE,cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKTWOTEXTURE.CUH]: cudaMemcpy d_indexTxt1 Error: %s\n", cudaGetErrorString(error_id));
             *error = 6;
             break;
         }
 
-        error_id = cudaMemcpy((void *) h_indexTexture2, (void *) d_indexTxt2, sizeof(unsigned int) * lessSize,cudaMemcpyDeviceToHost);
+        error_id = cudaMemcpy((void *) h_indexTexture2, (void *) d_indexTxt2, sizeof(unsigned int) * LESS_SIZE,cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKTWOTEXTURE.CUH]: cudaMemcpy d_indexTxt2 Error: %s\n", cudaGetErrorString(error_id));
             *error = 6;
@@ -290,8 +290,8 @@ bool launchBenchmarkTwoTexture(unsigned int TextureN, double *avgOutTxt1, double
             break;
         }
 
-        createOutputFile((int) TextureN, lessSize, h_indexTexture1, h_timeinfoTexture1, avgOutTxt1, potMissesOutTxt1, "TwoTexture1_");
-        createOutputFile((int) TextureN, lessSize, h_indexTexture2, h_timeinfoTexture2, avgOutTxt2, potMissesOutTxt2, "TwoTexture2_");
+        createOutputFile((int) TextureN, LESS_SIZE, h_indexTexture1, h_timeinfoTexture1, avgOutTxt1, potMissesOutTxt1, "TwoTexture1_");
+        createOutputFile((int) TextureN, LESS_SIZE, h_indexTexture2, h_timeinfoTexture2, avgOutTxt2, potMissesOutTxt2, "TwoTexture2_");
 
     } while(false);
 

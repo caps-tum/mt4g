@@ -34,86 +34,88 @@ unsigned int launchL2LineSizeAltKernelBenchmark(unsigned int N, int stride, int*
     unsigned int *h_a = nullptr, *h_missIndex = nullptr,
     *d_a = nullptr, *d_missIndex = nullptr;
 
-    // Allocate Memory on Host Memory
-    h_a = (unsigned int *) malloc(sizeof(unsigned int) * (N));
-    if (h_a == nullptr) {
-        printf("[L2_LINESIZE.CUH]: malloc h_a Error\n");
-        *error = 1;
-        break;
-    }
+    do {
+        // Allocate Memory on Host Memory
+        h_a = (unsigned int *) malloc(sizeof(unsigned int) * (N));
+        if (h_a == nullptr) {
+            printf("[L2_LINESIZE.CUH]: malloc h_a Error\n");
+            *error = 1;
+            break;
+        }
 
-    h_missIndex = (unsigned int*) calloc(LINE_MEASURE_SIZE, sizeof(unsigned int));
-    if (h_missIndex == nullptr) {
-        printf("[L2_LINESIZE.CUH]: malloc h_missIndex Error\n");
-        *error = 1;
-        break;
-    }
+        h_missIndex = (unsigned int*) calloc(LINE_MEASURE_SIZE, sizeof(unsigned int));
+        if (h_missIndex == nullptr) {
+            printf("[L2_LINESIZE.CUH]: malloc h_missIndex Error\n");
+            *error = 1;
+            break;
+        }
 
-    // Allocate Memory on GPU Memory
-    error_id = cudaMalloc((void **) &d_a, sizeof(unsigned int) * (N));
-    if (error_id != cudaSuccess) {
-        printf("[L2_LINESIZE.CUH]: cudaMalloc d_a Error: %s\n", cudaGetErrorString(error_id));
-        *error = 2;
-        break;
-    }
+        // Allocate Memory on GPU Memory
+        error_id = cudaMalloc((void **) &d_a, sizeof(unsigned int) * (N));
+        if (error_id != cudaSuccess) {
+            printf("[L2_LINESIZE.CUH]: cudaMalloc d_a Error: %s\n", cudaGetErrorString(error_id));
+            *error = 2;
+            break;
+        }
 
-    error_id = cudaMalloc((void **) &d_missIndex, sizeof(int) * LINE_MEASURE_SIZE);
-    if (error_id != cudaSuccess) {
-        printf("[L2_LINESIZE.CUH]: cudaMalloc d_missIndex Error: %s\n", cudaGetErrorString(error_id));
-        *error = 2;
-        break;
-    }
+        error_id = cudaMalloc((void **) &d_missIndex, sizeof(int) * LINE_MEASURE_SIZE);
+        if (error_id != cudaSuccess) {
+            printf("[L2_LINESIZE.CUH]: cudaMalloc d_missIndex Error: %s\n", cudaGetErrorString(error_id));
+            *error = 2;
+            break;
+        }
 
-    // Initialize p-chase array
-    for (int i = 0; i < N; i++) {
-        //original:
-        h_a[i] = (i + stride) % N;
-    }
+        // Initialize p-chase array
+        for (int i = 0; i < N; i++) {
+            //original:
+            h_a[i] = (i + stride) % N;
+        }
 
-    // Copy elements from Host to GPU
-    error_id = cudaMemcpy(d_a, h_a, sizeof(unsigned int) * N, cudaMemcpyHostToDevice);
-    if (error_id != cudaSuccess) {
-        printf("[L2_LINESIZE.CUH]: cudaMemcpy d_a Error: %s\n", cudaGetErrorString(error_id));
-        *error = 3;
-        break;
-    }
+        // Copy elements from Host to GPU
+        error_id = cudaMemcpy(d_a, h_a, sizeof(unsigned int) * N, cudaMemcpyHostToDevice);
+        if (error_id != cudaSuccess) {
+            printf("[L2_LINESIZE.CUH]: cudaMemcpy d_a Error: %s\n", cudaGetErrorString(error_id));
+            *error = 3;
+            break;
+        }
 
-    // Copy zeroes to GPU array
-    error_id = cudaMemcpy(d_missIndex, h_missIndex, sizeof(unsigned int) * LINE_MEASURE_SIZE, cudaMemcpyHostToDevice);
-    if (error_id != cudaSuccess) {
-        printf("[L2_LINESIZE.CUH]: cudaMemcpy d_missIndex Error: %s\n", cudaGetErrorString(error_id));
-        *error = 3;
-        break;
-    }
+        // Copy zeroes to GPU array
+        error_id = cudaMemcpy(d_missIndex, h_missIndex, sizeof(unsigned int) * LINE_MEASURE_SIZE, cudaMemcpyHostToDevice);
+        if (error_id != cudaSuccess) {
+            printf("[L2_LINESIZE.CUH]: cudaMemcpy d_missIndex Error: %s\n", cudaGetErrorString(error_id));
+            *error = 3;
+            break;
+        }
 
-    cudaDeviceSynchronize();
+        cudaDeviceSynchronize();
 
-    // Launch Kernel function
-    dim3 Db = dim3(1);
-    dim3 Dg = dim3(1, 1, 1);
-    l2_lineSize <<<Dg, Db>>>(N, d_a, d_missIndex);
-    cudaDeviceSynchronize();
+        // Launch Kernel function
+        dim3 Db = dim3(1);
+        dim3 Dg = dim3(1, 1, 1);
+        l2_lineSize <<<Dg, Db>>>(N, d_a, d_missIndex);
+        cudaDeviceSynchronize();
 
-    error_id = cudaGetLastError();
-    if (error_id != cudaSuccess) {
-        printf("[L2_LINESIZE.CUH]: Kernel launch/execution with clock Error: %s\n", cudaGetErrorString(error_id));
-        *error = 5;
-        break;
-    }
-    cudaDeviceSynchronize();
+        error_id = cudaGetLastError();
+        if (error_id != cudaSuccess) {
+            printf("[L2_LINESIZE.CUH]: Kernel launch/execution with clock Error: %s\n", cudaGetErrorString(error_id));
+            *error = 5;
+            break;
+        }
+        cudaDeviceSynchronize();
 
-    // Copy results from GPU to Host
-    error_id = cudaMemcpy((void *) h_missIndex, (void *) d_missIndex, sizeof(unsigned int) * LINE_MEASURE_SIZE, cudaMemcpyDeviceToHost);
-    if (error_id != cudaSuccess) {
-        printf("[L2_LINESIZE.CUH]: cudaMemcpy d_missIndex Error: %s\n", cudaGetErrorString(error_id));
-        *error = 6;
-        break;
-    }
-    cudaDeviceSynchronize();
+        // Copy results from GPU to Host
+        error_id = cudaMemcpy((void *) h_missIndex, (void *) d_missIndex, sizeof(unsigned int) * LINE_MEASURE_SIZE, cudaMemcpyDeviceToHost);
+        if (error_id != cudaSuccess) {
+            printf("[L2_LINESIZE.CUH]: cudaMemcpy d_missIndex Error: %s\n", cudaGetErrorString(error_id));
+            *error = 6;
+            break;
+        }
+        cudaDeviceSynchronize();
 
-    //most frequent distance between spikes in latency is the cache line size (first element of each cahce line getting loaded)
-    lineSize = getMostValueInArray(h_missIndex, LINE_MEASURE_SIZE) * sizeof(unsigned int);
-    cudaDeviceSynchronize();
+        //most frequent distance between spikes in latency is the cache line size (first element of each cahce line getting loaded)
+        lineSize = getMostValueInArray(h_missIndex, LINE_MEASURE_SIZE) * sizeof(unsigned int);
+        cudaDeviceSynchronize();
+    } while(false);
 
     // Free Memory on GPU
     if (d_a != nullptr) {

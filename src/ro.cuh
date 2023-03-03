@@ -72,14 +72,14 @@ bool launchROBenchmark(int N, int stride, double *avgOut, unsigned int* potMisse
             break;
         }
 
-        h_index = (unsigned int *) malloc(sizeof(unsigned int) * measureSize);
+        h_index = (unsigned int *) malloc(sizeof(unsigned int) * MEASURE_SIZE);
         if (h_index == nullptr) {
             printf("[RO.CUH]: malloc h_index Error\n");
             *error = 1;
             break;
         }
 
-        h_timeinfo = (unsigned int *) malloc(sizeof(unsigned int) * measureSize);
+        h_timeinfo = (unsigned int *) malloc(sizeof(unsigned int) * MEASURE_SIZE);
         if (h_timeinfo == nullptr) {
             printf("[RO.CUH]: malloc h_timeinfo Error\n");
             *error = 1;
@@ -101,14 +101,14 @@ bool launchROBenchmark(int N, int stride, double *avgOut, unsigned int* potMisse
             break;
         }
 
-        error_id = cudaMalloc((void **) &duration, sizeof(unsigned int) * measureSize);
+        error_id = cudaMalloc((void **) &duration, sizeof(unsigned int) * MEASURE_SIZE);
         if (error_id != cudaSuccess) {
             printf("[RO.CUH]: cudaMalloc duration Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &d_index, sizeof(unsigned int) * measureSize);
+        error_id = cudaMalloc((void **) &d_index, sizeof(unsigned int) * MEASURE_SIZE);
         if (error_id != cudaSuccess) {
             printf("[RO.CUH]: cudaMalloc d_index Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
@@ -154,14 +154,14 @@ bool launchROBenchmark(int N, int stride, double *avgOut, unsigned int* potMisse
         cudaDeviceSynchronize();
 
         // Copy results from GPU to Host
-        error_id = cudaMemcpy((void *) h_timeinfo, (void *) duration, sizeof(unsigned int) * measureSize,cudaMemcpyDeviceToHost);
+        error_id = cudaMemcpy((void *) h_timeinfo, (void *) duration, sizeof(unsigned int) * MEASURE_SIZE,cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[RO.CUH]: cudaMemcpy duration Error: %s\n", cudaGetErrorString(error_id));
             *error = 6;
             break;
         }
 
-        error_id = cudaMemcpy((void *) h_index, (void *) d_index, sizeof(unsigned int) * measureSize,cudaMemcpyDeviceToHost);
+        error_id = cudaMemcpy((void *) h_index, (void *) d_index, sizeof(unsigned int) * MEASURE_SIZE,cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[RO.CUH]: cudaMemcpy d_index Error: %s\n", cudaGetErrorString(error_id));
             *error = 6;
@@ -178,7 +178,7 @@ bool launchROBenchmark(int N, int stride, double *avgOut, unsigned int* potMisse
         cudaDeviceSynchronize();
 
         if (!*disturb)
-            createOutputFile(N, measureSize, h_index, h_timeinfo, avgOut, potMissesOut, "RO_");
+            createOutputFile(N, MEASURE_SIZE, h_index, h_timeinfo, avgOut, potMissesOut, "RO_");
     } while(false);
 
     // Free Memory on GPU
@@ -227,7 +227,7 @@ __global__ void RO_size (const unsigned int* __restrict__ my_array, int array_le
 
     bool dist = false;
 
-    for(int k=0; k<measureSize; k++){
+    for(int k=0; k<MEASURE_SIZE; k++){
         s_index[k] = 0;
         s_tvalue[k] = 0;
     }
@@ -237,7 +237,7 @@ __global__ void RO_size (const unsigned int* __restrict__ my_array, int array_le
         j = __ldg(&my_array[j]);
 
     // Second round
-    for (int k = 0; k < measureSize; k++) {
+    for (int k = 0; k < MEASURE_SIZE; k++) {
         start_time = clock();
         j = __ldg(&my_array[j]);
         s_index[k] = j;
@@ -251,7 +251,7 @@ __global__ void RO_size (const unsigned int* __restrict__ my_array, int array_le
         j = __ldg(&my_array[k]);
 
     //second round
-    for (int k = 0; k < measureSize; k++) {
+    for (int k = 0; k < MEASURE_SIZE; k++) {
         int l = k % array_length;
         start_time = clock();
         j = __ldg(&my_array[l]);
@@ -260,7 +260,7 @@ __global__ void RO_size (const unsigned int* __restrict__ my_array, int array_le
         s_tvalue[k] = end_time-start_time;
     }*/
 
-    for(int k=0; k < measureSize; k++){
+    for(int k=0; k < MEASURE_SIZE; k++){
         if (s_tvalue[k] > 2000) {
             dist = true;
         }
