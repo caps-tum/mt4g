@@ -20,7 +20,7 @@ CacheResults executeL2DataCacheChecks(unsigned int l2SizeBytes, unsigned int l1S
 #ifdef IsDebug
     fprintf(out, "\n\nMeasure L2 DataCache Segment Size\n\n");
 #endif //IsDebug
-    CacheSizeResult L2SegmentSizeInBytes = measure_L2_segment_size(l1SizeBytes);
+    CacheSizeResult L2SegmentSizeInBytes = measure_L2_segment_size((l1SizeBytes>L2_START_SIZE) ? l1SizeBytes : L2_START_SIZE);
     printf("\n\nMeasure L2 DataCache Cache Line Size\n");
 #ifdef IsDebug
     fprintf(out, "\n\nMeasure L2 DataCache  Cache Line Size\n\n");

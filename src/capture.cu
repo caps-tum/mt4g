@@ -417,33 +417,13 @@ void fillWithCUDAInfo(CudaDeviceInfo cudaInfo, size_t totalMem) {
     size_t L2_segment_size = overallResults[L2].CacheSize.CacheSize;
     size_t L2_total_sz = cudaInfo.L2CacheSize;
     unsigned int num_segments = 1;
-    if(L2_segment_size > 1)
-    {
+    if(L2_segment_size > 1){
         num_segments = (L2_total_sz + (L2_segment_size/2)) / L2_segment_size; //divide and round up or down
-        // size_t old_cuda_segment_size = L2_total_sz/num_segments;
-        // while(true)
-        // {
-        //     size_t cuda_segment_size = L2_total_sz/(num_segments+1);
-        //     if(segment_size >= cuda_segment_size)
-        //     {
-        //         //check if closer to old_cuda_segment_size or cuda_segment_size
-        //         size_t diff = segment_size - cuda_segment_size;
-        //         size_t diff_old = old_cuda_segment_size - segment_size;
-        //         if(diff < diff_old)//if the increased segment count is closer to the measured value, use the increased one.
-        //             num_segments++;
-        //         break;
-        //     }
-        //     num_segments ++;
-        //     old_cuda_segment_size = cuda_segment_size;
-        // }
     }
-    // num_segments ++;//TODO
-    if(num_segments <= 0 || num_segments > 16)
-    {
+    if(num_segments <= 0 || num_segments > 16) {
         printf("!Measured %d L2 cache segments, which is unexpected. Falling back to default 1 segment.\n", num_segments);
         num_segments = 1;
     }
-    printf("-- L2 num segments: %u \n", num_segments);
     overallResults[L2].numberPerSM = num_segments;
     overallResults[L2].CacheSize.CacheSize = cudaInfo.L2CacheSize / num_segments;
     overallResults[L2].CacheSize.realCP = true;
