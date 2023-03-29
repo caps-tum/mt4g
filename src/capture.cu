@@ -195,7 +195,7 @@ void printOverallBenchmarkResults(CacheResults* result, bool L1_global_load_enab
             double size;
             size_t original = result[L2].CacheSize.CacheSize;
             const char* unit = getSizeNiceFormatByte(&size, original);
-            printf("Detected L2 Cache Size: %.3f %s\n", size, unit);
+            printf("Detected L2 Cache Sizexx: %.3f %s\n", size, unit);
             fprintf(csv, "Size; %.3f; %s; \"%c\"; ", size, unit, '=');
         } else {
             double size;
@@ -426,7 +426,7 @@ void fillWithCUDAInfo(CudaDeviceInfo cudaInfo, size_t totalMem) {
             if(segment_size >= cuda_segment_size)
             {
                 //check if closer to old_cuda_segment_size or cuda_segment_size
-                size_t diff = segment_size - cuda_segment_size
+                size_t diff = segment_size - cuda_segment_size;
                 size_t diff_old = old_cuda_segment_size - segment_size;
                 if(diff < diff_old)//if the increased segment count is closer to the measured value, use the increased one.
                     num_segments++;
