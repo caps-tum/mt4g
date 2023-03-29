@@ -211,7 +211,7 @@ void printOverallBenchmarkResults(CacheResults* result, bool L1_global_load_enab
         printf("Detected L2 Cache Load Latency: %d nanoseconds\n", result[L2].latencyNano);
         fprintf(csv, "Load_Latency; %d; \"nanoseconds\"; ", result[L2].latencyNano);
         printf("L2 Cache Is Shared On %s-level\n", shared_where[L2]);
-        fprintf(csv, "Shared_On; \"%s-level\"\n", shared_where[L2]);
+        fprintf(csv, "Shared_On; \"%s-level\"; ", shared_where[L2]);
         printf("Detected L2 Data Cache Segments Per GPU: %d\n\n", result[L2].numberPerSM);
         fprintf(csv, "Caches_Per_GPU; %d\n", result[L2].numberPerSM);
     } else {
