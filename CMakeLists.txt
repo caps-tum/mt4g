@@ -25,6 +25,9 @@ elseif(NVIDIA_UARCH STREQUAL "TURING")
 elseif(NVIDIA_UARCH STREQUAL "AMPERE")
     set(COMPUTE_CAP_COMPILE_OPTIONS "PRIVATE" "$<$<COMPILE_LANGUAGE:CUDA>:-gencode" "arch=compute_86,code=sm_86>")
     #set(CMAKE_CUDA_ARCHITECTURES 86)
+elseif(NVIDIA_UARCH STREQUAL "HOPPER")
+    set(COMPUTE_CAP_COMPILE_OPTIONS "PRIVATE" "$<$<COMPILE_LANGUAGE:CUDA>:-gencode" "arch=compute_90,code=sm_90>")
+    #set(CMAKE_CUDA_ARCHITECTURES 90)
 endif()
 # see: https://dewiki.de/Lexikon/CUDA#Unterstützte_GPUs
 # TODO: automate this: https://stackoverflow.com/questions/68223398/how-can-i-get-cmake-to-automatically-detect-the-value-for-cuda-architectures

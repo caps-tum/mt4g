@@ -4,10 +4,13 @@
 
 #define BLOCK_SIZE 256
 #define REPEATS 32
+#define L2_START_SIZE 500000
 
 __global__ void l2_segment_size (unsigned int * my_array, int array_length, unsigned long long* time, unsigned int * last);
 int detect1DChangePoint(unsigned long long* arr, int num_elems, int look_around, double threshold);
 int launchL2SegmentSizeBenchmark(int lowerBound, int upperBound, unsigned long long* time_array, int arrayIncrease_elements);
+
+
 
 CacheSizeResult measure_L2_segment_size(unsigned int l1SizeBytes) {
 
@@ -29,7 +32,7 @@ CacheSizeResult measure_L2_segment_size(unsigned int l1SizeBytes) {
     //run num_experiments_before_doubling experiments, and check if there is a change point, otherwise increase maximum boundary
     do{
         int arrayIncrease_elements = lower_bound/num_experiments_before_doubling;
-        printf("searching boundary in: %d -- %d, increasing by %d elems \n",lower_bound*sizeof(unsigned int), lower_bound*2*sizeof(unsigned int), arrayIncrease_elements);
+        //printf("searching boundary in: %d -- %d, increasing by %d elems \n",lower_bound*sizeof(unsigned int), lower_bound*2*sizeof(unsigned int), arrayIncrease_elements);
         launchL2SegmentSizeBenchmark(lower_bound, lower_bound*2, &(time_array[num_experiments]), arrayIncrease_elements);
 
         num_experiments += num_experiments_before_doubling;
@@ -42,12 +45,12 @@ CacheSizeResult measure_L2_segment_size(unsigned int l1SizeBytes) {
     int cache_size = absoluteLowerBoundary << (cp/num_experiments_before_doubling); //double for each num_experiments_before_doubling experiments before
     cache_size = cache_size + (cp% num_experiments_before_doubling) * cache_size/num_experiments_before_doubling;
     cache_size = cache_size * sizeof(unsigned int);
-    printf("found boundary: %dkB (index %d) \n", cache_size/1000, cp );
+    //printf("found boundary: %dkB (index %d) \n", cache_size/1000, cp );
 
     CacheSizeResult result;
     result.CacheSize = cache_size;
     result.realCP = cp > 0;
-    result.maxSizeBenchmarked = absoluteLowerBoundary << 2; // * 4;
+    result.maxSizeBenchmarked = absoluteUpperBoundary*sizeof(unsigned int) ;
     return result;
 }
 
@@ -71,7 +74,7 @@ int detect1DChangePoint(unsigned long long* arr, int num_elems, int look_around 
         upper_avg = upper_avg / look_around;
         if(lower_avg * threshold < upper_avg) 
         {
-            printf("-found changepoint on index %d (%f, %f) -- spike %f \n", i, lower_avg, upper_avg, upper_avg / lower_avg );
+            //printf("-found changepoint on index %d (%f, %f) -- spike %f \n", i, lower_avg, upper_avg, upper_avg / lower_avg );
             if(upper_avg / lower_avg > largest_spike)
             {
                 largest_spike = upper_avg / lower_avg;
@@ -79,7 +82,8 @@ int detect1DChangePoint(unsigned long long* arr, int num_elems, int look_around 
             }
         }
     }
-    printf("-largest spike on index %d \n", largest_spike_index);
+    //if(largest_spike_index != -1)
+    //    printf("-largest spike on index %d \n", largest_spike_index);
     return largest_spike_index;
 }
 
@@ -106,31 +110,19 @@ __global__ void l2_segment_size (unsigned int * my_array, int array_length, unsi
     for(int r = 0; r<REPEATS; r++) {
         for(int k = tid; k<array_length; k+=BLOCK_SIZE){
             local_sum += my_array[k];
-            // ptr = my_array + j;
-            // //start_time = clock();
-            // asm volatile ("ld.global.cg.u32 %0, [%1];\n\t"
-            //             //"st.global.u32 [%1], %0 ; ": "=r"(j): "l"(ptr) : "memory"); //last=j;
-            //             "st.global.u32 [mem_ptr64], %0;" : "=r"(j): "l"(ptr) : "memory"); //last=j;
-            //             //"add.u64 smem_ptr64, smem_ptr64, 4;" : "=r"(j): "l"(ptr) : "memory");
-            // //start_time = clock();
-            // //j = my_array[j];
-            // //s_index[k] = j;
-            // //end_time = clock();
         }
     }
     asm volatile("mov.u64 %0, %%globaltimer;" : "=l"(end_time));
 
-    // if(tid == 0)
-    //     *time = end_time - start_time;
     if(tid == 0)
     {
         *last = local_sum;
         *time = ((end_time - start_time)*BLOCK_SIZE*1000)/(REPEATS * array_length * sizeof(unsigned int));
 
-        printf("---KERNEL: size %d kB, ", (int)array_length*4/1000);
-        printf("time %llu, "  , (end_time - start_time));
-        printf(" avg %llu,  ", *time);
-        printf(" last %u \n", *last);
+        // printf("---KERNEL: size %d kB, ", (int)array_length*4/1000);
+        // printf("time %llu, "  , (end_time - start_time));
+        // printf(" avg %llu,  ", *time);
+        // printf(" last %u \n", *last);
     }
 }
 
@@ -141,9 +133,9 @@ int launchL2SegmentSizeBenchmark(int lowerBound, int upperBound, unsigned long l
 
     int stride = BLOCK_SIZE; // => each block should access its own elements
 
-    const char* env_p = std::getenv("CUDA_VISIBLE_DEVICES");
-    printf("CUDA_VISIBLE_DEVICES, %s \n", env_p);
-    printf("array_sz, time, time/B \n");
+    // const char* env_p = std::getenv("CUDA_VISIBLE_DEVICES");
+    // printf("CUDA_VISIBLE_DEVICES, %s \n", env_p);
+    // printf("array_sz, time, time/B \n");
 
     int num_experiments = (upperBound - lowerBound ) / arrayIncrease_elements;
 
@@ -182,10 +174,10 @@ int launchL2SegmentSizeBenchmark(int lowerBound, int upperBound, unsigned long l
     // }
     //int result = detectChangePoint(time_2d, num_experiments, 1);
     
-    for(int i = 0; i< num_experiments; i++)
-    {
-        printf("%u,     %u\n", (lowerBound+i*arrayIncrease_elements)*sizeof(int), time[i]);
-    }
+    // for(int i = 0; i< num_experiments; i++)
+    // {
+    //     printf("%u,     %u\n", (lowerBound+i*arrayIncrease_elements)*sizeof(int), time[i]);
+    // }
 
     // Deallocate device memory
     cudaFree(d_a);
