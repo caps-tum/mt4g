@@ -2,11 +2,11 @@ GPU_INFORMATION; GPU_vendor; "Nvidia"; GPU_name; "NVIDIA A100-PCIE-40GB"
 COMPUTE_RESOURCE_INFORMATION; CUDA_compute_capability; "8.00"; Number_of_streaming_multiprocessors; 108; Number_of_cores_in_GPU; 6912; Number_of_cores_per_SM; 64
 REGISTER_INFORMATION; Registers_per_thread_block; 65536; "32-bit registers"; Registers_per_SM; 65536; "32-bit registers"
 ADDITIONAL_INFORMATION; Memory_Clock_Frequency; 1.215; "GHz"; Memory_Bus_Width; 5120; "bit"; GPU_Clock_Rate; 1.410; "GHz"
-L1_DATA_CACHE; Size; 22.253906; KiB; "="; Cache_Line_Size; 32; "B"; Load_Latency; 39; "cycles"; Load_Latency; 27; "nanoseconds"; Shared_On; "SM-level"; Share_Cache_With_Texture; 1; Share_Cache_With_Read-Only; 1; Share_Cache_With_ConstantL1; 0; Caches_Per_SM; 1
-L2_DATA_CACHE; Size; 40.000; MiB; "="; Cache_Line_Size; 32; "B"; Load_Latency; 324; "cycles"; Load_Latency; 242; "nanoseconds"; Shared_On; "GPU-level"
-TEXTURE_CACHE; Size; 25.363281; KiB; "="; Cache_Line_Size; 32; "B"; Load_Latency; 89; "cycles"; Load_Latency; 63; "nanoseconds"; Shared_On; "SM-level"; Share_Cache_With_L1_Data; 1; Share_Cache_With_Read-Only; 1; Caches_Per_SM; 1
-READ-ONLY_CACHE; Size; 22.253906; KiB; "="; Cache_Line_Size; 32; "B"; Load_Latency; 38; "cycles"; Load_Latency; 27; "nanoseconds"; Shared_On; "SM-level"; Share_Cache_With_L1_Data; 1; Share_Cache_With_Texture; 1; Caches_Per_SM; 1
-CONSTANT_L1_CACHE; Size; 2.109375; KiB; "="; Cache_Line_Size; 64; "B"; Load_Latency; 34; "cycles"; Load_Latency; 24; "nanoseconds"; Shared_On; "SM-level"; Share_Cache_With_L1_Data; 0; Caches_Per_SM; 1
+L1_DATA_CACHE; Size; 21.886719; KiB; "="; Cache_Line_Size; 32; "B"; Load_Latency; 39; "cycles"; Load_Latency; 27; "nanoseconds"; Shared_On; "SM-level"; Share_Cache_With_Texture; 1; Share_Cache_With_Read-Only; 1; Share_Cache_With_ConstantL1; 0; Caches_Per_SM; 1
+L2_DATA_CACHE; Size; 20.000; MiB; "="; Cache_Line_Size; 32; "B"; Load_Latency; 323; "cycles"; Load_Latency; 223; "nanoseconds"; Shared_On; "GPU-level"; Caches_Per_GPU; 2
+TEXTURE_CACHE; Size; 20.746094; KiB; "="; Cache_Line_Size; 32; "B"; Load_Latency; 89; "cycles"; Load_Latency; 116; "nanoseconds"; Shared_On; "SM-level"; Share_Cache_With_L1_Data; 1; Share_Cache_With_Read-Only; 1; Caches_Per_SM; 1
+READ-ONLY_CACHE; Size; 21.886719; KiB; "="; Cache_Line_Size; 32; "B"; Load_Latency; 38; "cycles"; Load_Latency; 27; "nanoseconds"; Shared_On; "SM-level"; Share_Cache_With_L1_Data; 1; Share_Cache_With_Texture; 1; Caches_Per_SM; 1
+CONSTANT_L1_CACHE; Size; 2.078125; KiB; "="; Cache_Line_Size; 64; "B"; Load_Latency; 34; "cycles"; Load_Latency; 24; "nanoseconds"; Shared_On; "SM-level"; Share_Cache_With_L1_Data; 0; Caches_Per_SM; 1
 CONST_L1_5_CACHE; Size; 62.500000; KiB; ">="; Cache_Line_Size; 256; "B"; Load_Latency; 114; "cycles"; Load_Latency; 81; "nanoseconds"; Shared_On; "SM-level"
-MAIN_MEMORY; Size; 39.408630; GiB; "="; Load_Latency; 570; "cycles"; Load_Latency; 403; "nanoseconds"; Shared_On; "GPU-level"
+MAIN_MEMORY; Size; 39.408630; GiB; "="; Load_Latency; 567; "cycles"; Load_Latency; 202; "nanoseconds"; Shared_On; "GPU-level"
 SHARED_MEMORY; Size; 164.000000; KiB; "="; Load_Latency; 28; "cycles"; Load_Latency; 20; "nanoseconds"; Shared_On; "SM-level"
