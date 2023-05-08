@@ -74,7 +74,7 @@ __global__ void constant_size(int N, unsigned int * duration, unsigned int *inde
     unsigned int j = 0;
     bool dist = false;
 
-    for(int k=0; k<measureSize; k++){
+    for(int k=0; k<MEASURE_SIZE; k++){
         s_index[k] = 0;
         s_tvalue[k] = 0;
     }
@@ -86,7 +86,7 @@ __global__ void constant_size(int N, unsigned int * duration, unsigned int *inde
     }
 
     // Second round
-    for (int k = 0; k < measureSize; k++) {
+    for (int k = 0; k < MEASURE_SIZE; k++) {
         start_time = clock();
         j = arr[j];
         s_index[k] = j;
@@ -95,7 +95,7 @@ __global__ void constant_size(int N, unsigned int * duration, unsigned int *inde
         s_tvalue[k] = end_time - start_time;
     }
 
-    for(int k=0; k<measureSize; k++){
+    for(int k=0; k<MEASURE_SIZE; k++){
         if (s_tvalue[k] > 1000) {
             //printf("boom\n");
             dist = true;
@@ -151,7 +151,7 @@ CacheSizeResult sizeL1() {
     printAvgFlow(avgFlow, sizeFlow, begin, arrayIncrease, "ConstantR1");
     printMissesFlow(potMissesFlow, sizeFlow, begin, arrayIncrease);
 
-    int cp = detectChangePoint(time, sizeFlow, measureSize);
+    int cp = detectChangePoint(time, sizeFlow, MEASURE_SIZE);
     size.CacheSize = ((begin + cp * arrayIncrease) << 2); // * 4);
     size.realCP = cp > 0;
     size.maxSizeBenchmarked = end << 2; // * 4;
@@ -190,7 +190,7 @@ CacheSizeResult sizeL15() {
     }
     bool innerTimeMallocSuccess = true;
     for (int i = 0; i < sizeFlow; i++) {
-        time2[i] = (unsigned int*) malloc(sizeof(unsigned int) * measureSize);
+        time2[i] = (unsigned int*) malloc(sizeof(unsigned int) * MEASURE_SIZE);
         if (time2[i] == nullptr) {
             innerTimeMallocSuccess = false;
         }
@@ -222,7 +222,7 @@ CacheSizeResult sizeL15() {
     printAvgFlow(avgFlow2, sizeFlow, begin, arrayIncrease, "ConstantR2");
     printMissesFlow(potMissesFlow2, sizeFlow, begin, arrayIncrease);
 
-    int cp = detectChangePoint(time2, sizeFlow, measureSize);
+    int cp = detectChangePoint(time2, sizeFlow, MEASURE_SIZE);
     size.CacheSize = ((begin + cp * arrayIncrease) << 2); // * 4);
     size.realCP = cp > 0;
     size.maxSizeBenchmarked = (begin + (sizeFlow * arrayIncrease)) << 2; // * 4;
@@ -243,14 +243,14 @@ bool launchConstantBenchmarkR1(int N, double *avgOut, unsigned int* potMissesOut
 
     do {
         // Allocate Memory on Host
-        h_index = (unsigned int *) malloc(sizeof(unsigned int) * measureSize);
+        h_index = (unsigned int *) malloc(sizeof(unsigned int) * MEASURE_SIZE);
         if (h_index == nullptr) {
             printf("[CONSTCACHE2.CUH]: malloc h_index Error\n");
             *error = 1;
             break;
         }
 
-        h_timeinfo = (unsigned int *) malloc(sizeof(unsigned int) * measureSize);
+        h_timeinfo = (unsigned int *) malloc(sizeof(unsigned int) * MEASURE_SIZE);
         if (h_timeinfo == nullptr) {
             printf("[CONSTCACHE2.CUH]: malloc h_timeinfo Error\n");
             *error = 1;
@@ -265,14 +265,14 @@ bool launchConstantBenchmarkR1(int N, double *avgOut, unsigned int* potMissesOut
         }
 
         // Allocate Memory on GPU
-        error_id = cudaMalloc((void **) &duration, sizeof(unsigned int) * measureSize);
+        error_id = cudaMalloc((void **) &duration, sizeof(unsigned int) * MEASURE_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CONSTCACHE2.CUH] R1: cudaMalloc duration Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &d_index, sizeof(unsigned int) * measureSize);
+        error_id = cudaMalloc((void **) &d_index, sizeof(unsigned int) * MEASURE_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CONSTCACHE2.CUH] R1: cudaMalloc d_index Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
@@ -301,13 +301,13 @@ bool launchConstantBenchmarkR1(int N, double *avgOut, unsigned int* potMissesOut
         }
         cudaDeviceSynchronize();
 
-        error_id = cudaMemcpy((void *) h_timeinfo, (void *) duration, sizeof(unsigned int) * measureSize,cudaMemcpyDeviceToHost);
+        error_id = cudaMemcpy((void *) h_timeinfo, (void *) duration, sizeof(unsigned int) * MEASURE_SIZE,cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CONSTCACHE2.CUH] R1: cudaMemcpy duration Error: %s\n", cudaGetErrorString(error_id));
             *error = 6;
             break;
         }
-        error_id = cudaMemcpy((void *) h_index, (void *) d_index, sizeof(unsigned int) * measureSize,cudaMemcpyDeviceToHost);
+        error_id = cudaMemcpy((void *) h_index, (void *) d_index, sizeof(unsigned int) * MEASURE_SIZE,cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CONSTCACHE2.CUH] R1: cudaMemcpy d_index Error: %s\n", cudaGetErrorString(error_id));
             *error = 6;
@@ -322,7 +322,7 @@ bool launchConstantBenchmarkR1(int N, double *avgOut, unsigned int* potMissesOut
         }
 
         if (!*disturb)
-            createOutputFile(N, measureSize, h_index, h_timeinfo, avgOut, potMissesOut, "Constant_R1");
+            createOutputFile(N, MEASURE_SIZE, h_index, h_timeinfo, avgOut, potMissesOut, "Constant_R1");
 
     } while (false);
 
@@ -371,7 +371,7 @@ void launchConstantBenchmarkR2(double *avgOut, unsigned int* potMissesOut, unsig
 
         do {
             // Allocate Memory on Host
-            h_index = (unsigned int *) malloc(sizeof(unsigned int) * measureSize);
+            h_index = (unsigned int *) malloc(sizeof(unsigned int) * MEASURE_SIZE);
             if (h_index == nullptr) {
                 printf("[CONSTCACHE2.CUH] R2: malloc h_index Error\n");
                 *error = 1;
@@ -379,7 +379,7 @@ void launchConstantBenchmarkR2(double *avgOut, unsigned int* potMissesOut, unsig
                 break;
             }
 
-            h_timeinfo = (unsigned int *) malloc(sizeof(unsigned int) * measureSize);
+            h_timeinfo = (unsigned int *) malloc(sizeof(unsigned int) * MEASURE_SIZE);
             if (h_timeinfo == nullptr) {
                 printf("[CONSTCACHE2.CUH] R2: malloc h_timeinfo Error\n");
                 *error = 1;
@@ -396,7 +396,7 @@ void launchConstantBenchmarkR2(double *avgOut, unsigned int* potMissesOut, unsig
             }
 
             // Allocate Memory on GPU
-            error_id = cudaMalloc((void **) &duration, sizeof(unsigned int) * measureSize);
+            error_id = cudaMalloc((void **) &duration, sizeof(unsigned int) * MEASURE_SIZE);
             if (error_id != cudaSuccess) {
                 printf("[CONSTCACHE2.CUH] R2: cudaMalloc duration Error: %s\n", cudaGetErrorString(error_id));
                 *error = 2;
@@ -404,7 +404,7 @@ void launchConstantBenchmarkR2(double *avgOut, unsigned int* potMissesOut, unsig
                 break;
             }
 
-            error_id = cudaMalloc((void **) &d_index, sizeof(unsigned int) * measureSize);
+            error_id = cudaMalloc((void **) &d_index, sizeof(unsigned int) * MEASURE_SIZE);
             if (error_id != cudaSuccess) {
                 printf("[CONSTCACHE2.CUH] R2: cudaMalloc d_index Error: %s\n", cudaGetErrorString(error_id));
                 *error = 2;
@@ -437,7 +437,7 @@ void launchConstantBenchmarkR2(double *avgOut, unsigned int* potMissesOut, unsig
             cudaDeviceSynchronize();
 
             // Copy results from GPU to Host
-            error_id = cudaMemcpy((void *) h_timeinfo, (void *) duration, sizeof(unsigned int) * measureSize,cudaMemcpyDeviceToHost);
+            error_id = cudaMemcpy((void *) h_timeinfo, (void *) duration, sizeof(unsigned int) * MEASURE_SIZE,cudaMemcpyDeviceToHost);
             if (error_id != cudaSuccess) {
                 printf("[CONSTCACHE2.CUH] R2: cudaMemcpy duration Error: %s\n", cudaGetErrorString(error_id));
                 *error = 6;
@@ -445,7 +445,7 @@ void launchConstantBenchmarkR2(double *avgOut, unsigned int* potMissesOut, unsig
                 break;
             }
 
-            error_id = cudaMemcpy((void *) h_index, (void *) d_index, sizeof(unsigned int) * measureSize,cudaMemcpyDeviceToHost);
+            error_id = cudaMemcpy((void *) h_index, (void *) d_index, sizeof(unsigned int) * MEASURE_SIZE,cudaMemcpyDeviceToHost);
             if (error_id != cudaSuccess) {
                 printf("[CONSTCACHE2.CUH] R2: cudaMemcpy d_index Error: %s\n", cudaGetErrorString(error_id));
                 *error = 6;
@@ -462,11 +462,11 @@ void launchConstantBenchmarkR2(double *avgOut, unsigned int* potMissesOut, unsig
             }
 
             if (!*disturb)
-                createOutputFile(begin + N * arrayIncrease, measureSize, h_index, h_timeinfo, &avgOut[N],
+                createOutputFile(begin + N * arrayIncrease, MEASURE_SIZE, h_index, h_timeinfo, &avgOut[N],
                                  &potMissesOut[N], "Constant_R2");
 
             if (time != nullptr) {
-                memcpy(time[N], h_timeinfo, measureSize * sizeof(unsigned int));
+                memcpy(time[N], h_timeinfo, MEASURE_SIZE * sizeof(unsigned int));
             }
 
             if (*disturb) {

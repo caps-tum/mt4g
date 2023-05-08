@@ -255,14 +255,14 @@ bool launchConst15KernelBenchmark(double *avgOut, unsigned int* potMissesOut, un
 
     do {
         // Allocate Memory on Host
-        h_index = (unsigned int *) malloc(sizeof(unsigned int) * measureSize);
+        h_index = (unsigned int *) malloc(sizeof(unsigned int) * MEASURE_SIZE);
         if (h_index == nullptr) {
          printf("[CONST15MEMTEST_SEP.CUH]: malloc h_index Error\n");
          *error = 1;
          break;
         }
 
-        h_timeinfo = (unsigned int *) malloc(sizeof(unsigned int) * measureSize);
+        h_timeinfo = (unsigned int *) malloc(sizeof(unsigned int) * MEASURE_SIZE);
         if (h_timeinfo == nullptr) {
             printf("[CONST15MEMTEST_SEP.CUH]: malloc h_timeinfo Error\n");
             *error = 1;
@@ -277,14 +277,14 @@ bool launchConst15KernelBenchmark(double *avgOut, unsigned int* potMissesOut, un
         }
 
         // Allocate Memory on GPU
-        error_id = cudaMalloc((void **) &duration, sizeof(unsigned int) * measureSize);
+        error_id = cudaMalloc((void **) &duration, sizeof(unsigned int) * MEASURE_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CONST15MEMTEST_SEP.CUH]: cudaMalloc duration Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &d_index, sizeof(unsigned int) * measureSize);
+        error_id = cudaMalloc((void **) &d_index, sizeof(unsigned int) * MEASURE_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CONST15MEMTEST_SEP.CUH]: cudaMalloc d_index Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
@@ -316,13 +316,13 @@ bool launchConst15KernelBenchmark(double *avgOut, unsigned int* potMissesOut, un
         cudaDeviceSynchronize();
 
         // Copy results from GPU to Host
-        error_id = cudaMemcpy((void *) h_timeinfo, (void *) duration, sizeof(unsigned int) * measureSize, cudaMemcpyDeviceToHost);
+        error_id = cudaMemcpy((void *) h_timeinfo, (void *) duration, sizeof(unsigned int) * MEASURE_SIZE, cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CONST15MEMTEST_SEP.CUH]: cudaMemcpy duration Error: %s\n", cudaGetErrorString(error_id));
             *error = 6;
             break;
         }
-        error_id = cudaMemcpy((void *) h_index, (void *) d_index, sizeof(unsigned int) * measureSize, cudaMemcpyDeviceToHost);
+        error_id = cudaMemcpy((void *) h_index, (void *) d_index, sizeof(unsigned int) * MEASURE_SIZE, cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CONST15MEMTEST_SEP.CUH]: cudaMemcpy d_index Error: %s\n", cudaGetErrorString(error_id));
             *error = 6;
@@ -338,7 +338,7 @@ bool launchConst15KernelBenchmark(double *avgOut, unsigned int* potMissesOut, un
         cudaDeviceSynchronize();
 
         // In Debug Mode the correct cache usage can be checked in this file (no other latencies)
-        createOutputFile(constArrSize, measureSize, h_index, h_timeinfo, avgOut, potMissesOut, "Const15_");
+        createOutputFile(constArrSize, MEASURE_SIZE, h_index, h_timeinfo, avgOut, potMissesOut, "Const15_");
     } while(false);
 
     // Free Memory on GPU
@@ -384,7 +384,7 @@ __global__ void const15_test (unsigned int * duration, unsigned int *index, bool
     bool dist = false;
     unsigned int j = 0;
 
-    for(int k=0; k<measureSize; k++){
+    for(int k=0; k<MEASURE_SIZE; k++){
         s_index[k] = 0;
         s_tvalue[k] = 0;
     }
@@ -395,7 +395,7 @@ __global__ void const15_test (unsigned int * duration, unsigned int *index, bool
     }
 
     // Second round
-    for (int k = 0; k < measureSize; k++) {
+    for (int k = 0; k < MEASURE_SIZE; k++) {
         start_time = clock();
         j = arr[j];
         s_index[k] = j;
@@ -404,7 +404,7 @@ __global__ void const15_test (unsigned int * duration, unsigned int *index, bool
     }
 
     // Copy results to output
-    for(int k=0; k<measureSize; k++){
+    for(int k=0; k<MEASURE_SIZE; k++){
         if (s_tvalue[k] > 1200) {
             dist = true;
         }

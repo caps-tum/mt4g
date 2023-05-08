@@ -59,14 +59,14 @@ bool launchSharedKernelBenchmark(double *avgOut, unsigned int* potMissesOut, uns
 
     do {
         // Allocate Memory on Host
-        h_index = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_index = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_index == nullptr) {
             printf("[SHAREDMEMTEST.CUH]: malloc h_index Error\n");
             *error = 1;
             break;
         }
 
-        h_timeinfo = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_timeinfo = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_timeinfo == nullptr) {
             printf("[SHAREDMEMTEST.CUH]: malloc h_timeinfo Error\n");
             *error = 1;
@@ -81,14 +81,14 @@ bool launchSharedKernelBenchmark(double *avgOut, unsigned int* potMissesOut, uns
         }
 
         // Allocate Memory on GPU
-        error_id = cudaMalloc((void **) &duration, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &duration, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[SHAREDMEMTEST.CUH]: cudaMalloc duration Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &d_index, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &d_index, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[SHAREDMEMTEST.CUH]: cudaMalloc d_index Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
@@ -120,14 +120,14 @@ bool launchSharedKernelBenchmark(double *avgOut, unsigned int* potMissesOut, uns
         cudaDeviceSynchronize();
 
         // Copy results from GPU to Host
-        error_id = cudaMemcpy((void *) h_timeinfo, (void *) duration, sizeof(unsigned int) * lessSize,cudaMemcpyDeviceToHost);
+        error_id = cudaMemcpy((void *) h_timeinfo, (void *) duration, sizeof(unsigned int) * LESS_SIZE,cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[SHAREDMEMTEST.CUH]: cudaMemcpy duration Error: %s\n", cudaGetErrorString(error_id));
             *error = 6;
             break;
         }
 
-        error_id = cudaMemcpy((void *) h_index, (void *) d_index, sizeof(unsigned int) * lessSize,cudaMemcpyDeviceToHost);
+        error_id = cudaMemcpy((void *) h_index, (void *) d_index, sizeof(unsigned int) * LESS_SIZE,cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[SHAREDMEMTEST.CUH]: cudaMemcpy d_index Error: %s\n", cudaGetErrorString(error_id));
             *error = 6;
@@ -142,7 +142,7 @@ bool launchSharedKernelBenchmark(double *avgOut, unsigned int* potMissesOut, uns
         }
         cudaDeviceSynchronize();
 
-        createOutputFile(sharedTestSize, lessSize, h_index, h_timeinfo, avgOut, potMissesOut, "Shared_");
+        createOutputFile(sharedTestSize, LESS_SIZE, h_index, h_timeinfo, avgOut, potMissesOut, "Shared_");
     } while(false);
 
     // Free Memory on GPU
@@ -191,19 +191,19 @@ __global__ void shared_test (unsigned int * duration, unsigned int *index, bool*
         s_array[i] = (i + 1) % sharedTestSize;
     }
 
-    __shared__ long long shared_tvalue[lessSize];
-    __shared__ unsigned int shared_index[lessSize];
+    __shared__ long long shared_tvalue[LESS_SIZE];
+    __shared__ unsigned int shared_index[LESS_SIZE];
 
     bool dist = false;
     unsigned int j = 0;
 
-    for(int k=0; k<lessSize; k++){
+    for(int k=0; k<LESS_SIZE; k++){
         shared_index[k] = 0;
         shared_tvalue[k] = 0;
     }
 
     // No first round required
-    for (int k = 0; k < lessSize; k++) {
+    for (int k = 0; k < LESS_SIZE; k++) {
         start_time = clock();
         j = s_array[j];
         shared_index[k] = j;
@@ -211,7 +211,7 @@ __global__ void shared_test (unsigned int * duration, unsigned int *index, bool*
         shared_tvalue[k] = end_time-start_time;
     }
 
-    for(int k=0; k<lessSize; k++){
+    for(int k=0; k<LESS_SIZE; k++){
         if (shared_tvalue[k] > 1200) {
             dist = true;
         }

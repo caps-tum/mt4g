@@ -115,4 +115,3 @@ __global__ void c15_linesize (unsigned int *linesize) {
 }
 
 #endif //CUDATEST_C15_LINESIZE
-

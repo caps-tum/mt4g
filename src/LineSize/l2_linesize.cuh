@@ -8,12 +8,14 @@
 # include "../eval.h"
 # include "../GPU_resources.cuh"
 
+#define TOLERANCE 50
+
 __global__ void l2_lineSize (unsigned int N, unsigned int * my_array, unsigned int *missIndex);
 
 unsigned int launchL2LineSizeAltKernelBenchmark(unsigned int N, int stride, int* error);
 
 unsigned int measure_L2_LineSize_Alt(unsigned int l2SizeBytes) {
-    unsigned int l2SizeInts = l2SizeBytes >> 2; // / 4;
+    unsigned int l2SizeInts = l2SizeBytes / sizeof(unsigned int);// / 4;
     int error = 0;
 
     unsigned int lineSize = 0;
@@ -41,7 +43,7 @@ unsigned int launchL2LineSizeAltKernelBenchmark(unsigned int N, int stride, int*
             break;
         }
 
-        h_missIndex = (unsigned int*) calloc(LineMeasureSize, sizeof(unsigned int));
+        h_missIndex = (unsigned int*) calloc(LINE_MEASURE_SIZE, sizeof(unsigned int));
         if (h_missIndex == nullptr) {
             printf("[L2_LINESIZE.CUH]: malloc h_missIndex Error\n");
             *error = 1;
@@ -56,7 +58,7 @@ unsigned int launchL2LineSizeAltKernelBenchmark(unsigned int N, int stride, int*
             break;
         }
 
-        error_id = cudaMalloc((void **) &d_missIndex, sizeof(int) * LineMeasureSize);
+        error_id = cudaMalloc((void **) &d_missIndex, sizeof(int) * LINE_MEASURE_SIZE);
         if (error_id != cudaSuccess) {
             printf("[L2_LINESIZE.CUH]: cudaMalloc d_missIndex Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
@@ -78,7 +80,7 @@ unsigned int launchL2LineSizeAltKernelBenchmark(unsigned int N, int stride, int*
         }
 
         // Copy zeroes to GPU array
-        error_id = cudaMemcpy(d_missIndex, h_missIndex, sizeof(unsigned int) * LineMeasureSize, cudaMemcpyHostToDevice);
+        error_id = cudaMemcpy(d_missIndex, h_missIndex, sizeof(unsigned int) * LINE_MEASURE_SIZE, cudaMemcpyHostToDevice);
         if (error_id != cudaSuccess) {
             printf("[L2_LINESIZE.CUH]: cudaMemcpy d_missIndex Error: %s\n", cudaGetErrorString(error_id));
             *error = 3;
@@ -102,7 +104,7 @@ unsigned int launchL2LineSizeAltKernelBenchmark(unsigned int N, int stride, int*
         cudaDeviceSynchronize();
 
         // Copy results from GPU to Host
-        error_id = cudaMemcpy((void *) h_missIndex, (void *) d_missIndex, sizeof(unsigned int) * LineMeasureSize, cudaMemcpyDeviceToHost);
+        error_id = cudaMemcpy((void *) h_missIndex, (void *) d_missIndex, sizeof(unsigned int) * LINE_MEASURE_SIZE, cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[L2_LINESIZE.CUH]: cudaMemcpy d_missIndex Error: %s\n", cudaGetErrorString(error_id));
             *error = 6;
@@ -110,7 +112,8 @@ unsigned int launchL2LineSizeAltKernelBenchmark(unsigned int N, int stride, int*
         }
         cudaDeviceSynchronize();
 
-        lineSize = getMostValueInArray(h_missIndex, LineMeasureSize) * 4;
+        //most frequent distance between spikes in latency is the cache line size (first element of each cahce line getting loaded)
+        lineSize = getMostValueInArray(h_missIndex, LINE_MEASURE_SIZE) * sizeof(unsigned int);
         cudaDeviceSynchronize();
     } while(false);
 
@@ -137,13 +140,13 @@ unsigned int launchL2LineSizeAltKernelBenchmark(unsigned int N, int stride, int*
     return lineSize;
 }
 
+//loads the values in "my_array", and checks the average load time "ref"; then stores the indexes with significantly above-average load times into "missIndex" -- each index is the discance from the last above-average load
 __global__ void l2_lineSize (unsigned int N, unsigned int* my_array, unsigned int *missIndex) {
     unsigned int start_time, end_time;
     unsigned int j = 0;
-    int tol = 50;
 
     // Using cold cache misses for this cache
-    for (int k = 0; k < LineMeasureSize; k++) {
+    for (int k = 0; k < LINE_MEASURE_SIZE; k++) {
         unsigned int* ptr = my_array + j;
         start_time = clock();
         asm volatile("ld.global.cg.u32 %0, [%1];\n\t" : "=r"(j) : "l"(ptr) : "memory");
@@ -153,16 +156,17 @@ __global__ void l2_lineSize (unsigned int N, unsigned int* my_array, unsigned in
     }
 
     unsigned long long ref = 0;
-    for (int i = 0; i < LineMeasureSize; ++i) {
+    for (int i = 0; i < LINE_MEASURE_SIZE; ++i) {
         ref = ref + s_tvalue[i];
     }
-    ref = ref / LineMeasureSize;
+    ref = ref / LINE_MEASURE_SIZE;
 
     int lastMissIndex = 0;
     int missPtr = 0;
 
-    for (int i = 1; i < LineMeasureSize; ++i) {
-        if (s_tvalue[i] > ref + tol) {
+    //i=0 was for sure a miss; ie. dont check that
+    for (int i = 1; i < LINE_MEASURE_SIZE; ++i) {
+        if (s_tvalue[i] > ref + TOLERANCE) {
             missIndex[missPtr] = i - lastMissIndex;
             lastMissIndex = i;
             ++missPtr;
@@ -171,4 +175,3 @@ __global__ void l2_lineSize (unsigned int N, unsigned int* my_array, unsigned in
 }
 
 #endif //CUDATEST_L2_LINESIZEALT
-

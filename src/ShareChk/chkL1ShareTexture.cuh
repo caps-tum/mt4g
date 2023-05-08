@@ -15,15 +15,15 @@ __global__ void chkL1ShareTexture(cudaTextureObject_t tex, unsigned int L1_N, un
     unsigned int start_time, end_time;
     unsigned int j = 0;
     int j2 = 0;
-    __shared__ long long s_tvalueL1[lessSize];
-    __shared__ unsigned int s_indexL1[lessSize];
-    __shared__ long long s_tvalueTexture[lessSize];
-    __shared__ unsigned int s_indexTexture[lessSize];
+    __shared__ long long s_tvalueL1[LESS_SIZE];
+    __shared__ unsigned int s_indexL1[LESS_SIZE];
+    __shared__ long long s_tvalueTexture[LESS_SIZE];
+    __shared__ unsigned int s_indexTexture[LESS_SIZE];
 
     __syncthreads();
 
     if (threadIdx.x == 0) {
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             s_indexL1[k] = 0;
             s_tvalueL1[k] = 0;
         }
@@ -32,7 +32,7 @@ __global__ void chkL1ShareTexture(cudaTextureObject_t tex, unsigned int L1_N, un
     __syncthreads();
 
     if (threadIdx.x == 1) {
-        for(int k=0; k < lessSize; k++) {
+        for(int k=0; k < LESS_SIZE; k++) {
             s_indexTexture[k] = 0;
             s_tvalueTexture[k] = 0;
         }
@@ -60,7 +60,7 @@ __global__ void chkL1ShareTexture(cudaTextureObject_t tex, unsigned int L1_N, un
 
     if (threadIdx.x == 0) {
         //second round
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             ptr = myArray + j;
             start_time = clock();
             asm volatile("ld.global.ca.u32 %0, [%1];" : "=r"(j) : "l"(ptr) : "memory");
@@ -73,7 +73,7 @@ __global__ void chkL1ShareTexture(cudaTextureObject_t tex, unsigned int L1_N, un
     __syncthreads();
 
     if (threadIdx.x == 1) {
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             start_time=clock();
             j2=tex1Dfetch<int>(tex, j2);
             s_indexTexture[k] = j2;
@@ -85,7 +85,7 @@ __global__ void chkL1ShareTexture(cudaTextureObject_t tex, unsigned int L1_N, un
     __syncthreads();
 
     if (threadIdx.x == 0) {
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             indexL1[k] = s_indexL1[k];
             durationL1[k] = s_tvalueL1[k];
             if (durationL1[k] > 3000) {
@@ -97,7 +97,7 @@ __global__ void chkL1ShareTexture(cudaTextureObject_t tex, unsigned int L1_N, un
     __syncthreads();
 
     if (threadIdx.x == 1) {
-        for(int k=0; k<lessSize; k++){
+        for(int k=0; k<LESS_SIZE; k++){
             indexTexture[k]= s_indexTexture[k];
             durationTexture[k] = s_tvalueTexture[k];
             if (durationTexture[k] > 3000) {
@@ -125,28 +125,28 @@ bool launchBenchmarkChkL1ShareTexture(unsigned int L1Data_N, unsigned int Textur
 
     do {
         // Allocate Memory on Host
-        h_indexL1Data = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_indexL1Data = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_indexL1Data == nullptr) {
             printf("[CHKL1SHARETEXTURE.CUH]: malloc h_indexL1Data Error\n");
             *error = 1;
             break;
         }
 
-        h_indexTexture = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_indexTexture = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_indexTexture == nullptr) {
             printf("[CHKL1SHARETEXTURE.CUH]: malloc h_indexTexture Error\n");
             *error = 1;
             break;
         }
 
-        h_timeinfoL1Data = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_timeinfoL1Data = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_timeinfoL1Data == nullptr) {
             printf("[CHKL1SHARETEXTURE.CUH]: malloc h_timeinfoL1Data Error\n");
             *error = 1;
             break;
         }
 
-        h_timeinfoTexture = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_timeinfoTexture = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_timeinfoTexture == nullptr) {
             printf("[CHKL1SHARETEXTURE.CUH]: malloc h_timeinfoTexture Error\n");
             *error = 1;
@@ -175,28 +175,28 @@ bool launchBenchmarkChkL1ShareTexture(unsigned int L1Data_N, unsigned int Textur
         }
 
         // Allocate Memory on GPU
-        error_id = cudaMalloc((void **) &durationL1, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &durationL1, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKL1SHARETEXTURE.CUH]: cudaMalloc durationL1 Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &durationTexture, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &durationTexture, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKL1SHARETEXTURE.CUH]: cudaMalloc durationTexture Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &d_indexL1, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &d_indexL1, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKL1SHARETEXTURE.CUH]: cudaMalloc d_indexL1 Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &d_indexTexture, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &d_indexTexture, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKL1SHARETEXTURE.CUH]: cudaMalloc d_indexTexture Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
@@ -290,7 +290,7 @@ bool launchBenchmarkChkL1ShareTexture(unsigned int L1Data_N, unsigned int Textur
         }
 
         // Copy results from GPU to Host
-        error_id = cudaMemcpy((void *) h_timeinfoL1Data, (void *) durationL1, sizeof(unsigned int) * lessSize,
+        error_id = cudaMemcpy((void *) h_timeinfoL1Data, (void *) durationL1, sizeof(unsigned int) * LESS_SIZE,
                               cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKL1SHARETEXTURE.CUH]: cudaMemcpy durationL1 Error: %s\n", cudaGetErrorString(error_id));
@@ -298,7 +298,7 @@ bool launchBenchmarkChkL1ShareTexture(unsigned int L1Data_N, unsigned int Textur
             break;
         }
 
-        error_id = cudaMemcpy((void *) h_timeinfoTexture, (void *) durationTexture, sizeof(unsigned int) * lessSize,
+        error_id = cudaMemcpy((void *) h_timeinfoTexture, (void *) durationTexture, sizeof(unsigned int) * LESS_SIZE,
                               cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKL1SHARETEXTURE.CUH]: cudaMemcpy durationTexture Error: %s\n", cudaGetErrorString(error_id));
@@ -306,7 +306,7 @@ bool launchBenchmarkChkL1ShareTexture(unsigned int L1Data_N, unsigned int Textur
             break;
         }
 
-        error_id = cudaMemcpy((void *) h_indexL1Data, (void *) d_indexL1, sizeof(unsigned int) * lessSize,
+        error_id = cudaMemcpy((void *) h_indexL1Data, (void *) d_indexL1, sizeof(unsigned int) * LESS_SIZE,
                               cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKL1SHARETEXTURE.CUH]: cudaMemcpy d_indexL1 Error: %s\n", cudaGetErrorString(error_id));
@@ -314,7 +314,7 @@ bool launchBenchmarkChkL1ShareTexture(unsigned int L1Data_N, unsigned int Textur
             break;
         }
 
-        error_id = cudaMemcpy((void *) h_indexTexture, (void *) d_indexTexture, sizeof(unsigned int) * lessSize,
+        error_id = cudaMemcpy((void *) h_indexTexture, (void *) d_indexTexture, sizeof(unsigned int) * LESS_SIZE,
                               cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKL1SHARETEXTURE.CUH]: cudaMemcpy d_indexTexture Error: %s\n", cudaGetErrorString(error_id));
@@ -329,9 +329,9 @@ bool launchBenchmarkChkL1ShareTexture(unsigned int L1Data_N, unsigned int Textur
             break;
         }
 
-        createOutputFile((int) L1Data_N, lessSize, h_indexL1Data, h_timeinfoL1Data, avgOutL1Data, potMissesOutL1Data,
+        createOutputFile((int) L1Data_N, LESS_SIZE, h_indexL1Data, h_timeinfoL1Data, avgOutL1Data, potMissesOutL1Data,
                          "ShareL1TextureRO_");
-        createOutputFile((int) TextureN, lessSize, h_indexTexture, h_timeinfoTexture, avgOutTexture, potMissesOutTexture,
+        createOutputFile((int) TextureN, LESS_SIZE, h_indexTexture, h_timeinfoTexture, avgOutTexture, potMissesOutTexture,
                          "ShareL1TextureTexture_");
     } while(false);
 

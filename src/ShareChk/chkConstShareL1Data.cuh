@@ -13,15 +13,15 @@ __global__ void chkConstShareData(unsigned int ConstN, unsigned int DataN, unsig
 
     unsigned int start_time, end_time;
     unsigned int j = 0;
-    __shared__ long long s_tvalueConst[lessSize];
-    __shared__ unsigned int s_indexConst[lessSize];
-    __shared__ long long s_tvalueData[lessSize];
-    __shared__ unsigned int s_indexData[lessSize];
+    __shared__ long long s_tvalueConst[LESS_SIZE];
+    __shared__ unsigned int s_indexConst[LESS_SIZE];
+    __shared__ long long s_tvalueData[LESS_SIZE];
+    __shared__ unsigned int s_indexData[LESS_SIZE];
 
     __syncthreads();
 
     if (threadIdx.x == 0) {
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             s_indexConst[k] = 0;
             s_tvalueConst[k] = 0;
         }
@@ -30,7 +30,7 @@ __global__ void chkConstShareData(unsigned int ConstN, unsigned int DataN, unsig
     __syncthreads();
 
     if (threadIdx.x == 1) {
-        for(int k=0; k<lessSize; k++){
+        for(int k=0; k<LESS_SIZE; k++){
             s_indexData[k] = 0;
             s_tvalueData[k] = 0;
         }
@@ -58,7 +58,7 @@ __global__ void chkConstShareData(unsigned int ConstN, unsigned int DataN, unsig
     __syncthreads();
 
     if (threadIdx.x == 0) {
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             start_time = clock();
             j = arr[j];
             s_indexConst[k] = j;
@@ -73,7 +73,7 @@ __global__ void chkConstShareData(unsigned int ConstN, unsigned int DataN, unsig
     if (threadIdx.x == 1) {
         asm volatile(" .reg .u64 smem_ptr64;\n\t"
                      " cvta.to.shared.u64 smem_ptr64, %0;\n\t" :: "l"(s_indexData));
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             ptr = my_array + j;
             asm volatile ("mov.u32 %0, %%clock;\n\t"
                           "ld.global.ca.u32 %1, [%3];\n\t"
@@ -87,7 +87,7 @@ __global__ void chkConstShareData(unsigned int ConstN, unsigned int DataN, unsig
     __syncthreads();
 
     if (threadIdx.x == 0) {
-        for (int k = 0; k < lessSize; k++) {
+        for (int k = 0; k < LESS_SIZE; k++) {
             indexConst[k] = s_indexConst[k];
             durationConst[k] = s_tvalueConst[k];
             if (durationConst[k] > 3000) {
@@ -99,7 +99,7 @@ __global__ void chkConstShareData(unsigned int ConstN, unsigned int DataN, unsig
     __syncthreads();
 
     if (threadIdx.x == 1) {
-        for(int k=0; k<lessSize; k++){
+        for(int k=0; k<LESS_SIZE; k++){
             indexData[k]= s_indexData[k];
             durationData[k] = s_tvalueData[k];
             if (durationData[k] > 3000) {
@@ -128,28 +128,28 @@ bool launchBenchmarkChkConstShareData(unsigned int ConstN, unsigned int DataN, d
 
     do {
         // Allocate Memory on Host
-        h_indexConst = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_indexConst = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_indexConst == nullptr) {
             printf("[CHKCONSTSHAREL1DATA.CUH]: malloc h_indexConst Error\n");
             *error = 1;
             break;
         }
 
-        h_indexData = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_indexData = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_indexData == nullptr) {
             printf("[CHKCONSTSHAREL1DATA.CUH]: malloc h_indexData Error\n");
             *error = 1;
             break;
         }
 
-        h_timeinfoConst = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_timeinfoConst = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_timeinfoConst == nullptr) {
             printf("[CHKCONSTSHAREL1DATA.CUH]: malloc h_timeinfoConst Error\n");
             *error = 1;
             break;
         }
 
-        h_timeinfoData = (unsigned int *) malloc(sizeof(unsigned int) * lessSize);
+        h_timeinfoData = (unsigned int *) malloc(sizeof(unsigned int) * LESS_SIZE);
         if (h_timeinfoData == nullptr) {
             printf("[CHKCONSTSHAREL1DATA.CUH]: malloc h_timeinfoData Error\n");
             *error = 1;
@@ -171,28 +171,28 @@ bool launchBenchmarkChkConstShareData(unsigned int ConstN, unsigned int DataN, d
         }
 
         // Allocate Memory on GPU
-        error_id = cudaMalloc((void **) &durationConst, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &durationConst, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKCONSTSHAREL1DATA.CUH]: cudaMalloc durationConst Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &durationData, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &durationData, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKCONSTSHAREL1DATA.CUH]: cudaMalloc durationData Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &d_indexConst, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &d_indexConst, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKCONSTSHAREL1DATA.CUH]: cudaMalloc d_indexConst Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &d_indexData, sizeof(unsigned int) * lessSize);
+        error_id = cudaMalloc((void **) &d_indexData, sizeof(unsigned int) * LESS_SIZE);
         if (error_id != cudaSuccess) {
             printf("[CHKCONSTSHAREL1DATA.CUH]: cudaMalloc d_indexData Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
@@ -241,7 +241,7 @@ bool launchBenchmarkChkConstShareData(unsigned int ConstN, unsigned int DataN, d
         }
 
         // Copy results from GPU to Host
-        error_id = cudaMemcpy((void *) h_timeinfoConst, (void *) durationConst, sizeof(unsigned int) * lessSize,
+        error_id = cudaMemcpy((void *) h_timeinfoConst, (void *) durationConst, sizeof(unsigned int) * LESS_SIZE,
                               cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKCONSTSHAREL1DATA.CUH]: cudaMemcpy durationConst Error: %s\n", cudaGetErrorString(error_id));
@@ -249,7 +249,7 @@ bool launchBenchmarkChkConstShareData(unsigned int ConstN, unsigned int DataN, d
             break;
         }
 
-        error_id = cudaMemcpy((void *) h_timeinfoData, (void *) durationData, sizeof(unsigned int) * lessSize,
+        error_id = cudaMemcpy((void *) h_timeinfoData, (void *) durationData, sizeof(unsigned int) * LESS_SIZE,
                               cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKCONSTSHAREL1DATA.CUH]: cudaMemcpy durationData Error: %s\n", cudaGetErrorString(error_id));
@@ -257,7 +257,7 @@ bool launchBenchmarkChkConstShareData(unsigned int ConstN, unsigned int DataN, d
             break;
         }
 
-        error_id = cudaMemcpy((void *) h_indexConst, (void *) d_indexConst, sizeof(unsigned int) * lessSize,
+        error_id = cudaMemcpy((void *) h_indexConst, (void *) d_indexConst, sizeof(unsigned int) * LESS_SIZE,
                               cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKCONSTSHAREL1DATA.CUH]: cudaMemcpy d_indexConst Error: %s\n", cudaGetErrorString(error_id));
@@ -265,7 +265,7 @@ bool launchBenchmarkChkConstShareData(unsigned int ConstN, unsigned int DataN, d
             break;
         }
 
-        error_id = cudaMemcpy((void *) h_indexData, (void *) d_indexData, sizeof(unsigned int) * lessSize,
+        error_id = cudaMemcpy((void *) h_indexData, (void *) d_indexData, sizeof(unsigned int) * LESS_SIZE,
                               cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[CHKCONSTSHAREL1DATA.CUH]: cudaMemcpy d_indexData Error: %s\n", cudaGetErrorString(error_id));
@@ -280,8 +280,8 @@ bool launchBenchmarkChkConstShareData(unsigned int ConstN, unsigned int DataN, d
             break;
         }
 
-        createOutputFile((int) ConstN, lessSize, h_indexConst, h_timeinfoConst, avgOutConst, potMissesOutConst,"ShareConstDataConst_");
-        createOutputFile((int) DataN, lessSize, h_indexData, h_timeinfoData, avgOutData, potMissesOutData, "ShareConstDataData_");
+        createOutputFile((int) ConstN, LESS_SIZE, h_indexConst, h_timeinfoConst, avgOutConst, potMissesOutConst,"ShareConstDataConst_");
+        createOutputFile((int) DataN, LESS_SIZE, h_indexData, h_timeinfoData, avgOutData, potMissesOutData, "ShareConstDataData_");
     } while(false);
 
     bool ret = false;

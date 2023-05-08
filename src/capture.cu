@@ -210,8 +210,10 @@ void printOverallBenchmarkResults(CacheResults* result, bool L1_global_load_enab
         fprintf(csv, "Load_Latency; %d; \"cycles\"; ", result[L2].latencyCycles);
         printf("Detected L2 Cache Load Latency: %d nanoseconds\n", result[L2].latencyNano);
         fprintf(csv, "Load_Latency; %d; \"nanoseconds\"; ", result[L2].latencyNano);
-        printf("L2 Cache Is Shared On %s-level\n\n", shared_where[L2]);
-        fprintf(csv, "Shared_On; \"%s-level\"\n", shared_where[L2]);
+        printf("L2 Cache Is Shared On %s-level\n", shared_where[L2]);
+        fprintf(csv, "Shared_On; \"%s-level\"; ", shared_where[L2]);
+        printf("Detected L2 Data Cache Segments Per GPU: %d\n\n", result[L2].numberPerSM);
+        fprintf(csv, "Caches_Per_GPU; %d\n", result[L2].numberPerSM);
     } else {
         printf("L2 CACHE WAS NOT BENCHMARKED!\n\n");
         fprintf(csv, "\"N/A\"\n");
@@ -411,7 +413,19 @@ void fillWithCUDAInfo(CudaDeviceInfo cudaInfo, size_t totalMem) {
     overallResults[SHARED].CacheSize.realCP = true;
     overallResults[SHARED].CacheSize.maxSizeBenchmarked = cudaInfo.sharedMemPerSM;
 
-    overallResults[L2].CacheSize.CacheSize = cudaInfo.L2CacheSize;
+    //for L2 cache, check the measured value segment size, and compute the respective number of segments
+    size_t L2_segment_size = overallResults[L2].CacheSize.CacheSize;
+    size_t L2_total_sz = cudaInfo.L2CacheSize;
+    unsigned int num_segments = 1;
+    if(L2_segment_size > 1){
+        num_segments = (L2_total_sz + (L2_segment_size/2)) / L2_segment_size; //divide and round up or down
+    }
+    if(num_segments <= 0 || num_segments > 16) {
+        printf("!Measured %d L2 cache segments, which is unexpected. Falling back to default 1 segment.\n", num_segments);
+        num_segments = 1;
+    }
+    overallResults[L2].numberPerSM = num_segments;
+    overallResults[L2].CacheSize.CacheSize = cudaInfo.L2CacheSize / num_segments;
     overallResults[L2].CacheSize.realCP = true;
     overallResults[L2].CacheSize.maxSizeBenchmarked = cudaInfo.L2CacheSize;
 
@@ -439,9 +453,9 @@ char cudaCoreQueryPath[coreQuerySize];
 
 void parseArgs(int argc, char *argv[]) {
 #ifdef _WIN32
-    printf("Usage: MemTop.exe [OPTIONS]\n"
+    printf("Usage: %s [OPTIONS]\n"
 #else
-    printf("Usage: ./MemTop [OPTIONS]\n"
+    printf("Usage: %s [OPTIONS]\n"
 #endif
            "\nOPTIONS\n=============================================\n"
            "\n-p:<path>: \n\tOverwrites the source of information for the number of Cuda Cores\n\t<path> specifies the path to the directory, that contains the \'deviceQuery\' executable"
@@ -452,7 +466,7 @@ void parseArgs(int argc, char *argv[]) {
            "\n-txt: Turns on benchmark for texture cache"
            "\n-ro: Turns on benchmark for read-only cache"
            "\n-c: Turns on benchmark for constant cache"
-           "\n\nIf none of the benchmark switches is used, every benchmark is executed!\n");
+           "\n\nIf none of the benchmark switches is used, every benchmark is executed!\n", argv[0]);
 
     bool bFlags = false;
 
@@ -552,14 +566,6 @@ int main(int argc, char *argv[]){
     }
 #endif //IsDebug
 
-    if (l2) {
-        // L2 Data Cache Checks
-        L2_results = executeL2DataCacheChecks(cudaInfo.L2CacheSize);
-        overallResults[L2] = L2_results;
-
-        cudaDeviceReset();
-    }
-
     if (L1_used_for_global_loads && l1) {
         // L1 Data Cache Checks
         L1_results = executeL1DataCacheChecks();
@@ -568,6 +574,17 @@ int main(int argc, char *argv[]){
         fprintf(out, "Detected L1 Latency in cycles: %d\n", L1_results.latencyCycles);
 #endif //IsDebug
         overallResults[L1] = L1_results;
+
+        cudaDeviceReset();
+    }
+
+    if (l2) {
+        // L2 Data Cache Checks
+        if(L1_used_for_global_loads && l1) //use L1 cache size as starting point if available
+            L2_results = executeL2DataCacheChecks(cudaInfo.L2CacheSize, L1_results.CacheSize.CacheSize);
+        else
+            L2_results = executeL2DataCacheChecks(cudaInfo.L2CacheSize);
+        overallResults[L2] = L2_results;
 
         cudaDeviceReset();
     }

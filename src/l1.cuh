@@ -72,14 +72,14 @@ bool launchL1KernelBenchmark(int N, int stride, double *avgOut, unsigned int* po
             break;
         }
 
-        h_index = (unsigned int *) malloc(sizeof(unsigned int) * measureSize);
+        h_index = (unsigned int *) malloc(sizeof(unsigned int) * MEASURE_SIZE);
         if (h_index == nullptr) {
             printf("[L1.CUH]: malloc h_index Error\n");
             *error = 1;
             break;
         }
 
-        h_timeinfo = (unsigned int *) malloc(sizeof(unsigned int) * measureSize);
+        h_timeinfo = (unsigned int *) malloc(sizeof(unsigned int) * MEASURE_SIZE);
         if (h_timeinfo == nullptr) {
             printf("[L1.CUH]: malloc h_timeinfo Error\n");
             *error = 1;
@@ -101,14 +101,14 @@ bool launchL1KernelBenchmark(int N, int stride, double *avgOut, unsigned int* po
             break;
         }
 
-        error_id = cudaMalloc((void **) &duration, sizeof(unsigned int) * measureSize);
+        error_id = cudaMalloc((void **) &duration, sizeof(unsigned int) * MEASURE_SIZE);
         if (error_id != cudaSuccess) {
             printf("[L1.CUH]: cudaMalloc duration Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
             break;
         }
 
-        error_id = cudaMalloc((void **) &d_index, sizeof(unsigned int) * measureSize);
+        error_id = cudaMalloc((void **) &d_index, sizeof(unsigned int) * MEASURE_SIZE);
         if (error_id != cudaSuccess) {
             printf("[L1.CUH]: cudaMalloc d_index Error: %s\n", cudaGetErrorString(error_id));
             *error = 2;
@@ -152,14 +152,14 @@ bool launchL1KernelBenchmark(int N, int stride, double *avgOut, unsigned int* po
         cudaDeviceSynchronize();
 
         // Copy results from GPU to Host
-        error_id = cudaMemcpy((void *) h_timeinfo, (void *) duration, sizeof(unsigned int) * measureSize,cudaMemcpyDeviceToHost);
+        error_id = cudaMemcpy((void *) h_timeinfo, (void *) duration, sizeof(unsigned int) * MEASURE_SIZE,cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[L1.CUH]: cudaMemcpy duration Error: %s\n", cudaGetErrorString(error_id));
             *error = 6;
             break;
         }
 
-        error_id = cudaMemcpy((void *) h_index, (void *) d_index, sizeof(unsigned int) * measureSize,cudaMemcpyDeviceToHost);
+        error_id = cudaMemcpy((void *) h_index, (void *) d_index, sizeof(unsigned int) * MEASURE_SIZE,cudaMemcpyDeviceToHost);
         if (error_id != cudaSuccess) {
             printf("[L1.CUH]: cudaMemcpy d_index Error: %s\n", cudaGetErrorString(error_id));
             *error = 6;
@@ -176,7 +176,7 @@ bool launchL1KernelBenchmark(int N, int stride, double *avgOut, unsigned int* po
         cudaDeviceSynchronize();
 
         if (!*disturb)
-            createOutputFile(N, measureSize, h_index, h_timeinfo, avgOut, potMissesOut, "L1_");
+            createOutputFile(N, MEASURE_SIZE, h_index, h_timeinfo, avgOut, potMissesOut, "L1_");
 
     } while(false);
 
@@ -230,7 +230,7 @@ __global__ void l1_size (unsigned int * my_array, int array_length, unsigned int
     bool dist = false;
     unsigned int j = 0;
 
-    for(int k=0; k<measureSize; k++){
+    for(int k=0; k<MEASURE_SIZE; k++){
         s_index[k] = 0;
         s_tvalue[k] = 0;
     }
@@ -246,7 +246,7 @@ __global__ void l1_size (unsigned int * my_array, int array_length, unsigned int
     // Second round
     asm volatile(" .reg .u64 smem_ptr64;\n\t"
                  " cvta.to.shared.u64 smem_ptr64, %0;\n\t" :: "l"(s_index));
-    for (int k = 0; k < measureSize; k++) {
+    for (int k = 0; k < MEASURE_SIZE; k++) {
         ptr = my_array + j;
         //start_time = clock();
         asm volatile ("mov.u32 %0, %%clock;\n\t"
@@ -261,7 +261,7 @@ __global__ void l1_size (unsigned int * my_array, int array_length, unsigned int
             s_tvalue[k] = end_time-start_time;
     }
 
-    for(int k=0; k<measureSize; k++){
+    for(int k=0; k<MEASURE_SIZE; k++){
         if (s_tvalue[k] > 2000) {
             dist = true;
         }
@@ -272,4 +272,3 @@ __global__ void l1_size (unsigned int * my_array, int array_length, unsigned int
 }
 
 #endif //CUDATEST_L1
-
