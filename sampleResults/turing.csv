@@ -1,0 +1,12 @@
+GPU_INFORMATION; GPU_vendor; "Nvidia"; GPU_name; "NVIDIA GeForce GTX 1650"
+COMPUTE_RESOURCE_INFORMATION; CUDA_compute_capability; "7.5"; Number_of_SM; 16; Number_of_cores_in_GPU; 1024; Number_of_cores_per_SM; 64
+REGISTER_INFORMATION; Registers_per_threadblock; 65536; "32-bit registers"; Registers_per_SM; 65536; "32-bit registers"
+ADDITIONAL_INFORMATION; Memory_Clock_Frequency; 4.001; "GHz"; Memory_Bus_Width; 128; "bit"; GPU_Clock_Rate; 1.560; "GHz"
+L1_DATA_CACHE; Size;25.012; MiB;"""="""; Cache_Line_Size;32; "B"; Load_Latency;95; "cycles"; Load_Latency;93; "nanoseconds"; Shared_On; "SM-level"; Share_Cache_With_Texture; 1; Share_Cache_With_Read-Only; 1; Share_Cache_With_ConstantL1; 1; Caches_Per_SM; 1; Bandwidth; 102.3; "GB/s"
+L2_DATA_CACHE; Size; 1.000; MiB; "="; Cache_Line_Size; 64; "B"; Load_Latency; 209; "cycles"; Load_Latency; 209; "nanoseconds"; Shared_On; "GPU-level"; Bandwidth; 101.4; "GB/s"
+TEXTURE_CACHE; Size; 23.012; KiB; "="; Cache_Line_Size; 32; "B"; Load_Latency; 86; "cycles"; Load_Latency; 86; "nanoseconds"; Shared_On; "SM-level"; Share_Cache_With_L1_Data; 1; Share_Cache_With_Read-Only; 1; Caches_Per_SM; 1
+READ-ONLY_CACHE; Size; 24.629; KiB; "="; Cache_Line_Size; 32; "B"; Load_Latency; 91; "cycles"; Load_Latency; 82; "nanoseconds"; Shared_On; "SM-level"; Share_Cache_With_L1_Data; 1; Share_Cache_With_Texture; 1; Caches_Per_SM; 1
+CONSTANT_L1_CACHE; Size; 2.109; KiB; "="; Cache_Line_Size; 64; "B"; Load_Latency; 32; "cycles"; Load_Latency; 22; "nanoseconds"; Shared_On; "SM-level"; Share_Cache_With_L1_Data; 1; Caches_Per_SM; 1
+CONST_L1_5_CACHE; Size; 35.156; KiB; "="; Cache_Line_Size; 256; "B"; Load_Latency; 96; "cycles"; Load_Latency; 69; "nanoseconds"; Shared_On; "SM-level"
+MAIN_MEMORY; Size; 3.812; GiB; "="; Load_Latency; 491; "cycles"; Load_Latency; 394; "nanoseconds"; Shared_On; "GPU-level"; Bandwidth; 102.1; "GB/s"
+SHARED_MEMORY; Size; 64.000; KiB; "="; Load_Latency; 28; "cycles"; Load_Latency; 15; "nanoseconds"; Shared_On; "SM-level"

@@ -1,57 +1,65 @@
-
-
-#TODO: IF(WIN32)....
-#set(CMAKE_THREAD_LIBS_INIT "-lpthread")
-#set(CMAKE_HAVE_THREADS_LIBRARY 1)
-#set(CMAKE_USE_WIN32_THREADS_INIT 0)
-#set(CMAKE_USE_PTHREADS_INIT 1)
-#set(THREADS_PREFER_PTHREAD_FLAG ON)
-
-
-
+# is 3.22, was tested also under 3.10
+cmake_minimum_required(VERSION 3.22)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
-include_directories(cuda-samples/Common)
 link_directories(${CMAKE_CURRENT_BINARY_DIR})
 
-add_executable(c15 starter_other/ConstMemory.cu)
-add_executable(mt4g capture.cu)
+# src: https://github.com/GPUOpen-ProfessionalCompute-Libraries/rpp/blob/ab75f4d90bf8ebccd10dd4292983a6638807c4c1/utilities/rpp-unittests/HIP_NEW/CMakeLists.txt
 
-set_property(TARGET mt4g PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS ON)
-set_target_properties(mt4g PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-set_target_properties(mt4g PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS ON)
+if(NOT "${HIP_PATH}")
+    set(HIP_PATH "/opt/rocm/hip")
+endif()
 
-set_property(TARGET c15 PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS ON)
-set_target_properties(c15 PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
-set_target_properties(c15 PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS ON)
+if(NOT "${CMAKE_MODULE_PATH}")
+    set(CMAKE_MODULE_PATH "${HIP_PATH}/cmake" "${HIP_PATH}/lib/cmake/hip" ${CMAKE_MODULE_PATH})
+endif()
 
-add_link_options("-lcuda")
-#add_link_options("-lnvidia-ml")
+if(NOT "${CMAKE_PREFIX_PATH}")
+    list(APPEND CMAKE_PREFIX_PATH
+            "${HIP_PATH}/cmake"
+            "${HIP_PATH}/lib/cmake"
+            "${HIP_PATH}/../lib/cmake" # hopefully catches all extra HIP dependencies
+            )
+endif()
 
-message(${CUDA_TOOLKIT_ROOT_DIR})
+message(STATUS "SRC module path:   ${CMAKE_MODULE_PATH}")
+message(STATUS "SRC prefix path:   ${CMAKE_PREFIX_PATH}")
 
-IF(UNIX)
-    #target_link_libraries( mt4g ${CUDA_LIBRARIES} ${CUDA_TOOLKIT_ROOT_DIR}/lib64/stubs/libnvidia-ml.so "stdc++fs" )
-    target_link_libraries( mt4g ${CUDA_LIBRARIES} "stdc++fs" )
-    target_link_libraries( c15 ${CUDA_LIBRARIES} "stdc++fs")
-ENDIF()
+# Set compiler and linker
+find_package(HIP REQUIRED HINTS
+        "${HIP_PATH}/cmake"
+        "${HIP_PATH}"
+        "opt/rocm/hip")
+message(STATUS "HIP libraries: ${HIP_LIBRARIES}")
 
-IF(WIN32)
-    target_link_libraries( mt4g "${CUDA_TOOLKIT_ROOT_DIR}/lib/x64/cuda.lib")
-    #target_link_libraries( mt4g "${CUDA_TOOLKIT_ROOT_DIR}/lib/x64/nvml.lib")
-    target_link_libraries( c15 "${CUDA_TOOLKIT_ROOT_DIR}/lib/x64/cuda.lib")
-ENDIF()
 
-IF(DEFINED COMPUTE_CAP_COMPILE_OPTIONS)
-    target_compile_options(mt4g ${COMPUTE_CAP_COMPILE_OPTIONS})
-    target_compile_options(c15 ${COMPUTE_CAP_COMPILE_OPTIONS})
+set(CMAKE_CXX_COMPILER ${HIP_HIPCC_EXECUTABLE})
+set(CMAKE_CXX_LINKER   ${HIP_HIPCC_EXECUTABLE})
+
+
+if (HIP_FOUND)
+
+    # Create the executable
+    add_executable(c15 starter_other/ConstMemory.cpp)
+    add_executable(mt4g capture.cpp general_functions.h)
+
+    # Link with HIP
+    target_include_directories(c15 PRIVATE ${ROCM_PATH}/hsa/include)
+    target_include_directories(mt4g PRIVATE ${ROCM_PATH}/hsa/include)
+
+    IF(UNIX)
+        target_link_libraries( mt4g ${HIP_LIBRARIES} "stdc++fs")
+
+        target_link_libraries( c15 ${HIP_LIBRARIES} "stdc++fs")
+    ENDIF()
+
+    if ("${IsDebug}" STREQUAL "1")
+        add_definitions(-DIsDebug)
+    endif()
+
+
+
+    install(TARGETS mt4g c15 DESTINATION bin)
 else()
-    target_compile_options(mt4g PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--ptxas-options=-v>)
-    target_compile_options(c15 PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--ptxas-options=-v>)
+    message(FATAL_ERROR "src/CMakeLists.txt: HIP not found!")
 endif()
-
-if ("${IsDebug}" STREQUAL "1")
-    add_definitions(-DIsDebug)
-endif()
-
-
-install(TARGETS mt4g c15 DESTINATION bin)
+##########################################

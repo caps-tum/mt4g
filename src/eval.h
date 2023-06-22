@@ -7,15 +7,21 @@
 
 #define _SILENCE_EXPERIMENTAL_FILESYSTEM_DEPRECATION_WARNING 1;
 
+# include "hip/hip_runtime.h"
 #include <cstdio>
 #include <cstdlib>
+
+#include <cstring>
+
 #include <sys/stat.h>
 #include <algorithm>
 #include <cerrno>
 #include <cassert>
+
 #ifdef _WIN32
 #include <direct.h>
 #endif
+
 #include <experimental/filesystem>
 #include <iostream>
 #include "ErrorHandler.h"
@@ -24,8 +30,7 @@
 FILE *out;
 #endif
 
-char separator()
-{
+char separator() {
 #ifdef _WIN32
     return '\\';
 #else
@@ -33,18 +38,53 @@ char separator()
 #endif
 }
 
-double computeAvg(const unsigned int* time, int size) {
-    double avg = 0.;
-    for (int i = 0; i < size; i++) {
-        avg += time[i];
+#include <stdarg.h>
+
+#include <hip/hip_runtime.h>
+
+/** Free memory for a list of pointers
+ * @param ptr_list list of pointers to free
+ * @param hip if true, use hipFree (GPU), else use free (CPU-side)
+ */
+void FreeTestMemory(std::initializer_list<void *> ptr_list, bool hip) {
+    for (auto ptr: ptr_list) {
+        if (ptr != nullptr) {
+            if (hip)
+                hipError_t error_id = hipFree(ptr);
+            else
+                free(ptr);
+        }
     }
-    return (avg / (double) size);
 }
 
-double computeAvg(const double* values, int size) {
+// Function to allocate memory on the host
+int allocate_host_memory(unsigned int **chunk, int size,
+                         char *where, char *what, int error_code) {
+    *chunk = (unsigned int *) malloc(size);
+    if (*chunk == nullptr) {
+        printf("[%s]: malloc %s Error\n", where, what);
+        return error_code;
+    }
+    return 0;
+}
+
+// Function to allocate memory on the GPU
+int allocate_device_memory(unsigned int **chunk, int size,
+                           char *where, char *what, int error_code) {
+    hipError_t error_id = hipMalloc((void **) chunk, size);
+    if (error_id != hipSuccess) {
+        printf("[%s]: hipMalloc %s Error: %s\n", where, what, hipGetErrorString(error_id));
+        return error_code;
+    }
+    return 0;
+}
+
+// template for ints/doubles to calculate averages
+template<typename T>
+double computeAvg(const T *data, int size) {
     double avg = 0.;
     for (int i = 0; i < size; i++) {
-        avg += values[i];
+        avg += data[i];
     }
     return (avg / (double) size);
 }
@@ -56,7 +96,7 @@ double computeAvg(const double* values, int size) {
  * @param tolerance
  * @return
  */
-unsigned int potCacheMisses(unsigned int* time, int size, double tolerance = 15) {
+unsigned int potCacheMisses(unsigned int *time, int size, double tolerance = 15) {
     int ret = 0;
     double avg = computeAvg(time, size);
     for (int i = 0; i < size; i++) {
@@ -75,9 +115,11 @@ unsigned int potCacheMisses(unsigned int* time, int size, double tolerance = 15)
  * @param missesIndicesOut
  * @param avg
  * @param tolerance
- * @return
+ * @return number of misses
  */
-unsigned int potCacheMissesInfo(unsigned int* time, int size, unsigned int* missesOut, int* missesIndicesOut, double avg, double tolerance = 15) {
+unsigned int
+potCacheMissesInfo(unsigned int *time, int size, unsigned int *missesOut, int *missesIndicesOut, double avg,
+                   double tolerance = 15) {
     int ret = 0;
     for (int i = 0; i < size; i++) {
         if (time[i] > avg + tolerance) {
@@ -95,16 +137,17 @@ unsigned int potCacheMissesInfo(unsigned int* time, int size, unsigned int* miss
  * @param size
  * @param slideWindow
  */
-void postProcessing(double* flow, int size, int slideWindow) {
+void postProcessing(double *flow, int size, int slideWindow) {
 #ifdef IsDebug
     fprintf(out, "Post Processing / Filtering\n");
 #endif //IsDebug
-    double* outFlow = (double*) malloc(sizeof(double) * size);
+    double *outFlow = (double *) malloc(sizeof(double) * size);
     if (outFlow == nullptr) {
         printErrorCodeInformation(1);
         exit(1);
     }
-    for(int i = 0; i < slideWindow / 2; i++) {
+
+    for (int i = 0; i < slideWindow / 2; i++) {
         int desiredLeftIndex = i - slideWindow / 2;
         int desiredRightIndex = i + slideWindow / 2;
         int actualLeftIndex = 0;
@@ -117,22 +160,24 @@ void postProcessing(double* flow, int size, int slideWindow) {
         }
         outFlow[i] = minValue;
     }
-    for (int i = slideWindow/2; i < size - slideWindow/2; i++) {
+
+    for (int i = slideWindow / 2; i < size - slideWindow / 2; i++) {
         int desiredLeftIndex = i - slideWindow / 2;
         int desiredRightIndex = i + slideWindow / 2;
         double minValue = flow[desiredLeftIndex];
-        for(int k = desiredLeftIndex + 1; k <= desiredRightIndex; k++) {
-            if(flow[k] < minValue) {
+        for (int k = desiredLeftIndex + 1; k <= desiredRightIndex; k++) {
+            if (flow[k] < minValue) {
                 minValue = flow[k];
             }
         }
         outFlow[i] = minValue;
     }
 
-    for (int i = size-slideWindow/2; i < size; i++) {
+
+    for (int i = size - slideWindow / 2; i < size; i++) {
         int desiredLeftIndex = i - slideWindow / 2;
         int desiredRightIndex = i + slideWindow / 2;
-        int actualRightIndex = size-1;
+        int actualRightIndex = size - 1;
         desiredLeftIndex = desiredLeftIndex - (desiredRightIndex - actualRightIndex);
         double minValue = flow[desiredLeftIndex];
         for (int k = desiredLeftIndex + 1; k <= actualRightIndex; k++) {
@@ -149,7 +194,7 @@ void postProcessing(double* flow, int size, int slideWindow) {
 #endif //IsDebug
 }
 
-void printAvgFlow(double* flow, int size, int begin, int stride, const char* type) {
+void printAvgFlow(double *flow, int size, int begin, int stride, const char *type) {
 #ifdef IsDebug
     char outputFile[64];
     snprintf(outputFile, 64, "%s_avgFlow.txt", type);
@@ -171,7 +216,7 @@ void printAvgFlow(double* flow, int size, int begin, int stride, const char* typ
 }
 
 
-void printMissesFlow(unsigned int* flow, int size, int begin, int stride) {
+void printMissesFlow(unsigned int *flow, int size, int begin, int stride) {
 #ifdef IsDebug
     fprintf(out, "******************\n");
     fprintf(out, "Flow of the potential misses\n");
@@ -191,25 +236,27 @@ void cleanupOutput() {
 
 /**
  * Creates the output file BUT also assigns the average and potMisses values to the pointers!
- * @param N
- * @param it
- * @param h_index
- * @param h_duration
- * @param avgOut
- * @param potMissesOut
- * @param prefix
+ * @param N the size of the array
+ * @param it the number of iterations
+ * @param h_index the array of the indices
+ * @param h_duration the array of the durations
+ * @param avgOut the pointer to the average
+ * @param potMissesOut the pointer to the potential misses
+ * @param prefix the prefix of the file
  */
-void createOutputFile(int N, int it, unsigned int *h_index, unsigned *h_duration, double *avgOut, unsigned *potMissesOut, const char* prefix) {
-    const char* dirName = "output";
+void
+createOutputFile(int N, int it, unsigned int *h_index, unsigned *h_duration, double *avgOut, unsigned *potMissesOut,
+                 const char *prefix) {
+    const char *dirName = "output";
     char fileName[64];
-    snprintf(fileName, 64, "output%c%soutput_%d.log",separator(),prefix, N);
+    snprintf(fileName, 64, "output%c%soutput_%d.log", separator(), prefix, N);
     errno = 0;
     int ret;
-    #ifdef __linux__
-        ret = mkdir(dirName, 0777);
-    #else
-        ret = _mkdir(dirName);
-    #endif
+#ifdef __linux__
+    ret = mkdir(dirName, 0777);
+#else
+    ret = _mkdir(dirName);
+#endif
     if (ret == -1) {
         switch (errno) {
             case EACCES :
@@ -234,8 +281,8 @@ void createOutputFile(int N, int it, unsigned int *h_index, unsigned *h_duration
     }
     unsigned int potMisses = potCacheMisses(h_duration, it, 30);
 
-    unsigned int* missesValues = (unsigned int*) malloc(sizeof(unsigned) * potMisses);
-    int* missesIndicesValues = (int*) malloc(sizeof(int) * potMisses);
+    unsigned int *missesValues = (unsigned int *) malloc(sizeof(unsigned) * potMisses);
+    int *missesIndicesValues = (int *) malloc(sizeof(int) * potMisses);
     if (missesValues == nullptr || missesIndicesValues == nullptr) {
         free(missesValues);
         free(missesIndicesValues);
@@ -279,19 +326,19 @@ void createOutputFile(int N, int it, unsigned int *h_index, unsigned *h_duration
         potMissesOut[0] = potMisses;
     }
 
-    if(potMisses != 0) {
+    if (potMisses != 0) {
         free(missesValues);
         free(missesIndicesValues);
     }
 
 }
 
-void print1DArr(FILE* f, double* arr, int size) {
+void print1DArr(FILE *f, double *arr, int size) {
     fprintf(f, "[");
-    for(int i = 0; i < size-1; i++) {
+    for (int i = 0; i < size - 1; i++) {
         fprintf(f, "%.3f,", arr[i]);
     }
-    fprintf(f, "%.3f]\n", arr[size-1]);
+    fprintf(f, "%.3f]\n", arr[size - 1]);
 }
 
 /**
@@ -299,40 +346,48 @@ void print1DArr(FILE* f, double* arr, int size) {
  * @param a
  * @param b
  * @param y
+ *
  * @return
  */
-double cost(unsigned int a, unsigned int b, double* y) {
+double cost(unsigned int a, unsigned int b, double *y) {
 #ifdef IsDebug
     assert(a < b);
 #endif //IsDebug
     double totalSum = 0.;
     double empiricalMean = 0.;
+
+#pragma omp parallel for reduction(+:empiricalMean)
     for (unsigned int i = a; i < b; i++) {
         empiricalMean += y[i];
     }
-    empiricalMean = empiricalMean / (double)(b-a);
-    for (unsigned int t = a+1; t < b; t++) {
+    empiricalMean = empiricalMean / (double) (b - a);
+
+#pragma omp parallel for reduction(+:totalSum)
+    for (unsigned int t = a + 1; t < b; t++) {
         totalSum += (y[t] - empiricalMean) * (y[t] - empiricalMean);
     }
     return totalSum;
 }
 
 /**
- * Empirical cumulative distribution function
- * @param sample
- * @param sampleSize
- * @param x
- * @return
- */
-double ecdf(const double* sample, unsigned int sampleSize, double x) {
+* This function calculates the empirical cumulative distribution function (ECDF) for a given sample.
+*
+* @param sample The array of double values representing the sample.
+* @param sampleSize The size of the sample.
+* @param x The value at which to evaluate the ECDF.
+*
+* @return The value of the ECDF at the given value x.
+*/
+double ecdf(const double *sample, unsigned int sampleSize, double x) {
     int n = 0;
     for (int i = 0; i < sampleSize; ++i) {
         if (sample[i] < x) {
             ++n;
         }
     }
-    return (double) n / double (sampleSize);
+    return (double) n / double(sampleSize);
 }
+
 
 /**
  * Kolmogorov Smirnov hypothesis test
@@ -344,7 +399,8 @@ double ecdf(const double* sample, unsigned int sampleSize, double x) {
  * @param significance_level
  * @return
  */
-bool kolmogorov_smirnov(unsigned int m, unsigned int n, double* d, unsigned int size, unsigned int cpt, double significance_level) {
+bool kolmogorov_smirnov(unsigned int m, unsigned int n, double *d, unsigned int size, unsigned int cpt,
+                        double significance_level) {
 #ifdef IsDebug
     fprintf(out, "Creating set of existing values in sample..."); fflush(stdout);
 #endif //IsDebug
@@ -356,7 +412,7 @@ bool kolmogorov_smirnov(unsigned int m, unsigned int n, double* d, unsigned int 
         }
     }
     for (unsigned int i = cpt; i < size; ++i) {
-        if(std::find(values_second.begin(), values_second.end(), d[i]) == values_second.end()) {
+        if (std::find(values_second.begin(), values_second.end(), d[i]) == values_second.end()) {
             values_second.push_back(d[i]);
         }
     }
@@ -366,14 +422,14 @@ bool kolmogorov_smirnov(unsigned int m, unsigned int n, double* d, unsigned int 
     fprintf(out, "DONE\n");
     fprintf(out, "Create two samples for test execution..."); fflush(stdout);
 #endif //IsDebug
-    double *arr1 = (double*) malloc(sizeof(double) * n);
+    double *arr1 = (double *) malloc(sizeof(double) * n);
     for (int i = 0; i < n; i++) {
         arr1[i] = d[i];
     }
 
-    double *arr2 = (double*) malloc(sizeof(double) * (size-cpt));
+    double *arr2 = (double *) malloc(sizeof(double) * (size - cpt));
     for (int i = cpt; i < size; i++) {
-        arr2[i-cpt] = d[i];
+        arr2[i - cpt] = d[i];
     }
 #ifdef IsDebug
     fprintf(out, "DONE\n");
@@ -383,8 +439,8 @@ bool kolmogorov_smirnov(unsigned int m, unsigned int n, double* d, unsigned int 
     for (int i = 0; i < values_second.size(); ++i) {
         double val1 = ecdf(arr1, n, values_second[i]);
         double val2 = ecdf(arr2, (size - cpt), values_second[i]);
-        if (supremum < abs(val1-val2)) {
-            supremum = abs(val1-val2);
+        if (supremum < abs(val1 - val2)) {
+            supremum = abs(val1 - val2);
         }
     }
 #ifdef IsDebug
@@ -395,7 +451,7 @@ bool kolmogorov_smirnov(unsigned int m, unsigned int n, double* d, unsigned int 
     free(arr2);
 
     double logarithm = -1. * log(significance_level / 2.);
-    double fraction = (1. + ((double)m / (double)n)) / (2. * (double)m);
+    double fraction = (1. + ((double) m / (double) n)) / (2. * (double) m);
     double p_val = sqrt(logarithm * fraction);
 #ifdef IsDebug
     fprintf(out, "\nComparison: %f > %f\n", supremum, p_val);
@@ -415,24 +471,32 @@ bool kolmogorov_smirnov(unsigned int m, unsigned int n, double* d, unsigned int 
 
 /**
  * Opt algorithm:
- * Creates for each subvector of d the measure of 'equality', the more all the values of a subvector is equal, the lower is its cost-value
- * -> Finding changepoint: get index i with cost(0, i) + cost(i+1, n) is minimal
- * @param d
- * @param size
- * @return
+ * Creates for each subvector of d the measure of 'equality', the more all the values of a subvector is equal, the lower is its cost-value.
+ * Finding changepoints: get index i with cost(0, i) + cost(i+1, n) is minimal.
+ *
+ * @param d     The array of double values representing the input data.
+ * @param size  The size of the array.
+ *
+ * @return      A vector containing the index of the detected changepoints.
  */
-std::vector<unsigned int> Opt(double* d, int size) {
-    double** C_1 = (double**) malloc(sizeof(double*) * size);
+std::vector<unsigned int> Opt(double *d, int size) {
+    double **C_1 = (double **) malloc(sizeof(double *) * size);
     for (int i = 0; i < size; i++) {
-        C_1[i] = (double*) calloc(size, sizeof(double));
+        C_1[i] = (double *) calloc(size, sizeof(double));
     }
 
+    // u/v are not dependent on each other
+    // + d is read-only in cost()
+    // -> parallelization possible
+    // compute cost for each subvector
+#pragma omp parallel for
     for (unsigned int u = 0; u < size; ++u) {
-        for (unsigned int v = u+1; v < size; ++v) {
+        for (unsigned int v = u + 1; v < size; ++v) {
             C_1[u][v] = cost(u, v, d);
         }
     }
 
+    // find optimal changepoints
     std::vector<unsigned int> L;
     int s = size - 1;
     unsigned int t_star = 1;
@@ -453,19 +517,87 @@ std::vector<unsigned int> Opt(double* d, int size) {
 }
 
 /**
- * detects Change point: First preprocessing (creating distance vector), then Opt, then Kolmogorov-smirnov
- * @param y
- * @param size
- * @param innerSize
- * @return
+ * Calculates the median of an array of doubles.
+ *
+ * @param data The input array of doubles.
+ * @param size The size of the array.
+ *
+ * @return The median value.
  */
-int detectChangePoint(unsigned int** y, int size, int innerSize) {
-#ifdef IsDebug
-    fprintf(out, "\n\nStarting change point detection...\n");
-    fprintf(out, "Building Min vector..."); fflush(stdout);
-#endif //IsDebug
-    unsigned int* y_min = (unsigned int*) malloc(sizeof(unsigned int) * innerSize);
+double calculateMedian(double *data, int size) {
+    std::sort(data, data + size);
+    if (size % 2 == 0) {
+        return (data[size / 2 - 1] + data[size / 2]) / 2.0;
+    } else {
+        return data[size / 2];
+    }
+}
 
+/**
+ * Performs a two-sided median test to check if the change point is significant.
+ *
+ * @param data          The input array of doubles.
+ * @param size          The size of the array.
+ * @param changePoint   The change point to be tested.
+ * @warning Significance level = 5%.
+ *
+ * @return              True if the change point is statistically significant, false otherwise.
+ */
+bool twoSidedMedianTest(double *data, int size, int changePoint) {
+    double *group1 = new double[size];
+    double *group2 = new double[size];
+    int size1 = 0, size2 = 0;
+
+    for (int i = 0; i < size; ++i) {
+        if (data[i] <= changePoint) {
+            group1[size1++] = data[i];
+        } else {
+            group2[size2++] = data[i];
+        }
+    }
+
+    double median1 = calculateMedian(group1, size1);
+    double median2 = calculateMedian(group2, size2);
+
+    // Calculate the number of observations above and below the medians
+    int n1_plus = 0, n1_minus = 0, n2_plus = 0, n2_minus = 0;
+    for (int i = 0; i < changePoint; i++) {
+        if (data[i] > median1)
+            n1_plus++;
+        else if (data[i] < median1)
+            n1_minus++;
+    }
+    for (int i = changePoint; i < size; i++) {
+        if (data[i] > median2)
+            n2_plus++;
+        else if (data[i] < median2)
+            n2_minus++;
+    }
+
+    // Calculate the test statistic Q
+    double Q = std::pow(n1_plus - n1_minus, 2) / static_cast<double>(changePoint) +
+               std::pow(n2_plus - n2_minus, 2) / static_cast<double>(size - changePoint);
+
+    // Compare Q with the critical value and return the result
+    // significance level = 0.05 = 5%
+    double criticalValue = 0.05;
+    return Q > criticalValue;
+}
+
+/**
+ * This function detects a change point in a two-dimensional array of unsigned integers.
+ *
+ * @param y          The two-dimensional array of unsigned integers representing the data.
+ * @param size       The number of rows in the array.
+ * @param innerSize  The number of columns in the array.
+ *
+ * @return           The index of the detected change point, or -1 if no change point is detected.
+ */
+int detectChangePoint(unsigned int **y, int size, int innerSize) {
+    // Allocate memory for y_min array
+    unsigned int *y_min = (unsigned int *) malloc(sizeof(unsigned int) * innerSize);
+
+    // Find the minimum value in each column of y and store it in y_min
     for (int j = 0; j < innerSize; j++) {
         unsigned int min = y[0][j];
         for (int i = 0; i < size; i++) {
@@ -475,25 +607,26 @@ int detectChangePoint(unsigned int** y, int size, int innerSize) {
         }
         y_min[j] = min;
     }
-#ifdef IsDebug
-    fprintf(out, "DONE\nBuilding y_prime 2D Array..."); fflush(stdout);
-#endif //IsDebug
 
-    unsigned int** y_prime = (unsigned int**) malloc(sizeof(unsigned int*) * size);
+    // Allocate memory for y_prime array
+    unsigned int **y_prime = (unsigned int **) malloc(sizeof(unsigned int *) * size);
 
+    // Compute y_prime by subtracting (y_min - 1) from each element in y
     for (int i = 0; i < size; i++) {
-        y_prime[i] = (unsigned int*) malloc(sizeof(unsigned int) * innerSize);
+        y_prime[i] = (unsigned int *) malloc(sizeof(unsigned int) * innerSize);
 
         for (int j = 0; j < innerSize; j++) {
             y_prime[i][j] = y[i][j] - (y_min[j] - 1); // 1 -> (1 ... 1)^T
         }
     }
-    // y_min no longer used
+
+    // y_min no longer used, free the memory
     free(y_min);
-#ifdef IsDebug
-    fprintf(out, "DONE\nBuilding distance vector..."); fflush(stdout);
-#endif //IsDebug
-    double* d = (double*) malloc(sizeof(double) * size);
+
+    // Allocate memory for d array
+    double *d = (double *) malloc(sizeof(double) * size);
+
+    // Compute d array by calculating the Euclidean distance of each row in y_prime
     for (int i = 0; i < size; i++) {
         double sum_scalar = 0.;
         for (int j = 0; j < innerSize; j++) {
@@ -501,43 +634,42 @@ int detectChangePoint(unsigned int** y, int size, int innerSize) {
         }
         d[i] = sqrt(sum_scalar);
     }
-#ifdef IsDebug
-    fprintf(out, "DONE\n");
-    fprintf(out, "Print Distance Array\n");
-    print1DArr(out, d, size);
-#endif //isDebug
 
+    // Perform post-processing on d array
     postProcessing(d, size, 4);
 
+    // Use 2-sided median test to find potential change points
     std::vector<unsigned int> result = Opt(d, size);
-#ifdef IsDebug
-    fprintf(out, "Testing potential change points with kolmogorov-smirnov...\n");
-#endif //IsDebug
     int firstCP = -1;
-    for(unsigned int potCP : result) {
-        if (potCP > 0 && potCP < size-1) {
-#ifdef IsDebug
-            fprintf(out, "Testing index %u...", potCP);
-#endif //IsDebug
-            unsigned int n = potCP - 1;
-            unsigned int m = size - potCP;
-            bool isCP = kolmogorov_smirnov(m, n, d, size, potCP, 0.0000001);
-#ifdef IsDebug
-            fprintf(out, "Testing index %u...DONE\n", potCP);
-#endif //IsDebug
+
+    // Print the potential change points
+//    printf("potential changepoints:\n");
+//    for (unsigned int cp: result) {
+//        printf("%d\n", cp);
+//    }
+
+    // Check each potential change point using the 2-sided median test
+    for (unsigned int potCP: result) {
+        //printf("potCP\t%d\n", potCP);
+        if (potCP > 0 && potCP < size - 1) {
+            bool isCP = twoSidedMedianTest(d, size, potCP);
+//            unsigned int n = potCP - 1;
+//            unsigned int m = size - potCP;
+//            bool isCP = kolmogorov_smirnov(m, n, d, size, potCP, 0.0000001);
             if (isCP) {
-                firstCP = (int)potCP;
+                firstCP = (int) potCP;
                 break;
             }
         }
     }
 
     free(d);
-    for(int i = 0; i < size; i++) {
+    for (int i = 0; i < size; i++) {
         free(y_prime[i]);
     }
     free(y_prime);
 
+    // Return the detected change point index or -1 if no change point is detected
     if (firstCP == -1) {
 #ifdef IsDebug
         fprintf(out, "No real changepoint detected at all!\n");

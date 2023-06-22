@@ -1,0 +1,12 @@
+GPU_INFORMATION; GPU_vendor; "Nvidia"; GPU_name; "Tesla V100-PCIE-32GB"
+COMPUTE_RESOURCE_INFORMATION; CUDA_compute_capability; "7.00"; Number_of_streaming_multiprocessors; 80; Number_of_cores_in_GPU; 5120; Number_of_cores_per_SM; 64
+REGISTER_INFORMATION; Registers_per_thread_block; 65536; "32-bit registers"; Registers_per_SM; 65536; "32-bit registers"
+ADDITIONAL_INFORMATION; Memory_Clock_Frequency; 877.000; "MHz"; Memory_Bus_Width; 4096; "bit"; GPU_Clock_Rate; 1.380; "GHz"
+L1_DATA_CACHE; Size; 25.011719; KiB; "="; Cache_Line_Size; 32; "B"; Load_Latency; 36; "cycles"; Load_Latency; 28; "nanoseconds"; Shared_On; "SM-level"; Share_Cache_With_Texture; 1; Share_Cache_With_Read-Only; 1; Share_Cache_With_ConstantL1; 0; Caches_Per_SM; 1
+L2_DATA_CACHE; Size; 6.000; MiB; "="; Cache_Line_Size; 64; "B"; Load_Latency; 214; "cycles"; Load_Latency; 173; "nanoseconds"; Shared_On; "GPU-level"
+TEXTURE_CACHE; Size; 23.574219; KiB; "="; Cache_Line_Size; 32; "B"; Load_Latency; 80; "cycles"; Load_Latency; 57; "nanoseconds"; Shared_On; "SM-level"; Share_Cache_With_L1_Data; 1; Share_Cache_With_Read-Only; 1; Caches_Per_SM; 1
+READ-ONLY_CACHE; Size; 25.011719; KiB; "="; Cache_Line_Size; 32; "B"; Load_Latency; 36; "cycles"; Load_Latency; 29; "nanoseconds"; Shared_On; "SM-level"; Share_Cache_With_L1_Data; 1; Share_Cache_With_Texture; 1; Caches_Per_SM; 1
+CONSTANT_L1_CACHE; Size; 2.062500; KiB; "="; Cache_Line_Size; 64; "B"; Load_Latency; 32; "cycles"; Load_Latency; 24; "nanoseconds"; Shared_On; "SM-level"; Share_Cache_With_L1_Data; 0; Caches_Per_SM; 1
+CONST_L1_5_CACHE; Size; 62.500000; KiB; ">="; Cache_Line_Size; 256; "B"; Load_Latency; 106; "cycles"; Load_Latency; 85; "nanoseconds"; Shared_On; "SM-level"
+MAIN_MEMORY; Size; 31.748474; GiB; "="; Load_Latency; 427; "cycles"; Load_Latency; 178; "nanoseconds"; Shared_On; "GPU-level"
+SHARED_MEMORY; Size; 96.000000; KiB; "="; Load_Latency; 27; "cycles"; Load_Latency; 21; "nanoseconds"; Shared_On; "SM-level"

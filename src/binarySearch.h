@@ -9,28 +9,33 @@
 # include "ErrorHandler.h"
 
 
-#define FreeBinarySearchBoundariesResources()   \
-free(logAvgLower);                              \
+#define FreeBinarySearchBoundariesResources() \
+if (logAvgLower != nullptr)                   \
+    free(logAvgLower);                              \
 if (logAvgMid != nullptr) {                     \
     free(logAvgMid);                            \
 }                                               \
 if (logAvgUpper != nullptr) {                   \
     free(logAvgUpper);                          \
 }                                               \
+if (time != nullptr){                                              \
 for (int k = 0; k < searchWindowSize; ++k) {    \
     if (time[k] != nullptr) {                   \
     free(time[k]);                              \
     }                                           \
 }                                               \
-free(time);                                     \
+free(time);                                   \
+}
 
-void finalizeBinarySearchNoCacheMiss(bool (*benchmark)(int, int, double*, unsigned int*, unsigned int**, int*), int* bounds, int searchWindowSize, int totalLowerBound, int totalUpperBound, double tol = 0.5) {
+void finalizeBinarySearchNoCacheMiss(bool (*benchmark)(int, int, double *, unsigned int *, unsigned int **, int *),
+                                     int *bounds, int searchWindowSize, int totalLowerBound, int totalUpperBound,
+                                     double tol = 0.5) {
     int lower = bounds[0], upper = bounds[1];
 
-    double* logAvgLower = (double*) malloc(sizeof(double) * searchWindowSize);
-    double* logAvgMid = nullptr;
-    double* logAvgUpper = nullptr;
-    unsigned int ** time = (unsigned int**)malloc(sizeof(unsigned int*) * searchWindowSize);
+    double *logAvgLower = (double *) malloc(sizeof(double) * searchWindowSize);
+    double *logAvgMid = nullptr;
+    double *logAvgUpper = nullptr;
+    unsigned int **time = (unsigned int **) malloc(sizeof(unsigned int *) * searchWindowSize);
     for (int i = 0; i < searchWindowSize; ++i) {
         time[i] = nullptr;
     }
@@ -55,7 +60,7 @@ void finalizeBinarySearchNoCacheMiss(bool (*benchmark)(int, int, double*, unsign
     fprintf(out, "Avg Lower Window: %f\n", windowAvgLower);
 #endif //IsDebug
 
-    logAvgUpper = (double*) malloc(sizeof(double) * searchWindowSize);
+    logAvgUpper = (double *) malloc(sizeof(double) * searchWindowSize);
 
     for (int i = 0; i < searchWindowSize; i++) {
         bool b = true;
@@ -78,6 +83,10 @@ void finalizeBinarySearchNoCacheMiss(bool (*benchmark)(int, int, double*, unsign
 #endif //IsDebug
     FreeBinarySearchBoundariesResources()
 
+
+#ifdef __HIP_PLATFORM_AMD__
+    tol = 0.01;
+#endif
     if (abs(windowAvgUpper - windowAvgLower) > tol) {
         return;
     } else {
@@ -93,12 +102,14 @@ void finalizeBinarySearchNoCacheMiss(bool (*benchmark)(int, int, double*, unsign
  * @param searchWindowSize
  * @param tol
  */
-void binarySearchBoundaries(bool (*benchmark)(int, int, double*, unsigned int*, unsigned int**, int*), int* bounds, int searchWindowSize, int totalLowerBound, int totalUpperBound, double tol = 0.5) {
+void binarySearchBoundaries(bool (*benchmark)(int, int, double *, unsigned int *, unsigned int **, int *), int *bounds,
+                            int searchWindowSize, int totalLowerBound, int totalUpperBound, double tol = 0.5) {
+
     // Check latency at lower boundary, upper boundary and the middle and decide where to go further
-    double* logAvgLower = (double*) malloc(sizeof(double) * searchWindowSize);
-    double* logAvgMid = nullptr;
-    double* logAvgUpper = nullptr;
-    unsigned int ** time = (unsigned int**)malloc(sizeof(unsigned int*) * searchWindowSize);
+    double *logAvgLower = (double *) malloc(sizeof(double) * searchWindowSize);
+    double *logAvgMid = nullptr;
+    double *logAvgUpper = nullptr;
+    unsigned int **time = (unsigned int **) malloc(sizeof(unsigned int *) * searchWindowSize);
     for (int i = 0; i < searchWindowSize; ++i) {
         time[i] = nullptr;
     }
@@ -115,12 +126,12 @@ void binarySearchBoundaries(bool (*benchmark)(int, int, double*, unsigned int*, 
     fprintf(out, "Mid index: %d\n", midIndex);
 #endif //IsDebug
 
-    int shiftToLeft = (searchWindowSize + (2-1)) / 2;
+    int shiftToLeft = (searchWindowSize + (2 - 1)) / 2;
     for (int i = 0; i < searchWindowSize; i++) {
         int size = lower - shiftToLeft + i;
         bool b = true;
         int tolCount = 3;
-        while(b && tolCount > 0) {
+        while (b && tolCount > 0) {
             int error = 0;
             b = benchmark(size, 1, &logAvgLower[i], nullptr, time, &error);
             if (error != 0) {
@@ -137,13 +148,13 @@ void binarySearchBoundaries(bool (*benchmark)(int, int, double*, unsigned int*, 
     fprintf(out, "Avg Lower Window: %f\n", windowAvgLower);
 #endif //IsDebug
 
-    logAvgMid = (double*) malloc(sizeof(double) * searchWindowSize);
+    logAvgMid = (double *) malloc(sizeof(double) * searchWindowSize);
 
     for (int i = 0; i < searchWindowSize; i++) {
         int size = midIndex - shiftToLeft + i;
         bool b = true;
         int tolCount = 3;
-        while(b && tolCount > 0) {
+        while (b && tolCount > 0) {
             int error = 0;
             b = (*benchmark)(size, 1, &logAvgMid[i], nullptr, time, &error);
             if (error != 0) {
@@ -163,19 +174,25 @@ void binarySearchBoundaries(bool (*benchmark)(int, int, double*, unsigned int*, 
     fprintf(out, "Avg Mid Window: %f\n", windowAvgMid);
 #endif //IsDebug
 
-    if (abs(windowAvgMid - windowAvgLower) > tol) {
+#ifdef __HIP_PLATFORM_AMD__
+    tol = 0.01; // hardcoded value for AMD
+#endif
+    //printf("binSearch, #185\t%f\t%f\n", windowAvgLower, windowAvgMid);
+
+    // if the average of the middle window is greater than the average of the lower window, then the cache miss starts down
+    if (windowAvgMid/windowAvgLower > 1.0) {
         bounds[1] = midIndex + 8;
         FreeBinarySearchBoundariesResources()
         binarySearchBoundaries(benchmark, &bounds[0], searchWindowSize, totalLowerBound, totalUpperBound);
         return;
     }
 
-    logAvgUpper = (double*) malloc(sizeof(double) * searchWindowSize);
+    logAvgUpper = (double *) malloc(sizeof(double) * searchWindowSize);
     for (int i = 0; i < searchWindowSize; i++) {
         int size = upper - shiftToLeft + i;
         bool b = true;
         int tolCount = 3;
-        while(b && tolCount > 0) {
+        while (b && tolCount > 0) {
             int error = 0;
             b = (*benchmark)(size, 1, &logAvgUpper[i], nullptr, time, &error);
             if (error != 0) {
@@ -194,8 +211,10 @@ void binarySearchBoundaries(bool (*benchmark)(int, int, double*, unsigned int*, 
 
     FreeBinarySearchBoundariesResources()
 
-    if (abs(windowAvgUpper - windowAvgMid) > tol) {
-        bounds[0] = midIndex - ((upper-lower) >> 4); // / 16
+    //printf("binSearch, #218\t%f\t%f\t%f\n", windowAvgLower, windowAvgMid, windowAvgUpper);
+
+    if (std::abs(windowAvgUpper - windowAvgMid) > tol) {
+        bounds[0] = midIndex - ((upper - lower) >> 4); // / 16
         binarySearchBoundaries(benchmark, &bounds[0], searchWindowSize, totalLowerBound, totalUpperBound);
         return;
     }
@@ -215,22 +234,29 @@ void binarySearchBoundaries(bool (*benchmark)(int, int, double*, unsigned int*, 
 }
 
 // Start region search for cache size
-void getBoundaries (bool (*benchmark)(int, int, double*, unsigned int*, unsigned int**, int*), int boundaries[2], int searchWindowSize, double tol = 1.23) {
-    int absoluteLowerBound = boundaries[0] / (int)sizeof(int);
-    int absoluteUpperBound = boundaries[1] / (int)sizeof(int);
+void getBoundaries(bool (*benchmark)(int, int, double *, unsigned int *, unsigned int **, int *), int boundaries[2],
+                   int searchWindowSize, double tol = 1.23) {
 
-    double currentWindowAvg;
+    // change of hardcoded value for tol in case of AMD due to lowered results
+#ifdef __HIP_PLATFORM_AMD__
+    tol = 0.09;
+#endif
+
+    int absoluteLowerBound = boundaries[0] / (int) sizeof(int);
+    int absoluteUpperBound = boundaries[1] / (int) sizeof(int);
+
+    double currentWindowAvg = -1234;
     // Doubling the size in each step
     for (int N = absoluteLowerBound; N < absoluteUpperBound; N = N << 1) {
-        int shiftToLeft = (searchWindowSize + (2-1)) / 2;
+        int shiftToLeft = (searchWindowSize + (2 - 1)) / 2;
 
         // Not only one size but a small number of sizes surrounding N
-        double* logAvg = (double*) malloc(sizeof(double) * searchWindowSize);
+        double *logAvg = (double *) malloc(sizeof(double) * searchWindowSize);
         for (int i = 0; i < searchWindowSize; i++) {
             int size = N - shiftToLeft + i;
             bool dist = true;
             int count = 5;
-            while(dist && count > 0) {
+            while (dist && count > 0) {
                 int error = 0;
                 dist = (*benchmark)(size, 1, &logAvg[i], nullptr, nullptr, &error);
                 if (error != 0) {
@@ -259,14 +285,25 @@ void getBoundaries (bool (*benchmark)(int, int, double*, unsigned int*, unsigned
 
         double windowAvg = computeAvg(logAvg, searchWindowSize);
         // If the avg loading time is significantly higher than the iteration before
-        if (N != absoluteLowerBound && windowAvg - currentWindowAvg > tol) {
+
+
+#ifdef __HIP_PLATFORM_AMD__
+        tol = 0.01;
+#endif
+
+            double diff = 1 - (currentWindowAvg/windowAvg);
+            // either window grows way to high -> +10%+ or it drops -> <0%
+            //                              first comparison - nvi, second - amd
+        if (N != absoluteLowerBound && (diff > 0.1 || diff < 0)) {
 #ifdef IsDebug
             fprintf(out, "Cache miss jump in search detected\n");
 #endif //IsDebug
-            boundaries[0] = std::max(absoluteLowerBound, (N/2) - (1024/(int)sizeof(int)));
-            boundaries[1] = std::min(absoluteUpperBound, N + (1024/(int)sizeof(int)));
+            boundaries[0] = std::max(absoluteLowerBound, (N / 2) - (1024 / (int) sizeof(int)));
+            boundaries[1] = std::min(absoluteUpperBound, N + (1024 / (int) sizeof(int)));
+
             // Start actual binary search within the region
-            binarySearchBoundaries(benchmark, &boundaries[0], searchWindowSize, absoluteLowerBound, absoluteUpperBound, tol);
+            binarySearchBoundaries(benchmark, &boundaries[0], searchWindowSize, absoluteLowerBound,
+                                   absoluteUpperBound, tol);
 
             if (errorStatus != 0) {
                 free(logAvg);

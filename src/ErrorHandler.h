@@ -9,6 +9,11 @@
 # include <cstdint>
 
 int errorStatus = 0;
+
+/**
+ * Prints the error code and exits the test
+ * @param errorCode int, corresponding to the error
+ */
 void printErrorCodeInformation(int errorCode) {
     if (errorCode != 0) {
         printf("Error occured during benchmark - Program will exit!\n");
@@ -23,10 +28,10 @@ void printErrorCodeInformation(int errorCode) {
             printf("Error during malloc - Could not allocate memory\n");
             break;
         case 2:
-            printf("Error during cudaMalloc - Could not allocate memory on GPU\n");
+            printf("Error during hipMalloc - Could not allocate memory on GPU\n");
             break;
         case 3:
-            printf("Error during cudaMemcpy - Could not copy memory to GPU\n");
+            printf("Error during hipMemcpy - Could not copy memory to GPU\n");
             break;
         case 4:
             printf("Error during texture binding - Could not bind texture or create texture object with array\n");
@@ -35,7 +40,7 @@ void printErrorCodeInformation(int errorCode) {
             printf("Error during kernel execution\n");
             break;
         case 6:
-            printf("Error during cudaMemcpy - Could not copy memory from GPU\n");
+            printf("Error during hipMemcpy - Could not copy memory from GPU\n");
             break;
         default:
             printf("Unexpected ErrorCode\n");

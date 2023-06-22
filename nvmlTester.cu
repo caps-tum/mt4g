@@ -1,6 +1,7 @@
 //
 // Created by nick- on 10/6/2022.
 //
+// max: hipify doesnt change it
 
 #include <nvml.h>
 #include <cstdio>
