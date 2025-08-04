@@ -1,0 +1,1 @@
+// Same approach as cuShareScalarL1
