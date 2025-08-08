@@ -74,7 +74,7 @@ double mainMemoryReadBandwidthLauncher(size_t arraySizeBytes) {
 namespace benchmark {
     double measureMainMemoryReadBandwidth(size_t mainMemorySizeBytes) {
         size_t testSizeBytes = mainMemorySizeBytes / SIZE_DOWN; // Divide by SIZE_DOWN to avoid too large memory allocations
-        double testSizeGiB = testSizeBytes / (1 * GiB); // Convert to GiB
+        double testSizeGiB = (double)testSizeBytes / (double)(1 * GiB); // Convert to GiB
 
         std::vector<double> results(ROUNDS);
         for (uint32_t i = 0; i < ROUNDS; ++i) {

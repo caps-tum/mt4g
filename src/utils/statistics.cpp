@@ -113,16 +113,16 @@ namespace util {
                     [](auto& a, auto& b){ return a.second < b.second; });
         }
 
-        /*
-        // Print pre-ranking distances
-        for (const auto& [innerK, distVec] : distanceMap) {
-            std::cout << "Inner key " << innerK << " distances:";
-            for (const auto& [outerK, dist] : distVec) {
-                std::cout << " (" << outerK << ", " << dist << ")";
-            }
-            std::cout << "\n";
-        }
-        */
+        
+        // // Print pre-ranking distances
+        // for (const auto& [innerK, distVec] : distanceMap) {
+        //     std::cout << "Inner key " << innerK << " distances:";
+        //     for (const auto& [outerK, dist] : distVec) {
+        //         std::cout << " (" << outerK << ", " << dist << ")";
+        //     }
+        //     std::cout << "\n";
+        // }
+        
 
         // 4. Compute penalties using the two largest pivots (maxKey and secondMax)
         auto temp = fullData;
@@ -166,16 +166,16 @@ namespace util {
                     [](auto& a, auto& b){ return a.second < b.second; });
         }
 
-        /*
-        // Print penalized distances
-        for (const auto& [innerK, distVec] : distanceMap) {
-            std::cout << "Penalized distances for inner key " << innerK << ":";
-            for (const auto& [outerK, dist] : distVec) {
-                std::cout << " (" << outerK << ", " << dist << ")";
-            }
-            std::cout << "\n";
-        }
-        */
+        
+        // // Print penalized distances
+        // for (const auto& [innerK, distVec] : distanceMap) {
+        //     std::cout << "Penalized distances for inner key " << innerK << ":";
+        //     for (const auto& [outerK, dist] : distVec) {
+        //         std::cout << " (" << outerK << ", " << dist << ")";
+        //     }
+        //     std::cout << "\n";
+        // }
+        
 
         // 5. Accumulate scores: sum(position * distance) — now includes pivots
         std::map<size_t, double> scores;
@@ -183,12 +183,12 @@ namespace util {
             for (size_t p = 0; p < vec.size(); ++p)
                 scores[vec[p].first] += p * vec[p].second;
 
-        /*
-        // print scores before padding & clamping
-        std::cout << "Scores before padding & clamping:\n";
-        for (auto& [k, sc] : scores)
-            std::cout << "  OuterKey " << k << " -> score " << sc << "\n";
-        */
+        
+        // // print scores before padding & clamping
+        // std::cout << "Scores before padding & clamping:\n";
+        // for (auto& [k, sc] : scores)
+        //     std::cout << "  OuterKey " << k << " -> score " << sc << "\n";
+        
 
         // 6a) pad isolated dips based on neighbors (pivots participate here)
         std::vector<std::pair<size_t,double>> byKey(scores.begin(), scores.end());
@@ -221,11 +221,11 @@ namespace util {
         for (size_t i = 0; i < n; ++i) {
             paddedList[i] = { byKey[i].first, padded[i] };
         }
-        /*
-        std::cout << "Padded scores:\n";
-        for (auto& [k, sc] : paddedList)
-            std::cout << "  OuterKey " << k << " -> padded " << sc << "\n";
-        */
+        
+        // std::cout << "Padded scores:\n";
+        // for (auto& [k, sc] : paddedList)
+        //     std::cout << "  OuterKey " << k << " -> padded " << sc << "\n";
+        
 
         // 6b) AFTER padding, drop pivots from further consideration
         paddedList.erase(
@@ -263,12 +263,12 @@ namespace util {
             }
         }
 
-        /*
-        // print after clamp
-        std::cout << "Clamped scores (pivots excluded):\n";
-        for (auto& [k, sc] : paddedList)
-            std::cout << "  OuterKey " << k << " -> clamped " << sc << "\n";
-        */
+        
+        // // print after clamp
+        // std::cout << "Clamped scores (pivots excluded):\n";
+        // for (auto& [k, sc] : paddedList)
+        //     std::cout << "  OuterKey " << k << " -> clamped " << sc << "\n";
+        
 
         // 6e) final sort: by score asc, then key asc
         std::stable_sort(paddedList.begin(), paddedList.end(),
@@ -277,11 +277,11 @@ namespace util {
                             return a.first < b.first;
                         });
 
-        /*
+        
         std::cout << "Final adjusted & sorted ranking (pivots excluded):\n";
         for (auto& [k, sc] : paddedList)
             std::cout << "  OuterKey " << k << " -> score " << sc << "\n";
-        */
+        
 
         // 7) find change point
         double maxRel = -1.0;
@@ -289,7 +289,7 @@ namespace util {
         for (size_t i = 0; i + 1 < paddedList.size(); ++i) {
             double c = paddedList[i].second;
             double nsc = paddedList[i+1].second;
-            double jump = (nsc + 1.0) / (c + 1.0);
+            double jump = (nsc + 10.0) / (c + 10.0);
             if (jump > maxRel) {
                 maxRel = jump;
                 idx = i;

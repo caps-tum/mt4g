@@ -2,7 +2,7 @@
 #include "benchmarks/benchmark.hpp"
 
 static constexpr auto MIN_EXPECTED_SIZE = 1 * MiB;// 1 * MiB
-static constexpr auto MAX_EXPECTED_SIZE = 64 * MiB;// 64 * MiB
+static constexpr auto MAX_EXPECTED_SIZE = 1024 * MiB;// 64 * MiB
 [[maybe_unused]] static constexpr auto ROUNDS = 12;// Rounds
 static constexpr auto MEASURE_SIZE = 2048;// Loads
 
@@ -121,7 +121,7 @@ std::vector<uint32_t> l2SegmentSizeLauncher(size_t arraySizeBytes, size_t stride
 
 namespace benchmark {
     CacheSizeResult measureL2SegmentSize(size_t l2FullSize, size_t l2FetchGranularityBytes) {
-        auto [beginBytes, endBytes] = util::findCacheMissRegion(l2SegmentSizeLauncher, MIN_EXPECTED_SIZE, MAX_EXPECTED_SIZE, l2FetchGranularityBytes, CACHE_MISS_REGION_RELATIVE_DIFFERENCE);
+        auto [beginBytes, endBytes] = util::findCacheMissRegion(l2SegmentSizeLauncher, MIN_EXPECTED_SIZE, MAX_EXPECTED_SIZE, l2FetchGranularityBytes, CACHE_MISS_REGION_RELATIVE_DIFFERENCE/8);
         
         // Adjust initial search range to multiples of CACHE_SIZE_BENCH_RESOLUTION and expand when possible
         std::tie(beginBytes, endBytes) = util::adjustKiBBoundaries(beginBytes, endBytes, MIN_EXPECTED_SIZE, MAX_EXPECTED_SIZE);
@@ -137,14 +137,14 @@ namespace benchmark {
 
         do {
             // Heuristic: Cache wont get faster with increasing array size, only slower. Thus, you can detect disturbances by checking if the measured timings decreased (significantly) after spiking
-            timings = util::runBenchmarkRange(l2SegmentSizeLauncher, beginBytes, endBytes, l2FetchGranularityBytes, CACHE_SIZE_BENCH_RESOLUTION * 4, "L2 Segment Size");
+            timings = util::runBenchmarkRange(l2SegmentSizeLauncher, beginBytes, endBytes, l2FetchGranularityBytes, CACHE_SIZE_BENCH_RESOLUTION * 16, "L2 Segment Size");
 
             flukeDetected = util::hasFlukeOccured(timings); // Cache answer times must not decrease again with increasing size, hopefully false most of the time
             if (flukeDetected) {
                 ++flukeCounter;
                 if (flukeCounter >= 5) {
                     if (!boundariesRefreshed) {
-                        std::tie(beginBytes, endBytes) = util::findCacheMissRegion(l2SegmentSizeLauncher, MIN_EXPECTED_SIZE, MAX_EXPECTED_SIZE, l2FetchGranularityBytes, CACHE_MISS_REGION_RELATIVE_DIFFERENCE);
+                        std::tie(beginBytes, endBytes) = util::findCacheMissRegion(l2SegmentSizeLauncher, MIN_EXPECTED_SIZE, MAX_EXPECTED_SIZE, l2FetchGranularityBytes, CACHE_MISS_REGION_RELATIVE_DIFFERENCE/8);
                         std::tie(beginBytes, endBytes) = util::adjustKiBBoundaries(beginBytes, endBytes, MIN_EXPECTED_SIZE, MAX_EXPECTED_SIZE);
                         flukeCounter = 0;
                         boundariesRefreshed = true;
