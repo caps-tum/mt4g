@@ -289,7 +289,7 @@ namespace util {
         for (size_t i = 0; i + 1 < paddedList.size(); ++i) {
             double c = paddedList[i].second;
             double nsc = paddedList[i+1].second;
-            double jump = (nsc + 5.0) / (c + 5.0);
+            double jump = (nsc + 10.0) / (c + 10.0);
             if (jump > maxRel) {
                 maxRel = jump;
                 idx = i;
