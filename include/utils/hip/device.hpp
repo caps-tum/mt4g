@@ -12,7 +12,9 @@
 #include "utils/hip/hsa.hpp"
 
 namespace util {
-
+/**
+ * @brief Check whether the build targets the AMD HIP backend.
+ */
 inline bool isAMD() {
 #ifdef __HIP_PLATFORM_AMD__
     return true;
@@ -20,6 +22,9 @@ inline bool isAMD() {
     return false;
 }
 
+/**
+ * @brief Check whether the build targets the NVIDIA HIP backend.
+ */
 inline bool isNVIDIA() {
 #ifdef __HIP_PLATFORM_NVIDIA__
     return true;
@@ -27,6 +32,9 @@ inline bool isNVIDIA() {
     return false;
 }
 
+/**
+ * @brief Return a human readable GPU vendor string.
+ */
 inline std::string getVendor() {
 #ifdef __HIP_PLATFORM_NVIDIA__
     return "NVIDIA";
@@ -37,6 +45,9 @@ inline std::string getVendor() {
     return "Unknown";
 }
 
+/**
+ * @brief Compute the theoretical peak global memory bandwidth in GiB/s.
+ */
 inline double getTheoreticalMaxGlobalMemoryBandwidthGiBs() {
     static double bwGiBs = []() -> double {
         hipDeviceProp_t prop;
@@ -49,6 +60,9 @@ inline double getTheoreticalMaxGlobalMemoryBandwidthGiBs() {
     return bwGiBs;
 }
 
+/**
+ * @brief Query the L1 cache size in bytes if available.
+ */
 inline std::optional<size_t> getL1SizeBytes() {
     static std::optional<size_t> v = [](){
 #ifdef __HIP_PLATFORM_NVIDIA__
@@ -62,6 +76,9 @@ inline std::optional<size_t> getL1SizeBytes() {
     return v;
 }
 
+/**
+ * @brief Query the L2 cache size in bytes if available.
+ */
 inline std::optional<size_t> getL2SizeBytes() {
     static std::optional<size_t> v = [](){
 #ifdef __HIP_PLATFORM_NVIDIA__
@@ -75,6 +92,9 @@ inline std::optional<size_t> getL2SizeBytes() {
     return v;
 }
 
+/**
+ * @brief Query the L3 cache size in bytes if available.
+ */
 inline std::optional<size_t> getL3SizeBytes() {
     static std::optional<size_t> v = [](){
         #ifdef __HIP_PLATFORM_NVIDIA__
@@ -88,6 +108,9 @@ inline std::optional<size_t> getL3SizeBytes() {
     return v;
 }
 
+/**
+ * @brief Query the L1 cache line size in bytes if available.
+ */
 inline std::optional<size_t> getL1LineSizeBytes() {
     static std::optional<size_t> v = [](){
 #ifdef __HIP_PLATFORM_NVIDIA__
@@ -100,6 +123,9 @@ inline std::optional<size_t> getL1LineSizeBytes() {
     return v;
 }
 
+/**
+ * @brief Query the L2 cache line size in bytes if available.
+ */
 inline std::optional<size_t> getL2LineSizeBytes() {
     static std::optional<size_t> v = [](){
 #ifdef __HIP_PLATFORM_NVIDIA__
@@ -112,6 +138,9 @@ inline std::optional<size_t> getL2LineSizeBytes() {
     return v;
 }
 
+/**
+ * @brief Query the L3 cache line size in bytes if available.
+ */
 inline std::optional<size_t> getL3LineSizeBytes() {
     static std::optional<size_t> v = [](){
 #ifdef __HIP_PLATFORM_NVIDIA__
@@ -124,6 +153,39 @@ inline std::optional<size_t> getL3LineSizeBytes() {
     return v;
 }
 
+/**
+ * @brief Number of L2 caches present on the device.
+ */
+inline std::optional<size_t> getL2Amount() {
+    static std::optional<size_t> v = [](){
+#ifdef __HIP_PLATFORM_NVIDIA__
+        return std::nullopt;
+#endif
+#ifdef __HIP_PLATFORM_AMD__
+        return getKfdCacheAmountForLevel(2);
+#endif
+    }();
+    return v;
+}
+
+/**
+ * @brief Number of L3 caches present on the device.
+ */
+inline std::optional<size_t> getL3Amount() {
+    static std::optional<size_t> v = [](){
+#ifdef __HIP_PLATFORM_NVIDIA__
+        return std::nullopt;
+#endif
+#ifdef __HIP_PLATFORM_AMD__
+        return getKfdCacheAmountForLevel(3);
+#endif
+    }();
+    return v;
+}
+
+/**
+ * @brief Return the number of SIMD units per compute unit.
+ */
 inline uint32_t getSIMDsPerCU() {
     static uint32_t xcdCount = [](){
 #ifdef __HIP_PLATFORM_NVIDIA__
@@ -141,6 +203,9 @@ inline uint32_t getSIMDsPerCU() {
     return xcdCount;
 }
 
+/**
+ * @brief Query how many XCDs (dies) the GPU comprises.
+ */
 inline uint32_t getNumXCDs() {
     static uint32_t xcdCount = [](){
 #ifdef __HIP_PLATFORM_NVIDIA__
@@ -158,6 +223,9 @@ inline uint32_t getNumXCDs() {
     return xcdCount;
 }
 
+/**
+ * @brief Compute the number of compute units per die.
+ */
 inline uint32_t getComputeUnitsPerDie() {
     static uint32_t cusPerDie = []() {
         int device;
@@ -172,6 +240,9 @@ inline uint32_t getComputeUnitsPerDie() {
     return cusPerDie;
 }
 
+/**
+ * @brief Retrieve the GPU core clock rate in kHz.
+ */
 inline uint32_t getClockRateKHz() {
     int32_t device;
     util::hipCheck(hipGetDevice(&device));
@@ -180,6 +251,9 @@ inline uint32_t getClockRateKHz() {
     return rateKHz;
 }
 
+/**
+ * @brief Return the native warp/wavefront size of the device.
+ */
 inline uint32_t getWarpSize() {
     static int32_t warpSize = [](){
         int32_t device;
@@ -191,6 +265,9 @@ inline uint32_t getWarpSize() {
     return warpSize;
 }
 
+/**
+ * @brief Query total global memory size in bytes.
+ */
 inline uint64_t getGlobalMemorySizeBytes() {
     static uint64_t totalMem = [](){
         int device;
@@ -202,6 +279,9 @@ inline uint64_t getGlobalMemorySizeBytes() {
     return totalMem;
 }
 
+/**
+ * @brief Estimate the number of cores per streaming multiprocessor.
+ */
 inline uint32_t getNumberOfCoresPerSM() {
 #if defined(__HIP_PLATFORM_NVIDIA__) || defined(__HIP_PLATFORM_AMD__)
     int device = 0;
@@ -238,6 +318,9 @@ inline uint32_t getNumberOfCoresPerSM() {
 #endif
 }
 
+/**
+ * @brief Return the total number of compute units on the device.
+ */
 inline uint32_t getNumberOfComputeUnits() {
     static uint32_t cusPerDie = []() {
         int device;

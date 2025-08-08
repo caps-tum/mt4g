@@ -8,18 +8,13 @@ static constexpr auto MAX_EXPECTED_SIZE = 1048576;// 1024 * 1024 Bytes
 
 //__attribute__((optimize("O0"), noinline))
 __global__ void readOnlySizeKernel(const uint32_t* __restrict__ pChaseArray, uint32_t *timingResults, size_t length) {
+    if (blockIdx.x != 0 || threadIdx.x != 0) return;
     __shared__ uint64_t s_timings[MIN_EXPECTED_SIZE / sizeof(uint32_t)]; // sizeof(uint32_t) is correct since we need to store that amount of timing values. 
-    __shared__ uint32_t s_index[MIN_EXPECTED_SIZE / sizeof(uint32_t)];
 
     size_t measureLength = util::min(length, MIN_EXPECTED_SIZE / sizeof(uint32_t));
 
     uint32_t start, end;
     uint32_t index = 0;
-
-    for (uint32_t k = 0; k < measureLength; k++) {
-        s_index[k] = 0;
-        s_timings[k] = 0;
-    }
 
     // First round
     for (uint32_t k = 0; k < length; k++) {
@@ -30,21 +25,18 @@ __global__ void readOnlySizeKernel(const uint32_t* __restrict__ pChaseArray, uin
     for (uint32_t k = 0; k < measureLength; k++) {
         start = clock();
         index = __ldg(&pChaseArray[index]);
-        s_index[k] = index;
+        s_timings[0] += index;
         end = clock();
         s_timings[k] = end - start;
     }
 
     for (uint32_t k = 0; k < measureLength; k++) {
-        s_index[0] += s_index[k];
         timingResults[k] = s_timings[k];
     }
-
-    timingResults[0] += s_index[0] >> util::min(s_index[0], 32);
 }
 
 std::vector<uint32_t> readOnlySizeLauncher(size_t arraySizeBytes, size_t strideBytes) {
-    util::hipCheck(hipDeviceReset());
+    util::hipDeviceReset();
 
     size_t arraySize = arraySizeBytes / sizeof(uint32_t);
     size_t stride = strideBytes / sizeof(uint32_t);
@@ -54,19 +46,14 @@ std::vector<uint32_t> readOnlySizeLauncher(size_t arraySizeBytes, size_t strideB
     // Allocate GPU VMemory
     uint32_t *d_pChaseArray = util::allocateGPUMemory(util::generatePChaseArray(arraySizeBytes, strideBytes));
     
-
     uint32_t *d_timingResultBuffer = util::allocateGPUMemory(resultBufferLength);
     
-
     util::hipCheck(hipDeviceSynchronize());
-    readOnlySizeKernel<<<1, 1>>>(d_pChaseArray, d_timingResultBuffer, steps);
-    util::hipCheck(hipDeviceSynchronize());
+    readOnlySizeKernel<<<1, util::getMaxThreadsPerBlock()>>>(d_pChaseArray, d_timingResultBuffer, steps);
 
     // Get Results
     std::vector<uint32_t> timingResultBuffer = util::copyFromDevice(d_timingResultBuffer, resultBufferLength);
-
-
-    util::hipCheck(hipDeviceReset());
+    timingResultBuffer.erase(timingResultBuffer.begin());
 
     return timingResultBuffer;
 }

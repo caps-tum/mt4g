@@ -10,6 +10,7 @@ static constexpr auto MAX_EXPECTED_SIZE = 1048576;// 1024 Bytes * 1024 Bytes = 1
 
 //__attribute__((optimize("O0"), noinline))
 __global__ void l1SizeKernel(uint32_t *pChaseArray, uint32_t *timingResults, size_t steps) {
+    if (blockIdx.x != 0 || threadIdx.x != 0) return;
     // s_timings[0] is undefined, as we use it to prevent compiler optimizations / latency hiding
     __shared__ uint64_t s_timings[MIN_EXPECTED_SIZE / sizeof(uint32_t)]; // sizeof(uint32_t) is correct since we need to store that amount of timing values. 
     
@@ -87,7 +88,7 @@ __global__ void l1SizeKernel(uint32_t *pChaseArray, uint32_t *timingResults, siz
 }
 
 std::vector<uint32_t> l1SizeLauncher(size_t arraySizeBytes, size_t strideBytes) {
-    util::hipCheck(hipDeviceReset());
+    util::hipDeviceReset();
 
     size_t stridedLength = arraySizeBytes / strideBytes;
     size_t resultBufferLength = std::min(stridedLength, MIN_EXPECTED_SIZE / sizeof(uint32_t)); 
@@ -98,7 +99,7 @@ std::vector<uint32_t> l1SizeLauncher(size_t arraySizeBytes, size_t strideBytes) 
     
 
     util::hipCheck(hipDeviceSynchronize());
-    l1SizeKernel<<<1, 1>>>(d_pChaseArray, d_timingResultBuffer, stridedLength);
+    l1SizeKernel<<<1, util::getMaxThreadsPerBlock()>>>(d_pChaseArray, d_timingResultBuffer, stridedLength);
 
     // Get Results
     std::vector<uint32_t> timingResultBuffer = util::copyFromDevice(d_timingResultBuffer, resultBufferLength);

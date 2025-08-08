@@ -1,4 +1,4 @@
-mt4amd*
+mt4g*
 build
 external
 gpucore*
@@ -7,3 +7,4 @@ dbg/*
 *.txt
 *.png
 .vscode
+!results/**

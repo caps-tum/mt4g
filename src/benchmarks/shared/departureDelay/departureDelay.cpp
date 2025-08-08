@@ -75,7 +75,7 @@ __global__ void departureDelayKernel(int4* __restrict__ read, int4* __restrict__
 }
 
 std::tuple<double, double> departureDelayLauncher() { 
-    util::hipCheck(hipDeviceReset()); 
+    util::hipDeviceReset(); 
 
     std::vector<double> results;
     results.reserve(ROUNDS);

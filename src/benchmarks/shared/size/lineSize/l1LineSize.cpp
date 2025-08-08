@@ -10,6 +10,7 @@ static constexpr auto MAX_EXPECTED_LINE_SIZE = 256;// B
 
 //__attribute__((optimize("O0"), noinline))
 __global__ void l1LineSizeKernel(uint32_t *pChaseArray, uint32_t *timingResults, size_t steps) {
+    if (blockIdx.x != 0 || threadIdx.x != 0) return;
     // s_timings[0] is undefined, as we use it to prevent compiler optimizations / latency hiding
     __shared__ uint64_t s_timings[MIN_EXPECTED_SIZE / sizeof(uint32_t)]; // sizeof(uint32_t) is correct since we need to store that amount of timing values. 
     
@@ -88,7 +89,7 @@ __global__ void l1LineSizeKernel(uint32_t *pChaseArray, uint32_t *timingResults,
 
 std::vector<uint32_t> l1LineSizeLauncher(size_t arraySizeBytes, size_t strideBytes) {
     if (arraySizeBytes <= MIN_EXPECTED_SIZE) return {};
-    util::hipCheck(hipDeviceReset());
+    util::hipDeviceReset();
 
     size_t stridedLength = arraySizeBytes / strideBytes;
     size_t resultBufferLength = std::min(stridedLength, MIN_EXPECTED_SIZE / sizeof(uint32_t)); 
@@ -98,7 +99,7 @@ std::vector<uint32_t> l1LineSizeLauncher(size_t arraySizeBytes, size_t strideByt
     uint32_t *d_timingResultBuffer = util::allocateGPUMemory(resultBufferLength);
     
     util::hipCheck(hipDeviceSynchronize());
-    l1LineSizeKernel<<<1, 1>>>(d_pChaseArray, d_timingResultBuffer, stridedLength);
+    l1LineSizeKernel<<<1, util::getMaxThreadsPerBlock()>>>(d_pChaseArray, d_timingResultBuffer, stridedLength);
 
     // Get Results
     std::vector<uint32_t> timingResultBuffer = util::copyFromDevice(d_timingResultBuffer, resultBufferLength);
@@ -109,32 +110,28 @@ std::vector<uint32_t> l1LineSizeLauncher(size_t arraySizeBytes, size_t strideByt
 }
 
 namespace benchmark {
-    CacheSizeResult measureL1LineSize(size_t cacheSizeBytes, size_t cacheFetchGranularityBytes) { 
+    CacheLineSizeResult measureL1LineSize(size_t cacheSizeBytes, size_t cacheFetchGranularityBytes) {
         std::map<size_t, std::map<size_t, std::vector<uint32_t>>> timings;
 
         size_t measureResolution = cacheFetchGranularityBytes / CACHE_LINE_SIZE_RESOLUTION_DIVISOR; // Measure with increased accuracy
         
-        for (size_t currentFetchGranularityBytes = cacheFetchGranularityBytes; currentFetchGranularityBytes <= MAX_EXPECTED_LINE_SIZE; currentFetchGranularityBytes += measureResolution) {
-            for (size_t currentCacheSize = cacheSizeBytes / 2; currentCacheSize < cacheSizeBytes + cacheSizeBytes / 2; currentCacheSize += cacheSizeBytes / measureResolution) {
+        for (size_t currentFetchGranularityBytes = measureResolution; currentFetchGranularityBytes <= MAX_EXPECTED_LINE_SIZE + measureResolution; currentFetchGranularityBytes += measureResolution) {
+            for (size_t currentCacheSize = 2 * cacheSizeBytes / 3 ; currentCacheSize < cacheSizeBytes + cacheSizeBytes / 3; currentCacheSize += cacheSizeBytes / measureResolution) {
                 timings[currentFetchGranularityBytes][currentCacheSize] = l1LineSizeLauncher(currentCacheSize, currentFetchGranularityBytes);
             }
-        }
-
-        for (auto& [size, map] : timings) {
-            util::pipeMapToPython(map, "L1 " + std::to_string(size));
         }
             
         auto [changePoint, confidence] = util::detectLineSizeChangePoint(timings);
 
-        CacheSizeResult result = {
-            util::flattenLineSizeMeasurementsToAverage(timings),
-            changePoint,
-            changePoint % cacheFetchGranularityBytes == 0 ? confidence : 0,
+        CacheLineSizeResult result = {
+            timings,
+            changePoint - (changePoint % cacheFetchGranularityBytes), // Ensure that the change point is a multiple of the fetch granularity
+            confidence,
             PCHASE,
             BYTE,
             false
         };
-        
+
         return result;
     }
 }

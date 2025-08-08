@@ -57,7 +57,7 @@ __global__ void scalarL1FetchGranularityKernel(uint32_t *timingResults, uint32_t
 
 
 std::vector<uint32_t> scalarL1FetchGranularityLauncher(size_t fetchGranularityToTestBytes) {
-    util::hipCheck(hipDeviceReset());
+    util::hipDeviceReset();
 
     uint32_t *d_timingResults = util::allocateGPUMemory(SAMPLE_SIZE);
 
@@ -66,7 +66,7 @@ std::vector<uint32_t> scalarL1FetchGranularityLauncher(size_t fetchGranularityTo
 
     std::vector<uint32_t> timingResultBuffer = util::copyFromDevice(d_timingResults, SAMPLE_SIZE);
 
-    util::hipCheck(hipDeviceReset());
+    util::hipDeviceReset();
     return timingResultBuffer;
 }
 

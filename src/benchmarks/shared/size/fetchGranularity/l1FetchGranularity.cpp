@@ -86,7 +86,7 @@ __global__ void l1FetchGranularityKernel(uint32_t *pChaseArray, uint32_t *timing
 
 
 std::vector<uint32_t> l1FetchGranularityLauncher(size_t arraySizeBytes, size_t fetchGranularityToTestBytes) { 
-    util::hipCheck(hipDeviceReset()); 
+    util::hipDeviceReset(); 
 
     // Initialize device Arrays
     uint32_t *d_pChaseArray = util::allocateGPUMemory(util::generatePChaseArray(arraySizeBytes, fetchGranularityToTestBytes));

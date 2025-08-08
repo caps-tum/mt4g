@@ -34,11 +34,11 @@ __global__ void constantL1LatencyKernel(uint32_t *timingResults, uint32_t stride
         timingResults[k] = s_timings[k];
     }
 
-    timingResults[0] += index >> util::min(index / 2, 32);
+    timingResults[0] += index;
 }
 
 std::vector<uint32_t> constantL1LatencyLauncher(size_t strideBytes) { 
-    util::hipCheck(hipDeviceReset()); 
+    util::hipDeviceReset(); 
 
     // Initialize device Arrays
     uint32_t *d_timingResults = util::allocateGPUMemory(SAMPLE_SIZE);
@@ -50,7 +50,7 @@ std::vector<uint32_t> constantL1LatencyLauncher(size_t strideBytes) {
 
     timingResultBuffer.erase(timingResultBuffer.begin());
 
-    util::hipCheck(hipDeviceReset());
+    util::hipDeviceReset();
     return timingResultBuffer;
 }
 
@@ -64,7 +64,7 @@ namespace benchmark {
                 util::average(timings),
                 util::percentile(timings, 0.5),
                 util::percentile(timings, 0.95),
-                util::stddev(timings),
+                util::stdev(timings),
                 timings.size(),
                 SAMPLE_SIZE,
                 CYCLE,

@@ -8,8 +8,15 @@
 
 static constexpr auto MEASURE_SIZE = DEFAULT_SAMPLE_SIZE;// Loads
 static constexpr auto GRACE = DEFAULT_GRACE_FACTOR;// Factor
+static constexpr auto TESTING_THREADS = 2;
 
-__global__ void textureAmountKernel(hipTextureObject_t texBase, hipTextureObject_t texTest, uint32_t *timingResultsBaseCore, uint32_t *timingResultsTestCore, size_t steps, uint32_t baseCore, uint32_t testCore) {
+__global__ void textureAmountKernel([[maybe_unused]]hipTextureObject_t texBase, [[maybe_unused]]hipTextureObject_t texTest, uint32_t *timingResultsBaseCore, uint32_t *timingResultsTestCore, size_t steps, uint32_t baseCore, uint32_t testCore) {
+    // 4 = Amount of Multiprocessor Partitions / SIMDs
+    if (__getWarpId() % 4 == testCore / 32 && threadIdx.x == testCore % 32) {
+        testCore = threadIdx.x;
+    } else if (__getWarpId() % 4 == baseCore / 32 && threadIdx.x == baseCore % 32) {
+        baseCore = threadIdx.x;
+    }
     __shared__ uint64_t s_timingResultsBaseCore[MEASURE_SIZE];
     __shared__ uint64_t s_timingResultsTestCore[MEASURE_SIZE];
 
@@ -30,7 +37,7 @@ __global__ void textureAmountKernel(hipTextureObject_t texBase, hipTextureObject
         index = 0;
     }
 
-    __syncthreads();
+    __localBarrier(TESTING_THREADS);
     // If the threads share the same cache physically this will evict all values loaded before
     if (threadIdx.x == testCore) {
         for (uint32_t k = 0; k < steps; k++) {
@@ -43,7 +50,7 @@ __global__ void textureAmountKernel(hipTextureObject_t texBase, hipTextureObject
         index = 0;
     }
 
-    __syncthreads();
+    __localBarrier(TESTING_THREADS);
 
     if (threadIdx.x == baseCore) {
         //second round
@@ -60,7 +67,7 @@ __global__ void textureAmountKernel(hipTextureObject_t texBase, hipTextureObject
         s_timingResultsBaseCore[0] += index >> util::min(steps, 32);
     }
 
-    __syncthreads();
+    __localBarrier(TESTING_THREADS);
 
     if (threadIdx.x == testCore) {
         for (uint32_t k = 0; k < measureLength; k++) {
@@ -76,7 +83,7 @@ __global__ void textureAmountKernel(hipTextureObject_t texBase, hipTextureObject
         s_timingResultsTestCore[0] += index >> util::min(steps, 32);
     }
 
-    __syncthreads();
+    __localBarrier(TESTING_THREADS);
 
     if (threadIdx.x == baseCore) {
         for (uint32_t k = 0; k < measureLength; k++) {
@@ -92,7 +99,7 @@ __global__ void textureAmountKernel(hipTextureObject_t texBase, hipTextureObject
 }
 
 std::tuple<std::vector<uint32_t>, std::vector<uint32_t>> textureAmountLauncher(size_t textureSizeBytes, size_t textureFetchGranularityBytes, uint32_t baseCore, uint32_t testCore) {
-    util::hipCheck(hipDeviceReset()); 
+    util::hipDeviceReset(); 
 
     std::vector<uint32_t> initializerArray = util::generatePChaseArray(textureSizeBytes, textureFetchGranularityBytes);
 
@@ -112,6 +119,9 @@ std::tuple<std::vector<uint32_t>, std::vector<uint32_t>> textureAmountLauncher(s
 
     std::vector<uint32_t> baseCoreTimingResultsBuffer = util::copyFromDevice(d_timingResultsBaseCore, resultBufferLength);
     std::vector<uint32_t> testCoreTimingResultsBuffer = util::copyFromDevice(d_timingResultsTestCore, resultBufferLength);
+    
+    baseCoreTimingResultsBuffer.erase(baseCoreTimingResultsBuffer.begin());
+    testCoreTimingResultsBuffer.erase(testCoreTimingResultsBuffer.begin());
 
     return { baseCoreTimingResultsBuffer, testCoreTimingResultsBuffer };
 }
@@ -120,12 +130,15 @@ std::tuple<std::vector<uint32_t>, std::vector<uint32_t>> textureAmountLauncher(s
 
 namespace benchmark {
     namespace nvidia {
-        uint32_t measureTextureAmount(size_t textureSizeBytes, size_t textureFetchGranularityBytes, double textureMissPenalty) {
+        std::optional<uint32_t> measureTextureAmount(size_t textureSizeBytes, size_t textureFetchGranularityBytes, double textureMissPenalty) {
             std::map<uint32_t, std::tuple<std::vector<uint32_t>, std::vector<uint32_t>>> testCoreToTimingResults;
 
-
             for (uint32_t i = 1; i <= util::getNumberOfCoresPerSM(); i *= 2) {
-                testCoreToTimingResults[i] = textureAmountLauncher(textureSizeBytes, textureFetchGranularityBytes, 0, i);
+                auto [baseTimings, testTimings] = testCoreToTimingResults[i] = textureAmountLauncher(textureSizeBytes, textureFetchGranularityBytes, 0, i);
+                if (baseTimings[0] == 0 || testTimings[0] == 0) {
+                    std::cout << "Error: Base or Test Core timings are zero, indicating an error in the measurement." << std::endl;
+                    return std::nullopt;
+                }
             }
             
             return util::getNumberOfCoresPerSM() / util::detectAmountChangePoint(testCoreToTimingResults, textureMissPenalty / GRACE);

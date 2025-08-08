@@ -23,7 +23,7 @@ __global__ void l2WriteBandwidthKernel(uint32v4* __restrict__ dst, size_t n) {
 
             #ifdef __HIP_PLATFORM_NVIDIA__
             asm volatile(
-                "st.global.cg.v4.u32 [%0], {%1,%2,%3,%4};\n"
+                "st.global.v4.u32 [%0], {%1,%2,%3,%4};\n"
                 :
                 : "l"(dst + i) // uint32v4*
                 , "r"(dummy.x) // int
@@ -35,7 +35,7 @@ __global__ void l2WriteBandwidthKernel(uint32v4* __restrict__ dst, size_t n) {
 
             #ifdef __HIP_PLATFORM_AMD__
             asm volatile(
-                "flat_store_dwordx4 %0, %1 " GLC "\n"
+                "flat_store_dwordx4 %0, %1\n"
                 :
                 : "v"(dst + i) // uint32v4*
                 , "v"(dummy) // uint32v4
@@ -49,11 +49,11 @@ __global__ void l2WriteBandwidthKernel(uint32v4* __restrict__ dst, size_t n) {
 
 
 double l2WriteBandwidthLauncher(size_t arraySizeBytes) { 
-    util::hipCheck(hipDeviceReset()); 
+    util::hipDeviceReset(); 
 
     // Calculate number of blocks and threads
-    uint32_t maxThreadsPerBlock = util::getMaxThreadsPerBlock(); // Allows the scheduler to use extensive latency hiding
-    uint32_t maxBlocks = util::getNumberOfComputeUnits(); // TODO: Find heuristic (funnily, departure delay might be interesting for that)
+    uint32_t maxThreadsPerBlock = util::min(util::getMaxThreadsPerBlock(), util::getWarpSize() * util::getSIMDsPerCU()); 
+    uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getDeviceProperties().maxBlocksPerMultiProcessor;
 
    
     uint32v4 *d_dstArr = util::allocateGPUMemory<uint32v4>(arraySizeBytes / sizeof(uint32v4));

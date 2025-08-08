@@ -1,10 +1,13 @@
 #pragma once
 
+#include <hip/hip_runtime.h>
+
 struct CLIOptions {
     int  deviceId;          // GPU ID via -d / --device-id
-    //std::string outputBase  // Output base directory for graphs / measurements / final json 
+    //std::string outputBase  // Output base directory for graphs / measurements / final json
     bool graphs;            // Generate graphs if true
     bool rawData;           // Output raw measurement data
+    bool fullReport;        // Write README with summary and graphs
     bool randomize;         // Randomize P-Chase arrays if true
     bool runSilently;       // Do not print progress information if true
 
@@ -20,4 +23,6 @@ struct CLIOptions {
     bool runMainMemory;
     bool runDepartureDelay;
     bool runResourceSharing;
+
+    hipFuncCache_t cachePreference; // Cache config preference
 };

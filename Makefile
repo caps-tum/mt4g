@@ -7,7 +7,7 @@ INC_DIRS      := -I$(CURDIR)/include \
                  -isystem $(HIP_PATH)/include
 
 SRC_BASE      := src
-TARGET        := mt4amd
+TARGET        := mt4g
 BUILD_DIR     := build
 GPU_TARGET_ARCH ?=
 d             ?= 0
@@ -27,6 +27,7 @@ endif
 # Determine platform
 ifeq ($(findstring sm_,$(GPU_TARGET_ARCH)),sm_)
   PLATFORM := nvidia
+  INC_DIRS += -I$(CUDA_PATH)/include
 else ifeq ($(findstring gfx,$(GPU_TARGET_ARCH)),gfx)
   PLATFORM := amd
   INC_DIRS += -isystem /opt/rocm/include 
@@ -58,7 +59,7 @@ all: fetch-cxxopts fetch-json $(TARGET)
 ifeq ($(PLATFORM),amd)
   LIB_DIRS := -L/opt/rocm/lib -lrocm_smi64 -lhsa-runtime64 -pthread
 else
-  LIB_DIRS := #-pthread
+  LIB_DIRS := -L$(CUDA_PATH)/lib64 -lcudart
 endif
 
 $(TARGET): $(OBJECTS)

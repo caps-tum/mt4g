@@ -14,21 +14,11 @@ __global__ void scalarL1MissPenaltyKernel(uint32_t *timingResults, size_t steps,
     uint32_t index = 0;
     // Evict scalar L1 by loading twice the cache size
     for (uint32_t k = 0; k < steps * 2; ++k) {
-        #ifdef __HIP_PLATFORM_AMD__
-        uint32_t *addr = arr16384AscStride0 + index;
-        asm volatile(
-            "s_load_dword %0, %1, 0\n\t"
-            "s_add_u32 %0, %0, %2\n\t"
-            : "+s"(index)
-            , "+s"(addr)
-            , "+s"(stride)
-            :
-            : "memory"
-        );
-        #endif
+        index = arr16384AscStride0[index] + stride;
     }
 
-    index &= 1;
+    uint32_t sum = index;
+    index = 0;
     for (uint32_t k = 0; k < measureLength; ++k) {
         #ifdef __HIP_PLATFORM_AMD__
         uint64_t start, end;
@@ -58,15 +48,15 @@ __global__ void scalarL1MissPenaltyKernel(uint32_t *timingResults, size_t steps,
         #endif
     }
 
-    for (uint32_t k = 0; k < measureLength; ++k) {
+    for (uint32_t k = 1; k < measureLength; ++k) {
         timingResults[k] = s_timings[k];
     }
 
-    timingResults[0] = index;
+    timingResults[0] = (index + sum & 0x8) >> 2;
 }
 
 std::vector<uint32_t> scalarL1MissPenaltyLauncher(size_t scalarL1CacheSizeBytes, size_t scalarL1FetchGranularityBytes) {
-    util::hipCheck(hipDeviceReset());
+    util::hipDeviceReset();
 
     size_t steps = scalarL1CacheSizeBytes / scalarL1FetchGranularityBytes;
     size_t resultBufferLength = util::min(steps, SAMPLE_SIZE);
@@ -79,8 +69,6 @@ std::vector<uint32_t> scalarL1MissPenaltyLauncher(size_t scalarL1CacheSizeBytes,
     std::vector<uint32_t> timingResultBuffer = util::copyFromDevice(d_timingResults, resultBufferLength);
     timingResultBuffer.erase(timingResultBuffer.begin());
     
-    util::printVector(timingResultBuffer);
-
     return timingResultBuffer;
 }
 

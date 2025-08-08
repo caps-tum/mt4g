@@ -9,6 +9,7 @@ static constexpr auto MAX_ALLOWED_SIZE = CONST_ARRAY_SIZE * sizeof(uint32_t);// 
 
 //__attribute__((optimize("O0"), noinline))
 __global__ void scalarL1SizeKernel(uint32_t *timingResults, size_t steps, uint32_t stride) {
+    if (blockIdx.x != 0 || threadIdx.x != 0) return;
     __shared__ uint64_t s_timings[MIN_EXPECTED_SIZE / sizeof(uint32_t)]; // sizeof(uint32_t) is correct since we need to store that amount of timing values. 
 
     size_t measureLength = util::min(steps, MIN_EXPECTED_SIZE / sizeof(uint32_t));
@@ -71,7 +72,7 @@ __global__ void scalarL1SizeKernel(uint32_t *timingResults, size_t steps, uint32
 }
 
 std::vector<uint32_t> scalarL1SizeLauncher(size_t arraySizeBytes, size_t strideBytes) {
-    util::hipCheck(hipDeviceReset());
+    util::hipDeviceReset();
 
     //std::cout << arraySizeBytes << std::endl;
 
@@ -81,12 +82,12 @@ std::vector<uint32_t> scalarL1SizeLauncher(size_t arraySizeBytes, size_t strideB
     uint32_t *d_timingResultBuffer = util::allocateGPUMemory(resultBufferLength);
 
     util::hipCheck(hipDeviceSynchronize());
-    scalarL1SizeKernel<<<1, 1>>>(d_timingResultBuffer, arraySizeBytes / strideBytes, strideBytes / sizeof(uint32_t));
+    scalarL1SizeKernel<<<1, util::getMaxThreadsPerBlock()>>>(d_timingResultBuffer, arraySizeBytes / strideBytes, strideBytes / sizeof(uint32_t));
 
     // Get Results
     std::vector<uint32_t> timingResultBuffer = util::copyFromDevice(d_timingResultBuffer, resultBufferLength);
     timingResultBuffer.erase(timingResultBuffer.begin());
-    util::hipCheck(hipDeviceReset());
+    util::hipDeviceReset();
 
     return timingResultBuffer;
 }

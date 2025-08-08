@@ -14,6 +14,6 @@ namespace benchmark {
          * @param textureMissPenalty        Penalty in cycles for a miss.
          * @return Number of cores per cache.
          */
-        uint32_t measureTextureAmount(size_t textureSizeBytes, size_t textureFetchGranularityBytes, double textureMissPenalty);
+        std::optional<uint32_t> measureTextureAmount(size_t textureSizeBytes, size_t textureFetchGranularityBytes, double textureMissPenalty);
     }
 }

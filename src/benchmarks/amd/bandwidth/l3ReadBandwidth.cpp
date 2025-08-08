@@ -22,7 +22,7 @@ __global__ void l3ReadBandwidthKernel(uint32v4* __restrict__ dst, uint32v4* __re
             uint32v4 loaded;
             #ifdef __HIP_PLATFORM_AMD__
             asm volatile(
-                "flat_load_dwordx4 %0, %1 " GLC_SLC "\n"
+                "flat_load_dwordx4 %0, %1\n"
                 : "=v"(loaded)
                 : "v"(src + i)
                 : "memory"
@@ -33,17 +33,17 @@ __global__ void l3ReadBandwidthKernel(uint32v4* __restrict__ dst, uint32v4* __re
     }
 
     tid = blockIdx.x * blockDim.x + threadIdx.x;
-    dst[tid] = dummy; // prevent dead code elimination
+    dst[tid % blockDim.x] = dummy; // prevent dead code elimination
 }
 
 double l3ReadBandwidthLauncher(size_t arraySizeBytes) {
-    util::hipCheck(hipDeviceReset());
+    util::hipDeviceReset();
 
-    uint32_t maxThreadsPerBlock = util::getMaxThreadsPerBlock();
-    uint32_t maxBlocks = util::getNumberOfComputeUnits();
+    uint32_t maxThreadsPerBlock = util::min(util::getMaxThreadsPerBlock(), util::getWarpSize() * util::getSIMDsPerCU()); 
+    uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getDeviceProperties().maxBlocksPerMultiProcessor;
 
     uint32v4* d_srcArr = util::allocateGPUMemory<uint32v4>(arraySizeBytes / sizeof(uint32v4));
-    uint32v4* d_dstArr = util::allocateGPUMemory<uint32v4>(maxBlocks * maxThreadsPerBlock);
+    uint32v4* d_dstArr = util::allocateGPUMemory<uint32v4>(maxThreadsPerBlock);
 
     l3ReadBandwidthKernel<<<maxBlocks, maxThreadsPerBlock>>>(d_dstArr, d_srcArr, arraySizeBytes / sizeof(uint32v4));
 

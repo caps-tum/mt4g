@@ -9,6 +9,7 @@ static constexpr auto MAX_ALLOWED_SIZE = MAX_ALLOWED_INDEX * sizeof(uint32_t);//
 
 //__attribute__((optimize("O0"), noinline))
 __global__ void constantL15SizeKernel(uint32_t *timingResults, size_t length, size_t stride) {
+    if (blockIdx.x != 0 || threadIdx.x != 0) return;
     __shared__ uint64_t s_timings[MIN_EXPECTED_SIZE / sizeof(uint32_t)]; // sizeof(uint32_t) is correct since we need to store that amount of timing values. 
     __shared__ uint32_t s_index[MIN_EXPECTED_SIZE / sizeof(uint32_t)];
 
@@ -50,7 +51,7 @@ __global__ void constantL15SizeKernel(uint32_t *timingResults, size_t length, si
 }
 
 std::vector<uint32_t> constantL15SizeLauncher(size_t arraySizeBytes, size_t strideBytes) {
-    util::hipCheck(hipDeviceReset());
+    util::hipDeviceReset();
 
     constexpr size_t CONST_ARRAY_BYTES = CONST_ARRAY_SIZE * sizeof(uint32_t);
     if (arraySizeBytes > MAX_ALLOWED_SIZE) {
@@ -82,14 +83,14 @@ std::vector<uint32_t> constantL15SizeLauncher(size_t arraySizeBytes, size_t stri
     
 
     util::hipCheck(hipDeviceSynchronize());
-    constantL15SizeKernel<<<1, 1>>>(d_timingResultBuffer, arraySizeBytes / sizeof(uint32_t), strideBytes / sizeof(uint32_t));
+    constantL15SizeKernel<<<1, util::getMaxThreadsPerBlock()>>>(d_timingResultBuffer, arraySizeBytes / sizeof(uint32_t), strideBytes / sizeof(uint32_t));
     util::hipCheck(hipDeviceSynchronize());
 
     // Get Results
     std::vector<uint32_t> timingResultBuffer = util::copyFromDevice(d_timingResultBuffer, resultBufferLength);
     
 
-    util::hipCheck(hipDeviceReset());
+    util::hipDeviceReset();
 
     return { timingResultBuffer[0] }; // hacky
 }
@@ -116,7 +117,7 @@ namespace benchmark {
 
             CacheSizeResult result = {
                 timings,
-                confidence == 0 ? MAX_ALLOWED_SIZE : changePoint, // If no change point was detected, we assume CL1.5 > MAX_ALLOWED_SIZE
+                confidence == 0 ? CONST_ARRAY_SIZE * sizeof(uint32_t) + 1 : changePoint, // If no change point was detected, we assume CL1.5 > CONST_ARRAY_SIZE * sizeof(uint32_t)
                 confidence,
                 PCHASE,
                 BYTE,

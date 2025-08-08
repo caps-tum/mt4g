@@ -73,7 +73,7 @@ __global__ void sharedMemoryLatencyKernel(uint32_t *timingResults) {
 
 
 std::vector<uint32_t> sharedMemoryLatencyLauncher(/*size_t arraySizeBytes, size_t strideBytes*/) { 
-    util::hipCheck(hipDeviceReset()); 
+    util::hipDeviceReset(); 
 
     // Initialize device Arrays
     uint32_t *d_timingResults = util::allocateGPUMemory(SAMPLE_SIZE);
@@ -86,7 +86,6 @@ std::vector<uint32_t> sharedMemoryLatencyLauncher(/*size_t arraySizeBytes, size_
 
     timingResultBuffer.erase(timingResultBuffer.begin());
     
-    util::printVector(timingResultBuffer);
     return timingResultBuffer;
 }
 
@@ -100,7 +99,7 @@ namespace benchmark {
             util::average(timings),
             util::percentile(timings, 0.5),
             util::percentile(timings, 0.95),
-            util::stddev(timings),
+            util::stdev(timings),
             timings.size(),
             SAMPLE_SIZE,
             CYCLE,
