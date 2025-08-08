@@ -76,7 +76,7 @@ double l2WriteBandwidthLauncher(size_t arraySizeBytes) {
 
 namespace benchmark {
     double measureL2WriteBandwidth(size_t l2SizeBytes) {
-        double testSizeGiB = (double)l2SizeBytes / (1 * GiB); // Convert to GiB
+        double testSizeGiB = (double)l2SizeBytes / (double)(1 * GiB); // Convert to GiB
 
         std::vector<double> results(ROUNDS);
         for (uint32_t i = 0; i < ROUNDS; ++i) {
