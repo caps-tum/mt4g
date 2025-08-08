@@ -47,6 +47,7 @@ spack load hip              # sets HIP_PATH and exposes hipcc
 
 Make sure to set `HIP_PATH` and `CUDA_PATH` when compiling for NVIDIA.
 Choose the desired GPU architecture and invoke the build:
+Note that you may have to run make twice if it fails because of missing dependencies.
 
 ```bash
 make -j$(nproc) GPU_TARGET_ARCH=<sm_XX|gfxXXX>
@@ -69,6 +70,7 @@ Common options:
 | `-g, --graphs` | Generate graphs for each benchmark |
 | `-o, --raw` | Write raw timing data |
 | `-p, --report` | Create Markdown report in output directory |
+| `-j, --json` | Save final JSON output to `<GPU_NAME>.json` in the current directory |
 | `-r, --random` | Randomize P-Chase arrays |
 | `-q, --quiet` | Reduce console output |
 | `--l1`, `--l2`, `--l3` | Run cache benchmarks for selected levels |
@@ -84,10 +86,12 @@ Make sure to have exclusive GPU access, otherwise results are far less reliable.
 
 ### Output
 
-Benchmark results are printed as JSON. When graph, raw or report output is
-enabled the files are written to a directory named after the detected GPU. The
-`--report` flag writes a `README.md` containing the JSON summary and embeds all
-generated graphs with links to raw data.
+Benchmark results are printed as JSON. With `-j`/`--json` the final output is
+additionally saved as `<GPU_NAME>.json` in the current working directory. When
+graph, raw or report output is enabled the files are written to a directory
+named after the detected GPU. The `--report` flag writes a `README.md`
+containing the JSON summary and embeds all generated graphs with links to raw
+data.
 
 ## Repository layout
 
@@ -124,6 +128,7 @@ Stepan Vanecek.
 - Bandwidths are not optimal because we currently do not use a (dynamically found) optimal number of blocks.
 - Cache Line Size detection uses a heuristical approach and is therefore not guaranteed to be correct.
 - Constant L1 shared with L1 is not too reliable. Hence, as a hotfix we repeat the measurements 10 times and on one unsuccessful run return not shared. We are working on a cleaner solution.
+- Parallel build fails if depedencies were not fetched.
 - Runs only on Linux.
 
 ## License

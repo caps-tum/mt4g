@@ -22,6 +22,7 @@ namespace util {
         opts.graphs = false;
         opts.rawData = false;
         opts.fullReport = false;
+        opts.writeJson = false;
         opts.randomize = false;
         opts.runSilently = false;
 
@@ -51,6 +52,8 @@ namespace util {
             ("o,raw", "Write raw timing data",
                 cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
             ("p,report", "Create Markdown report in output directory",
+                cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
+            ("j,json", "Write final JSON to <GPU_NAME>.json in current directory",
                 cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
             ("r,random", "Randomize P-Chase arrays",
                 cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
@@ -109,6 +112,7 @@ namespace util {
         opts.graphs     = result["graphs"].as<bool>();
         opts.rawData    = result["raw"].as<bool>();
         opts.fullReport = result["report"].as<bool>();
+        opts.writeJson  = result["json"].as<bool>();
         opts.randomize  = result["random"].as<bool>();
         opts.runSilently= result["quiet"].as<bool>();
 

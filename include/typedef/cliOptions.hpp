@@ -8,6 +8,7 @@ struct CLIOptions {
     bool graphs;            // Generate graphs if true
     bool rawData;           // Output raw measurement data
     bool fullReport;        // Write README with summary and graphs
+    bool writeJson;         // Write final JSON result to a file
     bool randomize;         // Randomize P-Chase arrays if true
     bool runSilently;       // Do not print progress information if true
 
