@@ -45,6 +45,7 @@ If no benchmark group is selected all available groups are executed by default. 
 | `-g, --graphs` | Generate graphs for each benchmark |
 | `-o, --raw` | Write raw timing data |
 | `-p, --report` | Create Markdown report in output directory |
+| `-j, --json` | Save final JSON output to `<GPU_NAME>.json` in the current directory |
 | `-r, --random` | Randomize P-Chase arrays |
 | `-q, --quiet` | Only write the final JSON to stdout |
 | `--l1` | Run L1 cache benchmarks |
@@ -64,10 +65,12 @@ Generating graphs requires Python 3 (python3 in PATH) with the `matplotlib`, `p
 
 ### Output
 
-Benchmark results are printed as JSON to `stdout`. When `--graphs`, `--raw` or
-`--report` is enabled, additional files are written to `./results/<GPU_NAME>`. 
-The `--report` flag generates a `README.md` that embeds all
-graphs and links to the raw data. If you would like to contribute results for
-hardware not yet covered, please run the tool with `--raw --graphs --report` and send us
-the generated directory via pull request.
+Benchmark results are printed as JSON to `stdout`. With `-j`/`--json` the final
+output is also saved as `<GPU_NAME>.json` in the current working directory.
+When `--graphs`, `--raw` or `--report` is enabled, additional files are written
+to `./results/<GPU_NAME>`. The `--report` flag generates a `README.md` that
+embeds all graphs and links to the raw data. If you would like to contribute
+results for hardware not yet covered, please run the tool with
+`--raw --graphs --report` and send us the generated directory via pull
+request.
 

@@ -811,6 +811,14 @@ int main(int argc, char* argv[]) {
     if (opts.fullReport) {
         util::writeMarkdownReport(graphDir, fancyName, result);
     }
+    if (opts.writeJson) {
+        std::ofstream jsonFile(fancyName + ".json");
+        if (!jsonFile) {
+            std::cerr << "Could not write JSON file '" << fancyName << ".json'" << std::endl;
+        } else {
+            jsonFile << result.dump(4) << std::endl;
+        }
+    }
 
     std::cout << result.dump(4) << std::endl;
     return 0;
