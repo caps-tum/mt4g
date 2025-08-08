@@ -60,7 +60,7 @@ __global__ void l2FetchGranularityKernel(uint32_t *pChaseArray, uint32_t *timing
 
 
 std::vector<uint32_t> l2FetchGranularityLauncher(size_t arraySizeBytes, size_t fetchGranularityToTestBytes) { 
-    util::hipCheck(hipDeviceReset()); 
+    util::hipDeviceReset(); 
 
     // Initialize device Arrays
     uint32_t *d_timingResults = util::allocateGPUMemory(SAMPLE_SIZE);

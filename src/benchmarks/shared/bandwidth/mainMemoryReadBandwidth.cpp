@@ -32,9 +32,9 @@ __global__ void mainMemoryReadBandwidthKernel(uint32v4* __restrict__ dst, uint32
 
         #ifdef __HIP_PLATFORM_AMD__
         asm volatile(
-            "flat_load_dwordx4 %0, %1, " GLC "\n" 
+            "flat_load_dwordx4 %0, %1\n" 
             : "=v"(loaded) // uint32v4
-            : "v"(src + i) // uint32v4*
+            : "s"(src + i) // uint32v4*
             :
         );
         #endif
@@ -43,20 +43,20 @@ __global__ void mainMemoryReadBandwidthKernel(uint32v4* __restrict__ dst, uint32
         dummy.x ^= loaded.x;
     }
 
-    dst[tid] = dummy; // prevent dead code elimination
+    dst[tid % blockDim.x] = dummy; // prevent dead code elimination
 }
 
 double mainMemoryReadBandwidthLauncher(size_t arraySizeBytes) { 
-    util::hipCheck(hipDeviceReset()); 
+    util::hipDeviceReset(); 
 
-    uint32_t maxThreadsPerBlock = util::getMaxThreadsPerBlock(); // Allows the scheduler to use extensive latency hiding
-    uint32_t maxBlocks = 2048; // TODO: Find heuristic (funnily, departure delay might be interesting for that)
+    uint32_t maxThreadsPerBlock = util::min(util::getMaxThreadsPerBlock(), util::getWarpSize() * util::getSIMDsPerCU()); 
+    uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getDeviceProperties().maxBlocksPerMultiProcessor;
 
     // Initialize device Arrays
     // sizeof(uint32v4) = 16 bytes -> allows us to load 4 integers with one instruction -> probability 
     // of the bandwidth being limited by the memory bandwidth rather than compute is considerably higher
     uint32v4 *d_srcArr = util::allocateGPUMemory<uint32v4>(arraySizeBytes / sizeof(uint32v4));
-    uint32v4 *d_dstArr = util::allocateGPUMemory<uint32v4>(maxBlocks * maxThreadsPerBlock); // total threads
+    uint32v4 *d_dstArr = util::allocateGPUMemory<uint32v4>(maxThreadsPerBlock); // total threads
     
     // Use events to measure timings
     auto start = util::createHipEvent();

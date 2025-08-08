@@ -48,21 +48,21 @@ __global__ void l2ReadBandwidthKernel(uint32v4* __restrict__ dst, uint32v4* __re
     }
     
     tid = blockIdx.x * blockDim.x + threadIdx.x;
-    dst[tid] = dummy; // prevent dead code elimination
+    dst[tid % blockDim.x] = dummy; // prevent dead code elimination
 }
 
 double l2ReadBandwidthLauncher(size_t arraySizeBytes) { 
-    util::hipCheck(hipDeviceReset()); 
+    util::hipDeviceReset(); 
 
     // Calculate number of blocks and threads
-    uint32_t maxThreadsPerBlock = util::getMaxThreadsPerBlock(); // Allows the scheduler to use extensive latency hiding
-    uint32_t maxBlocks = util::getNumberOfComputeUnits(); // TODO: Find heuristic (funnily, departure delay might be interesting for that)
+    uint32_t maxThreadsPerBlock = util::min(util::getMaxThreadsPerBlock(), util::getWarpSize() * util::getSIMDsPerCU()); 
+    uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getDeviceProperties().maxBlocksPerMultiProcessor;
 
     // Initialize device Arrays
     // sizeof(uint32v4) = 16 bytes -> allows us to load 4 integers with one instruction -> probability 
     // of the bandwidth being limited by the memory bandwidth rather than compute is considerably higher
     uint32v4 *d_srcArr = util::allocateGPUMemory<uint32v4>(arraySizeBytes / sizeof(uint32v4));
-    uint32v4 *d_dstArr = util::allocateGPUMemory<uint32v4>(maxBlocks * maxThreadsPerBlock); // total threads
+    uint32v4 *d_dstArr = util::allocateGPUMemory<uint32v4>(maxThreadsPerBlock); // total threads
 
     // warm up L2
     l2ReadBandwidthKernel<<<maxBlocks, maxThreadsPerBlock>>>(d_dstArr, d_srcArr, arraySizeBytes / sizeof(uint32v4));

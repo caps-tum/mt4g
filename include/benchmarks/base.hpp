@@ -49,6 +49,34 @@ __device__ __forceinline__ uint32_t __getPhysicalCUId() {
 return __smid();
 #endif
 }
+/**
+ * @brief Query the warp identifier of the calling thread.
+ *
+ * @return Warp ID Register content.
+ */
+__device__ __forceinline__ uint32_t __getWarpId() {
+    #ifdef __HIP_PLATFORM_NVIDIA__
+    uint32_t wid;
+    asm volatile ("mov.u32 %0, %warpid;" : "=r"(wid));
+    return wid;
+    #endif
+    #ifdef __HIP_PLATFORM_AMD__
+    // Read HW_ID into an SGPR, then extract fields.
+    uint32_t hwid;
+    asm volatile ("s_getreg_b32 %0, hwreg(HW_REG_HW_ID)" : "=s"(hwid));
+
+    // wave_id = bits [3:0]  (scheduler's wave slot within a SIMD)
+    // simd_id = bits [5:4]  (which SIMD within the CU)
+    const uint32_t wave_id =  hwid        & 0xF;   // [0..15]
+    //const uint32_t simd_id = (hwid >> 4)  & 0x3;   // [0..3]
+
+    return wave_id;  
+    #endif
+
+    // Portable fallback
+    const uint32_t linear_tid = threadIdx.x + blockDim.x * (threadIdx.y + blockDim.y * threadIdx.z);
+    return linear_tid / warpSize;
+}
 
 // While a bit sketchy it is sufficient for our purposes
 // Proper way of doing this would be using cooperative groups.
@@ -92,6 +120,35 @@ __device__ __forceinline__ void __globalBarrier(unsigned int threshold) {
 
     // Optional: synchronize threads within a block
     __syncthreads();
+}
+
+/**
+ * @brief Block-local barrier without using __syncthreads().
+ *
+ * @param threshold Number of threads in the block.
+ */
+__device__ __forceinline__ void __localBarrier(unsigned int threshold) {
+    // Shared per-block counter and sense flag
+    __shared__ unsigned int counter;      // counter lives in shared memory
+    __shared__ unsigned int sense;        // sense flag lives in shared memory
+
+    // Compute this thread's sense for the current barrier phase
+    unsigned int mySense = 1 - sense;     // sense-reversal technique
+
+    // Atomic arrival: each thread fetches-and-increments the counter
+    unsigned int ticket = atomicAdd(&counter, 1); // shared-memory atomic 
+
+    if (ticket == threshold - 1) {
+        // Last arriving thread: reset counter and flip the sense to release waiters
+        counter = 0;                       // reset for next barrier iteration
+        sense = mySense;                   // release all spin-waiters
+    } else {
+        // Other threads: spin-wait until sense matches this thread’s sense
+        while (sense != mySense) {         // pure busy-wait, no syncthreads 
+            // spin
+        }
+    }
+    // At this point, all 'threshold' threads have synchronized
 }
 
 

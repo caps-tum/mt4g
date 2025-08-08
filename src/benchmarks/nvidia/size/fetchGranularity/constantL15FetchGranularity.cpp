@@ -42,7 +42,7 @@ __global__ void constantL15FetchGranularityKernel(uint32_t *timingResults, size_
 
 
 std::vector<uint32_t> constantL15FetchGranularityLauncher(size_t fetchGranularityToTestBytes) { 
-    util::hipCheck(hipDeviceReset()); 
+    util::hipDeviceReset(); 
 
     // Initialize device Arrays
     uint32_t *d_timingResults = util::allocateGPUMemory(SAMPLE_SIZE);
@@ -54,7 +54,7 @@ std::vector<uint32_t> constantL15FetchGranularityLauncher(size_t fetchGranularit
 
     std::vector<uint32_t> timingResultBuffer = util::copyFromDevice(d_timingResults, SAMPLE_SIZE);
 
-    util::hipCheck(hipDeviceReset()); 
+    util::hipDeviceReset(); 
     return timingResultBuffer;
 }
 

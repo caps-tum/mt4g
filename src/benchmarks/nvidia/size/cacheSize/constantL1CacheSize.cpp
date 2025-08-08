@@ -9,6 +9,7 @@ static constexpr auto MAX_ALLOWED_SIZE = CONST_ARRAY_SIZE;// ~16 * KiB, bandaid 
 
 //__attribute__((optimize("O0"), noinline))
 __global__ void constantL1SizeKernel(uint32_t *timingResults, size_t steps, uint32_t stride) {
+    if (blockIdx.x != 0 || threadIdx.x != 0) return;
     __shared__ uint64_t s_timings[MIN_EXPECTED_SIZE / sizeof(uint32_t)]; // sizeof(uint32_t) is correct since we need to store that amount of timing values. 
 
     size_t measureLength = util::min(steps, MIN_EXPECTED_SIZE / sizeof(uint32_t));
@@ -23,7 +24,7 @@ __global__ void constantL1SizeKernel(uint32_t *timingResults, size_t steps, uint
         sum += index;
     }
 
-    index = 0;
+    index &= 1;
 
 
     // Second round
@@ -34,19 +35,21 @@ __global__ void constantL1SizeKernel(uint32_t *timingResults, size_t steps, uint
             ".reg .u32 r_start, r_end, r_tmp;\n\t" 
             ".reg .u64 r_off, r_addr, r_base;\n\t"
             "mov.u64 r_base, arr16384AscStride0;\n\t" 
-            "mul.wide.u32 r_off, %1, 4;\n\t"             // r_off = index * 4\n\t"
-            "add.u64 r_addr, r_base, r_off;\n\t"          // r_addr = base + offset\n\t"
+            "mul.wide.u32 r_off, %1, 4;\n\t"            
+            "add.u64 r_addr, r_base, r_off;\n\t"        
 
             "mov.u32 r_start, %%clock;\n\t"
-            "ld.const.u32 r_tmp, [r_addr];\n\t"           // lade arr[index]\n\t"
-            "add.u32 r_tmp, r_tmp, %2;\n\t"               // + stride\n\t"
-            "rem.u32 r_tmp, r_tmp, %3;\n\t"               // % maxIndex\n\t"
+            "ld.const.u32 r_tmp, [r_addr];\n\t"
+            "add.u32 r_tmp, r_tmp, %2;\n\t"
+            "rem.u32 r_tmp, r_tmp, %3;\n\t"
             "mov.u32 r_end, %%clock;\n\t"
 
-            "sub.u32 %0, r_end, r_start;\n\t"             // latency = r_end - r_start\n\t"
-            "mov.u32 %1, r_tmp;\n\t"                     // index = updated value
-            : "=r"(latency), "+r"(index)
-            : "r"(stride), "r"(maxIndex)
+            "sub.u32 %0, r_end, r_start;\n\t"           
+            "mov.u32 %1, r_tmp;\n\t"                    
+            : "=r"(latency)
+            , "+r"(index)
+            : "r"(stride)
+            , "r"(maxIndex)
             : "memory"
         );
 
@@ -63,7 +66,7 @@ __global__ void constantL1SizeKernel(uint32_t *timingResults, size_t steps, uint
 }
 
 std::vector<uint32_t> constantL1SizeLauncher(size_t arraySizeBytes, size_t strideBytes) {
-    util::hipCheck(hipDeviceReset());
+    util::hipDeviceReset();
 
     constexpr size_t CONST_ARRAY_BYTES = CONST_ARRAY_SIZE * sizeof(uint32_t);
     if (arraySizeBytes > CONST_ARRAY_BYTES) {
@@ -93,7 +96,7 @@ std::vector<uint32_t> constantL1SizeLauncher(size_t arraySizeBytes, size_t strid
     uint32_t *d_timingResultBuffer = util::allocateGPUMemory(resultBufferLength);
 
     util::hipCheck(hipDeviceSynchronize());
-    constantL1SizeKernel<<<1, 1>>>(d_timingResultBuffer, arraySizeBytes / strideBytes, strideBytes / sizeof(uint32_t));
+    constantL1SizeKernel<<<1, util::getMaxThreadsPerBlock()>>>(d_timingResultBuffer, arraySizeBytes / strideBytes, strideBytes / sizeof(uint32_t));
     
     // Get Results
     std::vector<uint32_t> timingResultBuffer = util::copyFromDevice(d_timingResultBuffer, resultBufferLength);

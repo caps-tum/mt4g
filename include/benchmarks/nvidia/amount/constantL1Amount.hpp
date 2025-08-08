@@ -14,6 +14,6 @@ namespace benchmark {
          * @param l1MissPenalty                Penalty in cycles for an L1 miss.
          * @return Number of cores per cache.
          */
-        uint32_t measureConstantL1Amount(size_t constantL1SizeBytes, size_t constantL1FetchGranularityBytes, double l1MissPenalty);
+        std::optional<uint32_t> measureConstantL1Amount(size_t constantL1SizeBytes, size_t constantL1FetchGranularityBytes, double l1MissPenalty);
     }
 }

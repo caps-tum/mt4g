@@ -73,41 +73,6 @@ namespace util {
         return result;
     }
 
-    hipTextureObject_t createTextureObject(uint32_t *data, size_t dataSize) {
-        hipTextureObject_t tex = 0;
-
-        hipResourceDesc resDesc {
-            .resType = hipResourceTypeLinear,
-            .res = {
-                .linear = {
-                    .devPtr = data,
-                    .desc = hipCreateChannelDesc<uint32_t>(),
-                    .sizeInBytes = dataSize
-                }
-            }
-        };
-
-        hipTextureDesc texDesc{
-            .addressMode         = { hipAddressModeClamp,
-                                    hipAddressModeClamp,
-                                    hipAddressModeClamp },
-            .filterMode          = hipFilterModePoint,
-            .readMode            = hipReadModeElementType,
-            .sRGB                = 0,
-            .borderColor         = { 0.f, 0.f, 0.f, 0.f },
-            .normalizedCoords    = 0,
-            .maxAnisotropy       = 0,
-            .mipmapFilterMode    = hipFilterModePoint,
-            .mipmapLevelBias     = 0.f,
-            .minMipmapLevelClamp = 0.f,
-            .maxMipmapLevelClamp = 0.f
-        };
-        
-        util::hipCheck(hipCreateTextureObject(&tex, &resDesc, &texDesc, nullptr));
-
-        return tex;
-    }
-
     uint32_t closestPowerOfTwo(uint32_t n) {
         if (n == 0) return 1;
 

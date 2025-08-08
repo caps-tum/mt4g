@@ -9,8 +9,15 @@
 
 static constexpr auto MEASURE_SIZE = DEFAULT_SAMPLE_SIZE;// Loads
 static constexpr auto GRACE = DEFAULT_GRACE_FACTOR;// Factor
+static constexpr auto TESTING_THREADS = 2;
 
 __global__ void constantL1AmountKernel(uint32_t *timingResultsBaseCore, uint32_t *timingResultsTestCore, size_t steps, size_t stride, uint32_t baseCore, uint32_t testCore) {
+    // 4 = Amount of Multiprocessor Partitions / SIMDs
+    if (__getWarpId() % 4 == testCore / 32 && threadIdx.x == testCore % 32) {
+        testCore = threadIdx.x;
+    } else if (__getWarpId() % 4 == baseCore / 32 && threadIdx.x == baseCore % 32) {
+        baseCore = threadIdx.x;
+    } 
     uint32_t start, end;
     uint32_t index = 0;
     
@@ -31,10 +38,10 @@ __global__ void constantL1AmountKernel(uint32_t *timingResultsBaseCore, uint32_t
         }
 
         timingResultsBaseCore[0] = index >> util::min(steps, 32);
-        index = 0;
+        index = CONST_ARRAY_SIZE - steps * stride;
     }
 
-    __syncthreads();
+    __localBarrier(TESTING_THREADS);
     // If the threads share the same cache physically this will evict all values loaded before
     if (threadIdx.x == testCore) {
         for (uint32_t k = 0; k < steps; k++) {
@@ -44,7 +51,7 @@ __global__ void constantL1AmountKernel(uint32_t *timingResultsBaseCore, uint32_t
         index = CONST_ARRAY_SIZE - steps * stride;
     }
 
-    __syncthreads();
+    __localBarrier(TESTING_THREADS);
 
     if (threadIdx.x == baseCore) {
         //second round
@@ -58,7 +65,7 @@ __global__ void constantL1AmountKernel(uint32_t *timingResultsBaseCore, uint32_t
         timingResultsBaseCore[0] += index >> util::min(steps, 32);
     }
 
-    __syncthreads();
+    __localBarrier(TESTING_THREADS);
 
     if (threadIdx.x == testCore) {
         for (uint32_t k = 0; k < measureLength; k++) {
@@ -71,7 +78,7 @@ __global__ void constantL1AmountKernel(uint32_t *timingResultsBaseCore, uint32_t
         timingResultsTestCore[0] += index >> util::min(steps, 32);
     }
 
-    __syncthreads();
+    __localBarrier(TESTING_THREADS);
 
     if (threadIdx.x == baseCore) {
         for (uint32_t k = 1; k < measureLength; k++) {
@@ -87,7 +94,7 @@ __global__ void constantL1AmountKernel(uint32_t *timingResultsBaseCore, uint32_t
 }
 
 std::tuple<std::vector<uint32_t>, std::vector<uint32_t>> constantL1AmountLauncher(size_t constantL1SizeBytes, size_t constantL1FetchGranularityBytes, uint32_t baseCore, uint32_t testCore) {
-    util::hipCheck(hipDeviceReset()); 
+    util::hipDeviceReset(); 
 
     constantL1SizeBytes = util::min(constantL1SizeBytes, CONST_ARRAY_SIZE); // Cap at CONST_ARRAY_SIZE, otherwise the benchmark will access illegal addresses and returnt trash values
 
@@ -110,7 +117,7 @@ std::tuple<std::vector<uint32_t>, std::vector<uint32_t>> constantL1AmountLaunche
 
 namespace benchmark {
     namespace nvidia {
-        uint32_t measureConstantL1Amount(size_t constantL1SizeBytes, size_t constantL1FetchGranularityBytes, double constantL1MissPenalty) {
+        std::optional<uint32_t> measureConstantL1Amount(size_t constantL1SizeBytes, size_t constantL1FetchGranularityBytes, double constantL1MissPenalty) {
             std::map<uint32_t, std::tuple<std::vector<uint32_t>, std::vector<uint32_t>>> testCoreToTimingResults;
 
             if (constantL1SizeBytes > CONST_ARRAY_SIZE) {
@@ -119,7 +126,11 @@ namespace benchmark {
 
             // Differences are not too great because of CL1.5
             for (uint32_t i = 1; i <= util::getNumberOfCoresPerSM(); i *= 2) {
-                testCoreToTimingResults[i] = constantL1AmountLauncher(constantL1SizeBytes, constantL1FetchGranularityBytes, 0, i);
+                auto [baseTimings, testTimings] = testCoreToTimingResults[i] = constantL1AmountLauncher(constantL1SizeBytes, constantL1FetchGranularityBytes, 0, i);
+                if (baseTimings[0] == 0 || testTimings[0] == 0) {
+                    std::cout << "Error: Base or Test Core timings are zero, indicating an error in the measurement." << std::endl;
+                    return std::nullopt;
+                }
             }
 
             return util::getNumberOfCoresPerSM() / util::detectAmountChangePoint(testCoreToTimingResults, constantL1MissPenalty / GRACE);

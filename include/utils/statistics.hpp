@@ -12,12 +12,62 @@
 
 namespace util {
     /**
-     * Applies a sliding window minimum filter to suppress high outliers.
-     * Each value is replaced by the minimum in its surrounding window.
-     * The first value remains unchanged
-     * 
-     * @param samples Input vector of numeric values
-     * @param windowSize Size of the symmetric window (must be odd)
+     * @brief Compute the RMS distance from a reference minimum.
+     *
+     * @tparam T Numeric element type.
+     * @param vec       Sample vector.
+     * @param globalMin Pre-computed minimum used as reference.
+     * @return Root-mean-square distance from @p globalMin.
+     */
+    template<typename T> inline double computeRMSFromMin(const std::vector<T>& vec, double globalMin) {
+        if (vec.empty()) return 0.0;
+        long double sum = 0.0L;
+        for (T v : vec) {
+            // difference to global minimum
+            const long double d = static_cast<long double>(v) - globalMin;
+            sum += d * d;
+        }
+        return std::sqrt(double(sum / vec.size()));
+    }
+
+    /**
+     * @brief Build a reducer computing RMS distances using the global minimum.
+     *
+     * Scans all vectors in @p timingsMap to determine the smallest element and
+     * returns a callable that calculates the RMS distance of any vector to that
+     * global minimum.
+     *
+     * @tparam Map Map type whose mapped value is a vector.
+     * @param timingsMap Map of vectors to inspect for the minimum.
+     * @return Callable reducing a vector to a double.
+     */
+    template<typename Map> inline auto getMagicReductionFunction(const Map& timingsMap) {
+        using Vec = typename Map::mapped_type;
+        using T   = typename Vec::value_type;
+        // find smallest element over all vectors
+        T globalMinVal = std::numeric_limits<T>::max();
+        for (const auto& kv : timingsMap) {
+            for (T v : kv.second) {
+                if (v < globalMinVal) globalMinVal = v;
+            }
+        }
+        const double globalMin = static_cast<double>(globalMinVal);
+
+        // return lambda that closes over globalMin
+        return [globalMin](const Vec& vec) -> double {
+            return computeRMSFromMin<T>(vec, globalMin);
+        };
+    }
+
+    /**
+     * @brief Apply a sliding minimum filter to suppress outliers.
+     *
+     * Each value is replaced by the minimum in its surrounding window while the
+     * first element remains unchanged.
+     *
+     * @param samples    Input vector of numeric values.
+     * @param windowSize Size of the symmetric window (must be odd).
+     * @return Filtered vector.
      */
     template <typename T> std::vector<T> suppressOutliersWithMinFilter(const std::vector<T>& samples, int32_t windowSize) {
         if (windowSize <= 0 || (windowSize % 2) == 0 || samples.empty()) {
@@ -118,8 +168,22 @@ namespace util {
         return *std::max_element(v.begin(), v.end());
     }
 
+    /**
+     * @brief Compute the p-th percentile of the data.
+     *
+     * @param data Sample values.
+     * @param p    Desired percentile in [0,1].
+     * @return Interpolated percentile value.
+     */
     double percentile(const std::vector<uint32_t>& data, double p);
-    double stddev(const std::vector<uint32_t>& data);
+
+    /**
+     * @brief Calculate the sample standard deviation of the data.
+     *
+     * @param data Sample values.
+     * @return Standard deviation.
+     */
+    double stdev(const std::vector<uint32_t>& data);
 
     /**
      * @brief Compute the Euclidean distance between two vectors.
@@ -178,8 +242,11 @@ namespace util {
      */
     uint32_t detectAmountChangePoint(const std::map<uint32_t, std::tuple<std::vector<uint32_t>, std::vector<uint32_t>>>& timingsMap, double threshold);
 
+    /**
+     * @brief Identify compute units exhibiting increased sharing latency.
+     *
+     * Averages the paired timing vectors per compute unit and returns all IDs
+     * whose average exceeds 1.5 times the minimum.
+     */
     std::vector<uint32_t> detectShareChangePoint(const std::map<uint32_t, std::tuple<std::vector<uint32_t>, std::vector<uint32_t>>>& timings);
-
-    double computeRMSFromMin(const std::vector<uint32_t>& vec, double globalMin);
-    auto getMagicReductionFunction(const std::map<size_t, std::vector<uint32_t>>& timingsMap);
 }

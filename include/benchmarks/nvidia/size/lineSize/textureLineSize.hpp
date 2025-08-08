@@ -11,6 +11,6 @@ namespace benchmark {
          * @param cacheFetchGranularityBytes Sector size used for measurement.
          * @return Detected line size in bytes if successful.
          */
-        CacheSizeResult measureTextureLineSize(size_t cacheSizeBytes, size_t cacheFetchGranularityBytes);
+        CacheLineSizeResult measureTextureLineSize(size_t cacheSizeBytes, size_t cacheFetchGranularityBytes);
     }
 }

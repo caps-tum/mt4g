@@ -10,12 +10,12 @@ static constexpr auto MAX_EXPECTED_LINE_SIZE = 256;// B
 static constexpr auto SAMPLE_SIZE = 64;// Tries
 
 
-__global__ void textureFetchGranularityKernel(hipTextureObject_t tex, uint32_t *timingResults) {
+__global__ void textureFetchGranularityKernel([[maybe_unused]]hipTextureObject_t tex, uint32_t *timingResults) {
     __shared__ uint64_t s_timings[SAMPLE_SIZE]; // sizeof(uint32_t) is correct since we need to store that amount of timing values. 
     __shared__ uint32_t s_index[SAMPLE_SIZE];
 
-    uint32_t start, end;
-    uint32_t index = 0;
+    [[maybe_unused]]uint32_t start, end;
+    [[maybe_unused]]uint32_t index = 0;
     
     // Provoke cold cache misses
     for (uint32_t k = 0; k < SAMPLE_SIZE; ++k) {
@@ -38,7 +38,7 @@ __global__ void textureFetchGranularityKernel(hipTextureObject_t tex, uint32_t *
 
 
 std::vector<uint32_t> textureFetchGranularityLauncher(size_t arraySizeBytes, size_t fetchGranularityToTestBytes) { 
-    util::hipCheck(hipDeviceReset()); 
+    util::hipDeviceReset(); 
 
     // Initialize device Arrays
     uint32_t *d_pChaseArray = util::allocateGPUMemory(util::generatePChaseArray(arraySizeBytes, fetchGranularityToTestBytes));
@@ -52,7 +52,7 @@ std::vector<uint32_t> textureFetchGranularityLauncher(size_t arraySizeBytes, siz
     std::vector<uint32_t> timingResultBuffer = util::copyFromDevice(d_timingResults, SAMPLE_SIZE);
     
     
-    util::hipCheck(hipDeviceReset()); 
+    util::hipDeviceReset(); 
     return timingResultBuffer;
 }
 

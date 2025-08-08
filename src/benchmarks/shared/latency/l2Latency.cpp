@@ -34,7 +34,7 @@ __global__ void l2LatencyKernel(uint32_t *pChaseArray, uint32_t *timingResults) 
 }
 
 std::vector<uint32_t> l2LatencyLauncher(size_t arraySizeBytes, size_t strideBytes) { 
-    util::hipCheck(hipDeviceReset()); 
+    util::hipDeviceReset(); 
 
     // Initialize device Arrays
     uint32_t *d_pChaseArray = util::allocateGPUMemory(util::generatePChaseArray(arraySizeBytes, strideBytes));
@@ -47,7 +47,7 @@ std::vector<uint32_t> l2LatencyLauncher(size_t arraySizeBytes, size_t strideByte
     std::vector<uint32_t> timingResultBuffer = util::copyFromDevice(d_timingResults, SAMPLE_SIZE);
 
     timingResultBuffer.erase(timingResultBuffer.begin());
-    util::hipCheck(hipDeviceReset()); 
+    util::hipDeviceReset(); 
     return timingResultBuffer;
 }
 
@@ -61,7 +61,7 @@ namespace benchmark {
             util::average(timings),
             util::percentile(timings, 0.5),
             util::percentile(timings, 0.95),
-            util::stddev(timings),
+            util::stdev(timings),
             timings.size(),
             SAMPLE_SIZE,
             CYCLE,

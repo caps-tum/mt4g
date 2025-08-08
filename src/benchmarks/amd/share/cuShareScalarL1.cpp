@@ -11,6 +11,8 @@ static constexpr auto MEASURE_SIZE = 1024;
 
 static constexpr auto THREADBLOCKS = 2;
 
+static constexpr auto MAX_RETRIES = 10;
+
 __global__ void cuShareScalarL1Kernel(uint32_t *pChaseArrayBaseCU, uint32_t *pChaseArrayTestCU, uint32_t *timingResultsBaseCU, uint32_t *timingResultsTestCU, size_t steps, uint32_t baseCU, uint32_t testCU) {
     __shared__ uint64_t s_timingResultsBaseCU[MEASURE_SIZE];
     __shared__ uint64_t s_timingResultsTestCU[MEASURE_SIZE];
@@ -29,9 +31,7 @@ __global__ void cuShareScalarL1Kernel(uint32_t *pChaseArrayBaseCU, uint32_t *pCh
         timingResultsBaseCU[0] = currentCUId;
     } else if (currentCUId == testCU) {
         timingResultsTestCU[0] = currentCUId;
-    } else {
-        return; // Something went horribly wrong (stream assignment did not work)
-    }
+    } 
 
     __globalBarrier(THREADBLOCKS);
 
@@ -201,8 +201,8 @@ __global__ void cuShareScalarL1Kernel(uint32_t *pChaseArrayBaseCU, uint32_t *pCh
     }
 }
 
-std::tuple<std::vector<uint32_t>, std::vector<uint32_t>> cuSharescalarL1Launcher(size_t scalarL1SizeBytes, size_t scalarL1FetchGranularityBytes, uint32_t baseCU, uint32_t testCU, std::vector<uint32_t> physicalCUIdLUT) {
-    util::hipCheck(hipDeviceReset()); 
+std::optional<std::tuple<std::vector<uint32_t>, std::vector<uint32_t>>> cuSharescalarL1Launcher(size_t scalarL1SizeBytes, size_t scalarL1FetchGranularityBytes, uint32_t baseCU, uint32_t testCU, std::vector<uint32_t> physicalCUIdLUT) {
+    util::hipDeviceReset(); 
 
     std::vector<uint32_t> initializerArray = util::generatePChaseArray(scalarL1SizeBytes, scalarL1FetchGranularityBytes);
 
@@ -221,8 +221,10 @@ std::tuple<std::vector<uint32_t>, std::vector<uint32_t>> cuSharescalarL1Launcher
     std::vector<uint32_t> baseCUTimingResultsBuffer;
     std::vector<uint32_t> testCUTimingResultsBuffer;
 
+
+    uint32_t retryCounter = MAX_RETRIES;
+
     do {
-        
         util::hipCheck(hipDeviceSynchronize());
         cuShareScalarL1Kernel<<<THREADBLOCKS, 1, 0, util::createStreamForCUs({ baseCU, testCU })>>>(d_pChaseArrayBaseCU, d_pChaseArrayTestCU, d_timingResultsBaseCU, d_timingResultsTestCU, scalarL1SizeBytes / scalarL1FetchGranularityBytes, physicalCUIdLUT[baseCU], physicalCUIdLUT[testCU]);
 
@@ -232,11 +234,14 @@ std::tuple<std::vector<uint32_t>, std::vector<uint32_t>> cuSharescalarL1Launcher
         baseCUTimingResultsBuffer.erase(baseCUTimingResultsBuffer.begin());
         testCUTimingResultsBuffer.erase(testCUTimingResultsBuffer.begin());
 
-    } while (((baseCUTimingResultsBuffer[0] == 0) && (testCUTimingResultsBuffer[0] != 0)) || 
-             ((baseCUTimingResultsBuffer[0] != 0) && (testCUTimingResultsBuffer[0] == 0)));  
-             // The scheduler does not guarantee that both CUs will be used, so we may have to retry if one of the CUs did not run the kernel
+    } while ((baseCUTimingResultsBuffer[0] == 0 || testCUTimingResultsBuffer[0] == 0) && --retryCounter > 0);  
+    // The scheduler does not guarantee that both CUs will be used, so we may have to retry if one of the CUs did not run the kernel
 
-    return { baseCUTimingResultsBuffer, testCUTimingResultsBuffer };
+    if (retryCounter == 0) {
+        std::cout << "Failed to run the kernel on both CUs after " << MAX_RETRIES << " retries." << std::endl;
+        return std::nullopt; // Failed to run the kernel on both CUs
+    }
+    return {{ baseCUTimingResultsBuffer, testCUTimingResultsBuffer }};
 }
 
 namespace benchmark {
@@ -253,13 +258,16 @@ namespace benchmark {
 
                 for (uint32_t i = 0; i < util::getNumberOfComputeUnits(); ++i) { 
                     if (k == i || skipLUT.contains(logicalToPhysicalCUs.at(i))) continue;
-                    testCUToTimingResults[logicalToPhysicalCUs[i]] = cuSharescalarL1Launcher(scalarL1SizeBytes, scalarL1FetchGranularityBytes, k, i, logicalToPhysicalCUs);
+                    auto timingsOpt = cuSharescalarL1Launcher(scalarL1SizeBytes, scalarL1FetchGranularityBytes, k, i, logicalToPhysicalCUs);
+                    if (!timingsOpt.has_value()) {
+                        std::cout << "Skipping CU " << i << " because it did not return any results." << std::endl;
+                        return {};
+                    }
+                    testCUToTimingResults[logicalToPhysicalCUs[i]] = timingsOpt.value();
                 }
 
                 auto mostLikelyPartners = util::detectShareChangePoint(testCUToTimingResults);
                 
-                util::printVector(mostLikelyPartners);
-
                 if (!mostLikelyPartners.empty()) {
                     for (auto partnerId : mostLikelyPartners) {
                         dsu.unite(logicalToPhysicalCUs[k], partnerId);

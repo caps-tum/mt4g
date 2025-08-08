@@ -106,7 +106,7 @@ __global__ void scalarL1AmountKernel(uint32_t *timingResultsMatrix, size_t steps
 
 
 std::map<uint32_t, std::vector<uint32_t>> scalarL1AmountLauncher(size_t scalarL1SizeBytes, size_t scalarL1FetchGranularityBytes) {
-    util::hipCheck(hipDeviceReset()); 
+    util::hipDeviceReset(); 
 
     scalarL1SizeBytes = util::min(scalarL1SizeBytes, CONST_ARRAY_SIZE); // Cap at CONST_ARRAY_SIZE, otherwise the benchmark will access illegal addresses and returnt trash values
 

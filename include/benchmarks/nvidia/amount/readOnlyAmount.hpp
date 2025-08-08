@@ -14,6 +14,6 @@ namespace benchmark {
          * @param readOnlyMissPenalty        Penalty for a cache miss.
          * @return Number of cores per cache.
          */
-        uint32_t measureReadOnlyAmount(size_t readOnlySizeBytes, size_t readOnlyFetchGranularityBytes, double readOnlyMissPenalty);
+        std::optional<uint32_t> measureReadOnlyAmount(size_t readOnlySizeBytes, size_t readOnlyFetchGranularityBytes, double readOnlyMissPenalty);
     }
 }

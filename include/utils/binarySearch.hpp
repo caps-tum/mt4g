@@ -5,11 +5,12 @@
 
 namespace util {
     /**
-     * @brief Narrow down the region where the latency increases.
+     * @brief Locate the cache miss region using exponential and binary search.
      *
-     * This helper launches the supplied kernel on progressively smaller
-     * intervals until the difference between the returned bounds falls below
-     * @p lowerUpperDiff of the initial range.
+     * The kernel is first launched over exponentially growing sizes to bracket
+     * the latency jump. The resulting window is then refined with a binary
+     * search until the bounds differ by @p lowerUpperDiff of the original
+     * interval.
      *
      * @param launch         Kernel launcher returning per-access timings.
      * @param lowerBytes     Lower bound of the search range in bytes.

@@ -19,30 +19,23 @@ __global__ void l3WriteBandwidthKernel(uint32v4* __restrict__ dst, size_t n) {
         tid = (((blockIdx.x + j) * blockDim.x) + threadIdx.x) % stride;
 
         for (size_t i = tid; i < n; i += stride) {
-#ifdef __HIP_PLATFORM_NVIDIA__
+            #ifdef __HIP_PLATFORM_AMD__
             asm volatile(
-                "st.global.wb.v4.u32 [%0], {%1,%2,%3,%4};\n"
-                :
-                : "l"(dst + i), "r"(dummy.x), "r"(dummy.y), "r"(dummy.z), "r"(dummy.w)
-            );
-#endif
-#ifdef __HIP_PLATFORM_AMD__
-            asm volatile(
-                "flat_store_dwordx4 %0, %1 " GLC_SLC "\n"
+                "flat_store_dwordx4 %0, %1\n"
                 :
                 : "v"(dst + i), "v"(dummy)
                 : "memory"
             );
-#endif
+            #endif
         }
     }
 }
 
 double l3WriteBandwidthLauncher(size_t arraySizeBytes) {
-    util::hipCheck(hipDeviceReset());
+    util::hipDeviceReset();
 
-    uint32_t maxThreadsPerBlock = util::getMaxThreadsPerBlock();
-    uint32_t maxBlocks = util::getNumberOfComputeUnits();
+    uint32_t maxThreadsPerBlock = util::min(util::getMaxThreadsPerBlock(), util::getWarpSize() * util::getSIMDsPerCU()); 
+    uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getDeviceProperties().maxBlocksPerMultiProcessor;
 
     uint32v4* d_dstArr = util::allocateGPUMemory<uint32v4>(arraySizeBytes / sizeof(uint32v4));
 

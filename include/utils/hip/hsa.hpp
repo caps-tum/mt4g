@@ -122,5 +122,35 @@ inline std::optional<size_t> getKfdCachelineBytesForLevel(uint32_t level) {
     if (best == 0) return std::nullopt;
     return best;
 }
+
+inline std::optional<size_t> getKfdCacheAmountForLevel(uint32_t level) {
+    if (level < 1 || level > 4) return std::nullopt;
+    hsa_agent_t agent = getCurrentHsaAgent();
+    if (!agent.handle) return std::nullopt;
+    uint32_t node = 0;
+    if (hsa_agent_get_info(agent,
+          (hsa_agent_info_t)HSA_AMD_AGENT_INFO_DRIVER_NODE_ID, &node) != HSA_STATUS_SUCCESS)
+        return std::nullopt;
+    namespace fs = std::filesystem;
+    const std::string base = "/sys/class/kfd/kfd/topology/nodes/" + std::to_string(node) + "/caches";
+    std::error_code ec;
+    if (!fs::exists(base, ec)) return std::nullopt;
+    size_t count = 0;
+    for (const auto& d : fs::directory_iterator(base, ec)) {
+        if (ec) return std::nullopt;
+        const fs::path prop = d.path() / "properties";
+        if (!fs::is_regular_file(prop)) continue;
+        std::ifstream f(prop);
+        if (!f) continue;
+        int lvl = -1;
+        std::string key; std::string val;
+        while (f >> key >> val) {
+            if (key == "level") lvl = std::stoi(val);
+        }
+        if (lvl == static_cast<int>(level)) ++count;
+    }
+    if (count == 0) return std::nullopt;
+    return count;
+}
 #endif
 

@@ -34,7 +34,7 @@ __global__ void readOnlyMissPenaltyKernel(const uint32_t* __restrict__ pChaseArr
 }
 
 std::vector<uint32_t> readOnlyMissPenaltyLauncher(size_t readOnlyCacheSizeBytes, size_t readOnlyCacheLineSizeBytes) {
-    util::hipCheck(hipDeviceReset());
+    util::hipDeviceReset();
 
     size_t steps = readOnlyCacheSizeBytes / readOnlyCacheLineSizeBytes;
     size_t resultBufferLength = util::min(steps, SAMPLE_SIZE);

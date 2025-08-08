@@ -41,7 +41,7 @@ __global__ void readOnlyFetchGranularityKernel(const uint32_t* __restrict__ pCha
 
 
 std::vector<uint32_t> readOnlyFetchGranularityLauncher(size_t arraySizeBytes, size_t fetchGranularityToTestBytes) { 
-    util::hipCheck(hipDeviceReset()); 
+    util::hipDeviceReset(); 
 
     // Initialize device Arrays
     uint32_t *d_pChaseArray = util::allocateGPUMemory(util::generatePChaseArray(arraySizeBytes, fetchGranularityToTestBytes));
@@ -54,7 +54,7 @@ std::vector<uint32_t> readOnlyFetchGranularityLauncher(size_t arraySizeBytes, si
     std::vector<uint32_t> timingResultBuffer = util::copyFromDevice(d_timingResults, SAMPLE_SIZE);
     
 
-    util::hipCheck(hipDeviceReset()); 
+    util::hipDeviceReset(); 
     return timingResultBuffer;
 }
 

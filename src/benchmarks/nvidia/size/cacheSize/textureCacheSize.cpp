@@ -4,21 +4,16 @@
 #include "utils/util.hpp"
 
 static constexpr auto MIN_EXPECTED_SIZE = 1024;// B
-static constexpr auto MAX_EXPECTED_SIZE = 128 * 1024;// 128 * KiB
+static constexpr auto MAX_EXPECTED_SIZE = 1048576;// 1024 * 1024 Bytes
 
-__global__ void textureSizeKernel(hipTextureObject_t tex, uint32_t *timingResults, size_t length) {
+__global__ void textureSizeKernel([[maybe_unused]]hipTextureObject_t tex, uint32_t *timingResults, size_t length) {
+    if (blockIdx.x != 0 || threadIdx.x != 0) return;
     __shared__ uint64_t s_timings[MIN_EXPECTED_SIZE / sizeof(uint32_t)]; // sizeof(uint32_t) is correct since we need to store that amount of timing values. 
-    __shared__ uint32_t s_index[MIN_EXPECTED_SIZE / sizeof(uint32_t)];
 
     size_t measureLength = util::min(length, MIN_EXPECTED_SIZE / sizeof(uint32_t));
 
-    uint32_t start, end;
-    uint32_t index = 0;
-
-    for (uint32_t  k = 0; k < measureLength; k++) {
-        s_index[k] = 0;
-        s_timings[k] = 0;
-    }
+    [[maybe_unused]]uint32_t start, end;
+    [[maybe_unused]]uint32_t index = 0;
 
     // First round
     for (uint32_t k = 0; k < length; k++) {
@@ -32,7 +27,7 @@ __global__ void textureSizeKernel(hipTextureObject_t tex, uint32_t *timingResult
         #ifdef __HIP_PLATFORM_NVIDIA__
         start = clock();
         index = tex1Dfetch<uint32_t>(tex, index);
-        s_index[k] = index;
+        s_timings[0] += index;
         end = clock();
         s_timings[k] = end - start;
         #endif
@@ -40,14 +35,11 @@ __global__ void textureSizeKernel(hipTextureObject_t tex, uint32_t *timingResult
 
     for (uint32_t k = 0; k < measureLength; k++) {
         timingResults[k] = s_timings[k];
-        s_index[0] += s_index[k];
     }
-
-    timingResults[0] += s_index[0] >> util::min(s_index[0], 32);
 }
 
 std::vector<uint32_t> textureSizeLauncher(size_t arraySizeBytes, size_t strideBytes) {
-    util::hipCheck(hipDeviceReset());
+    util::hipDeviceReset();
 
     size_t arraySize = arraySizeBytes / sizeof(uint32_t);
     size_t stride = strideBytes / sizeof(uint32_t);
@@ -60,18 +52,13 @@ std::vector<uint32_t> textureSizeLauncher(size_t arraySizeBytes, size_t strideBy
     uint32_t *d_timingResultBuffer = util::allocateGPUMemory(resultBufferLength);
     
     hipTextureObject_t tex = util::createTextureObject(d_pChaseArray, arraySizeBytes);
-    
 
     util::hipCheck(hipDeviceSynchronize());
-    textureSizeKernel<<<1, 1>>>(tex, d_timingResultBuffer, steps);
-    util::hipCheck(hipDeviceSynchronize());
-
+    textureSizeKernel<<<1, util::getMaxThreadsPerBlock()>>>(tex, d_timingResultBuffer, steps);
 
     // Get Results
     std::vector<uint32_t> timingResultBuffer = util::copyFromDevice(d_timingResultBuffer, resultBufferLength);
-    
-
-    util::hipCheck(hipDeviceReset());
+    timingResultBuffer.erase(timingResultBuffer.begin());
 
     return timingResultBuffer;
 }
@@ -99,7 +86,6 @@ namespace benchmark {
                 // Heuristic: Cache wont get faster with increasing array size, only slower. Thus, you can detect disturbances by checking if the measured timings decreased (significantly) after spiking
                 timings = util::runBenchmarkRange(textureSizeLauncher, beginBytes, endBytes, cacheFetchGranularityBytes, CACHE_SIZE_BENCH_RESOLUTION, "Texture Size");
 
-                util::pipeMapToPython(timings, std::to_string(flukeCounter) + " Texture");
                 flukeDetected = util::hasFlukeOccured(timings); // Cache answer times may not decrease again with increasing size, hopefully false most of the time
                 if (flukeDetected) {
                     ++flukeCounter;

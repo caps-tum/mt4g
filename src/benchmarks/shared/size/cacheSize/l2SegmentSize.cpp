@@ -7,6 +7,7 @@ static constexpr auto MAX_EXPECTED_SIZE = 64 * MiB;// 64 * MiB
 static constexpr auto MEASURE_SIZE = 2048;// Loads
 
 __global__ void l2SegmentSizeKernel(uint32_t *pChaseArray, uint32_t *timingResults, size_t steps) {
+    if (blockIdx.x != 0 || threadIdx.x != 0) return;
     // s_timings[0] is undefined, as we use it to prevent compiler optimizations / latency hiding
     __shared__ uint64_t s_timings[MEASURE_SIZE / sizeof(uint32_t)]; // sizeof(uint32_t) is correct since we need to store that amount of timing values. 
     
@@ -94,7 +95,7 @@ __global__ void l2SegmentSizeKernel(uint32_t *pChaseArray, uint32_t *timingResul
 
 
 std::vector<uint32_t> l2SegmentSizeLauncher(size_t arraySizeBytes, size_t strideBytes) {
-    util::hipCheck(hipDeviceReset());
+    util::hipDeviceReset();
 
     //std::cout << arraySizeBytes << " " << strideBytes << std::endl;
 
@@ -108,7 +109,7 @@ std::vector<uint32_t> l2SegmentSizeLauncher(size_t arraySizeBytes, size_t stride
     uint32_t *d_timingResultBuffer = util::allocateGPUMemory(resultBufferLength);
     
     util::hipCheck(hipDeviceSynchronize());
-    l2SegmentSizeKernel<<<1, 1, 0, util::createStreamForCU(0)>>>(d_pChaseArray, d_timingResultBuffer, steps);
+    l2SegmentSizeKernel<<<1, util::getMaxThreadsPerBlock(), 0, util::createStreamForCU(0)>>>(d_pChaseArray, d_timingResultBuffer, steps);
 
     // Get Results
     std::vector<uint32_t> timingResultBuffer = util::copyFromDevice(d_timingResultBuffer, resultBufferLength);

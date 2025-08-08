@@ -27,7 +27,7 @@ __global__ void l3FetchGranularityKernel(uint32_t *pChaseArray, uint32_t *timing
 }
 
 std::vector<uint32_t> l3FetchGranularityLauncher(size_t arraySizeBytes, size_t fetchGranularityToTestBytes) {
-    util::hipCheck(hipDeviceReset());
+    util::hipDeviceReset();
 
     uint32_t *d_pChaseArray = util::allocateGPUMemory(util::generatePChaseArray(arraySizeBytes, fetchGranularityToTestBytes));
     uint32_t *d_timingResults = util::allocateGPUMemory(SAMPLE_SIZE);
@@ -37,7 +37,7 @@ std::vector<uint32_t> l3FetchGranularityLauncher(size_t arraySizeBytes, size_t f
 
     std::vector<uint32_t> timingResultBuffer = util::copyFromDevice(d_timingResults, SAMPLE_SIZE);
 
-    util::hipCheck(hipDeviceReset());
+    util::hipDeviceReset();
     return timingResultBuffer;
 }
 

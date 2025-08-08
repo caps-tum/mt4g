@@ -30,7 +30,7 @@ __global__ void l3MissPenaltyKernel(uint32_t *pChaseArray, uint32_t *timingResul
 }
 
 std::vector<uint32_t> l3MissPenaltyLauncher(size_t l3CacheSizeBytes, size_t l3FetchGranularityBytes) {
-    util::hipCheck(hipDeviceReset());
+    util::hipDeviceReset();
 
     size_t steps = l3CacheSizeBytes / l3FetchGranularityBytes;
     size_t resultBufferLength = util::min(steps, SAMPLE_SIZE);

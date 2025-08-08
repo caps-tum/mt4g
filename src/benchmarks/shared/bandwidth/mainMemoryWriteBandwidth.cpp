@@ -31,9 +31,9 @@ __global__ void mainMemoryWriteBandwidthKernel(uint32v4* __restrict__ dst, size_
 
         #ifdef __HIP_PLATFORM_AMD__
         asm volatile(
-            "flat_store_dwordx4 %0, %1 " GLC "\n"
+            "flat_store_dwordx4 %0, %1\n"
             :
-            : "v"(dst + i) // uint32v4*
+            : "s"(dst + i) // uint32v4*
             , "v"(dummy) // uint32v4
             : "memory"
         );
@@ -42,15 +42,13 @@ __global__ void mainMemoryWriteBandwidthKernel(uint32v4* __restrict__ dst, size_
 }
 
 double mainMemoryWriteBandwidthLauncher(size_t arraySizeBytes) { 
-    util::hipCheck(hipDeviceReset()); 
+    util::hipDeviceReset(); 
 
-    uint32_t maxThreadsPerBlock = util::getMaxThreadsPerBlock(); // Allows the scheduler to use extensive latency hiding
-    uint32_t maxBlocks = 1024 * 1024; // TODO: Find heuristic (funnily, departure delay might be interesting for that)
-
+    uint32_t maxThreadsPerBlock = util::min(util::getMaxThreadsPerBlock(), util::getWarpSize() * util::getSIMDsPerCU()); 
+    uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getDeviceProperties().maxBlocksPerMultiProcessor;
 
     uint32v4 *d_dstArr = util::allocateGPUMemory<uint32v4>(arraySizeBytes / sizeof(uint32v4));
     
-
     // Use events to measure timings
     auto start = util::createHipEvent();
     auto end = util::createHipEvent();

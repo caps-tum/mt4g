@@ -6,13 +6,72 @@
 #include <filesystem>
 #include <fstream>
 #include <vector>
+#include <set>
 #include <unistd.h>
+#include <nlohmann/json.hpp>
 
 #include "utils/util.hpp"
+#include "const/chartScript.hpp"
 
 template <typename T> struct is_vector : std::false_type {};
 
 template <typename T, typename A> struct is_vector<std::vector<T, A>> : std::true_type {};
+
+template <typename Writer>
+void _exportChartImpl(
+    const std::string& title,
+    const std::vector<double>& highlights,
+    const std::string& xLabel,
+    const std::string& yLabel,
+    const std::string& redylabel,
+    const std::string& outDir,
+    bool reduction,
+    Writer writer
+) {
+    // Write script to temporary file
+    std::filesystem::path scriptTmp = std::filesystem::temp_directory_path() / "exportChartXXXXXX.py";
+    std::string tmpName = scriptTmp.string();
+    int fd = mkstemps(tmpName.data(), 3);
+    if (fd == -1) {
+        std::fprintf(stderr, "Failed to create temporary script file.\n");
+        return;
+    }
+    close(fd);
+    {
+        std::ofstream ofs(tmpName);
+        ofs << chartScript;
+    }
+
+    // build command
+    std::string cmd = "python3 " + tmpName +
+                        " --title \"" + title + "\"" +
+                        " --xlabel \"" + xLabel + "\"" +
+                        " --ylabel \"" + yLabel + "\"" +
+                        " --outdir \"" + outDir + "\"";
+    if (reduction) {
+        cmd += " --reduction";
+        cmd += " --redylabel \"" + redylabel + "\"";
+    }
+    if (!highlights.empty()) {
+        cmd += " --highlights";
+        for (double x : highlights) cmd += " " + std::to_string(x);
+    }
+
+    FILE* pipe = popen(cmd.c_str(), "w");
+    if (!pipe) {
+        std::fprintf(stderr, "Could not run Python interpreter.\n");
+        std::filesystem::remove(tmpName);
+        return;
+    }
+
+    writer(pipe);
+
+    int status = pclose(pipe);
+    if (status != 0) {
+        std::fprintf(stderr, "Python chart export failed.\n");
+    }
+    std::filesystem::remove(tmpName);
+}
 
 namespace util {
     /**
@@ -23,6 +82,17 @@ namespace util {
      * @return Parsed CLIOptions structure.
      */
     CLIOptions parseCommandLine(int argc, char* argv[]);
+
+    /**
+     * @brief Write a Markdown report with summary tables and embedded graphs.
+     *
+     * @param outDir     Directory where the report and associated files reside.
+     * @param deviceName Human readable GPU name.
+     * @param result     JSON result object to summarise.
+     */
+    void writeMarkdownReport(const std::filesystem::path& outDir,
+                             const std::string& deviceName,
+                             const nlohmann::json& result);
 
     /**
      * @brief Dump a QuickChart URL representing the map as a JSON dataset.
@@ -120,135 +190,152 @@ namespace util {
     }
 
 
+
+    template <typename X, typename Y>
     /**
-     * @brief Pipe the map as CSV to a helper Python plotting script.
+     * @brief Export a CSV chart with min/avg/max and reduced values.
      *
-     * @tparam X Key type.
-     * @tparam Y Value type (either numeric or vector of numeric).
-     * @param data        Map to export.
+     * Generates a Python script on the fly to create a chart for the provided
+     * dataset. Each entry is reduced using @p getMagicReductionFunction and the
+     * min/avg/max values are emitted alongside the reduction.
+     *
+     * @tparam X Map key type.
+     * @tparam Y Vector element type.
+     * @param data        Map of measurements per key.
      * @param title       Chart title.
-     * @param highlights  Optional x-axis values to highlight.
+     * @param highlights  Positions to highlight on the x-axis.
      * @param xLabel      Label for the x-axis.
      * @param yLabel      Label for the y-axis.
-     * @param outDir      Directory for generated charts.
+     * @param outDir      Directory where the chart is written.
      */
-    template <typename X, typename Y>
-    void pipeMapToPython(
-        const std::map<X, Y>& data,
-        const std::string& title               = "Benchmark",
-        const std::vector<X>& highlights       = {},
-        const std::string& xLabel              = "Bytes",
-        const std::string& yLabel              = "Cycles",
-        const std::string& outDir              = "."
+    void exportChartMinMaxAvgRed(
+        const std::map<X, std::vector<Y>>& data,
+        const std::string& title         = "Benchmark",
+        const std::vector<X>& highlights = {},
+        const std::string& xLabel        = "Bytes",
+        const std::string& yLabel        = "Cycles",
+        const std::string& outDir        = "."
     ) {
         static_assert(std::is_arithmetic<X>::value, "Key must be numeric or convertible to double");
+        static_assert(std::is_arithmetic<Y>::value, "Vector elements must be numeric");
 
-        // Embedded Python script
-        const char* pythonScript = R"PY(
-import sys
-import argparse
-import pandas as pd
-import matplotlib.pyplot as plt
-from pathlib import Path
+        std::vector<double> hl;
+        hl.reserve(highlights.size());
+        for (auto x : highlights) hl.push_back(static_cast<double>(x));
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--title', default='Benchmark')
-parser.add_argument('--xlabel', default='X')
-parser.add_argument('--ylabel', default='Value')
-parser.add_argument('--highlights', nargs='*', type=float, default=[])
-parser.add_argument('--quantile', type=float, default=0.99)
-parser.add_argument('--outdir', default='.')
-args = parser.parse_args()
+        auto reduction = util::getMagicReductionFunction(data);
 
-df = pd.read_csv(sys.stdin)
-data_cols = df.columns[1:]
-thresh = df[data_cols].stack().quantile(args.quantile)
-df[data_cols] = df[data_cols].clip(upper=thresh)
-
-plt.figure(figsize=(16, 4))
-plt.grid(True)
-if df.shape[1] > 2:
-    x = df.iloc[:, 0]
-    for col in data_cols:
-        plt.plot(x, df[col], label=col)
-    plt.legend()
-else:
-    plt.plot(df.iloc[:, 0], df.iloc[:, 1])
-
-for hx in args.highlights:
-    plt.axvline(x=hx, linestyle='--', linewidth=1)
-
-plt.xlabel(args.xlabel)
-plt.ylabel(args.ylabel)
-plt.title(args.title)
-plt.ylim(top=thresh * 1.02)
-plt.tight_layout()
-outdir = Path(args.outdir)
-outdir.mkdir(parents=True, exist_ok=True)
-plt.savefig(outdir / f"{args.title}.png")
-)PY";
-
-        // Write script to temporary file
-        std::filesystem::path scriptTmp = std::filesystem::temp_directory_path() / "exportChartXXXXXX.py";
-        std::string tmpName = scriptTmp.string();
-        int fd = mkstemps(tmpName.data(), 3);
-        if (fd == -1) {
-            std::fprintf(stderr, "Failed to create temporary script file.\n");
-            return;
-        }
-        close(fd);
-        {
-            std::ofstream ofs(tmpName);
-            ofs << pythonScript;
-        }
-
-        // build command with title, xlabel, ylabel and highlights as args
-        std::string cmd = "python3 " + tmpName +
-                         " --title \"" + title + "\"" +
-                         " --xlabel \"" + xLabel + "\"" +
-                         " --ylabel \"" + yLabel + "\"" +
-                         " --outdir \"" + outDir + "\"";
-        if (!highlights.empty()) {
-            cmd += " --highlights";
-            for (auto x : highlights) cmd += " " + std::to_string(x);
-        }
-
-        // open pipe to Python script
-        FILE* pipe = popen(cmd.c_str(), "w");
-        if (!pipe) {
-            std::fprintf(stderr, "Could not run Python interpreter.\n");
-            std::filesystem::remove(tmpName);
-            return;
-        }
-
-        if constexpr (is_vector<Y>::value) {
-            // write header: X,Max,Avg,Min
-            std::fprintf(pipe, "%s,Max,Avg,Min\n", xLabel.c_str());
-            for (auto& [x, vec] : data) {
-                double xd  = static_cast<double>(x);
-                double mn  = static_cast<double>(util::min(vec));       // minimum value
-                double mx  = static_cast<double>(util::max(vec));       // maximum value
-                double avg = static_cast<double>(util::average(vec));   // average value
-                std::fprintf(pipe, "%f,%f,%f,%f\n", xd, mx, avg, mn);
+        _exportChartImpl(title, hl, xLabel, yLabel, "Reduction Value", outDir, true,
+            [&](FILE* pipe) {
+                std::fprintf(pipe, "%s,Max,Avg,Min,Reduced\n", xLabel.c_str());
+                for (auto& [x, vec] : data) {
+                    double xd  = static_cast<double>(x);
+                    double mn  = static_cast<double>(util::min(vec));
+                    double mx  = static_cast<double>(util::max(vec));
+                    double avg = static_cast<double>(util::average(vec));
+                    double red = reduction(vec);
+                    std::fprintf(pipe, "%f,%f,%f,%f,%f\n", xd, mx, avg, mn, red);
+                }
             }
-        } else {
-            // write header: X,Y
-            std::fprintf(pipe, "%s,%s\n", xLabel.c_str(), yLabel.c_str());
-            for (auto& [x, y] : data) {
-                double xd = static_cast<double>(x);
-                double yd = static_cast<double>(y);
-                std::fprintf(pipe, "%f,%f\n", xd, yd);
-            }
-        }
-
-        int status = pclose(pipe);
-        if (status != 0) {
-            std::fprintf(stderr, "Python chart export failed.\n");
-        }
-        std::filesystem::remove(tmpName);
+        );
     }
 
     template <typename X, typename Y>
+    /**
+     * @brief Export a CSV chart with min/avg/max statistics.
+     *
+     * Similar to exportChartMinMaxAvgRed but only prints the extremal values
+     * and the average per measurement.
+     */
+    void exportChartsMinMaxAvg(
+        const std::map<X, std::vector<Y>>& data,
+        const std::string& title         = "Benchmark",
+        const std::vector<X>& highlights = {},
+        const std::string& xLabel        = "Bytes",
+        const std::string& yLabel        = "Cycles",
+        const std::string& outDir        = "."
+    ) {
+        static_assert(std::is_arithmetic<X>::value, "Key must be numeric or convertible to double");
+        static_assert(std::is_arithmetic<Y>::value, "Vector elements must be numeric");
+
+        std::vector<double> hl;
+        hl.reserve(highlights.size());
+        for (auto x : highlights) hl.push_back(static_cast<double>(x));
+
+        _exportChartImpl(title, hl, xLabel, yLabel, "", outDir, false,
+            [&](FILE* pipe) {
+                std::fprintf(pipe, "%s,Max,Avg,Min\n", xLabel.c_str());
+                for (auto& [x, vec] : data) {
+                    double xd  = static_cast<double>(x);
+                    double mn  = static_cast<double>(util::min(vec));
+                    double mx  = static_cast<double>(util::max(vec));
+                    double avg = static_cast<double>(util::average(vec));
+                    std::fprintf(pipe, "%f,%f,%f,%f\n", xd, mx, avg, mn);
+                }
+            }
+        );
+    }
+
+    template <typename Label, typename X, typename Y, typename ReductionFunc>
+    /**
+     * @brief Export a CSV chart from multiple labelled datasets.
+     *
+     * Each dataset is reduced using @p reduce and emitted as a separate series
+     * in the chart.
+     */
+    void exportChartsReduced(
+        const std::map<Label, std::map<X, std::vector<Y>>>& datasets,
+        ReductionFunc reduce,
+        const std::string& title         = "Benchmark",
+        const std::vector<X>& highlights = {},
+        const std::string& xLabel        = "Bytes",
+        const std::string& yLabel        = "Cycles",
+        const std::string& outDir        = "."
+    ) {
+        static_assert(std::is_arithmetic<X>::value, "Key must be numeric or convertible to double");
+        static_assert(std::is_arithmetic<Y>::value, "Vector elements must be numeric");
+
+        std::vector<double> hl;
+        hl.reserve(highlights.size());
+        for (auto x : highlights) hl.push_back(static_cast<double>(x));
+
+        std::set<X> allX;
+        std::vector<std::string> labels;
+        std::vector<const std::map<X, std::vector<Y>>*> maps;
+        for (const auto& [label, map] : datasets) {
+            std::ostringstream oss;
+            oss << label;
+            labels.push_back(oss.str());
+            maps.push_back(&map);
+            for (const auto& [x, _] : map) allX.insert(x);
+        }
+
+        _exportChartImpl(title, hl, xLabel, yLabel, "", outDir, false,
+            [&](FILE* pipe) {
+                std::fprintf(pipe, "%s", xLabel.c_str());
+                for (const auto& lbl : labels) std::fprintf(pipe, ",%s", lbl.c_str());
+                std::fprintf(pipe, "\n");
+                for (auto x : allX) {
+                    std::fprintf(pipe, "%f", static_cast<double>(x));
+                    for (auto m : maps) {
+                        auto it = m->find(x);
+                        if (it != m->end()) {
+                            double val = reduce(it->second);
+                            std::fprintf(pipe, ",%f", val);
+                        } else {
+                            std::fprintf(pipe, ",");
+                        }
+                    }
+                    std::fprintf(pipe, "\n");
+                }
+            }
+        );
+    }
+
+    template <typename X, typename Y>
+    /**
+     * @brief Write a map to a CSV file.
+     */
     void writeMapToFile(const std::map<X, Y>& data, const std::string& filePath) {
         std::ofstream ofs(filePath);
         if (!ofs) {
@@ -269,7 +356,30 @@ plt.savefig(outdir / f"{args.title}.png")
         }
     }
 
+    template <typename Outer, typename Inner, typename T>
+    /**
+     * @brief Persist a nested map of vectors to a CSV file.
+     */
+    void writeNestedMapToFile(const std::map<Outer, std::map<Inner, std::vector<T>>>& data,
+                              const std::string& filePath) {
+        std::ofstream ofs(filePath);
+        if (!ofs) {
+            std::cerr << "Could not open '" << filePath << "' for writing" << std::endl;
+            return;
+        }
+        for (auto& [outer, innerMap] : data) {
+            for (auto& [inner, vec] : innerMap) {
+                ofs << outer << ',' << inner;
+                for (auto v : vec) ofs << ',' << v;
+                ofs << '\n';
+            }
+        }
+    }
+
     template <typename T>
+    /**
+     * @brief Write a vector to a newline-separated file.
+     */
     void writeVectorToFile(const std::vector<T>& data, const std::string& filePath) {
         std::ofstream ofs(filePath);
         if (!ofs) {

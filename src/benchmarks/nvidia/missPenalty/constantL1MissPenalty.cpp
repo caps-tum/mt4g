@@ -34,7 +34,7 @@ __global__ void constantL1MissPenaltyKernel(uint32_t *timingResults, size_t step
 }
 
 std::vector<uint32_t> constantL1MissPenaltyLauncher(size_t constantL1CacheSizeBytes, size_t constantL1CacheLineSizeBytes) {
-    util::hipCheck(hipDeviceReset());
+    util::hipDeviceReset();
 
     size_t steps = constantL1CacheSizeBytes / constantL1CacheLineSizeBytes;
     size_t resultBufferLength = util::min(steps, SAMPLE_SIZE);

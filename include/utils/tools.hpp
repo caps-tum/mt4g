@@ -1,20 +1,62 @@
 #pragma once
 
-#include <vector>
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <iterator>
+#include <map>
+#include <random>
+#include <stdexcept>
+#include <tuple>
 #include <unordered_set>
-#include <map> 
-#include <utility> 
-#include <hip/hip_runtime.h>
+#include <utility>
 #include <vector>
 #include <algorithm>
-#include <stdexcept>
-#include <random> 
-#include <cstddef> 
-#include <cstdint>  
-#include <cstring> 
 
+#include <hip/hip_runtime.h>
+
+template <size_t N, typename Map, size_t... Is> auto splitMapImpl(const Map& src, std::index_sequence<Is...>) {
+    const size_t total = src.size();
+    const size_t base  = total / N;
+    const size_t rem   = total % N;
+
+    // build counts: first 'rem' parts get +1
+    std::array<size_t, N> counts;
+    for (size_t i = 0; i < N; ++i)
+        counts[i] = base + (i < rem ? 1 : 0);
+
+    // build iterators bounds[0]=begin, bounds[N]=end
+    std::array<typename Map::const_iterator, N+1> bounds;
+    bounds[0] = src.begin();
+    for (size_t i = 1; i <= N; ++i)
+        bounds[i] = std::next(bounds[i-1], counts[i-1]);
+
+    // expand into a tuple of Maps using CTAD (C++17+)
+    return std::make_tuple(
+        Map(bounds[Is], bounds[Is+1])...
+    );
+}
 
 namespace util {
+    /**
+     * @brief Divide a map into @p N equally sized submaps.
+     *
+     * The input map is split into @p N contiguous sections with sizes
+     * differing by at most one element. The resulting submaps preserve
+     * the original key ordering.
+     *
+     * @tparam N   Number of chunks to create.
+     * @tparam Map Map type to split.
+     * @param src  Source map.
+     * @return Tuple containing @p N submaps.
+     */
+    template <size_t N, typename Map> auto splitMap(const Map& src) {
+        return splitMapImpl<N, Map>(
+            src, std::make_index_sequence<N>{}
+        );
+    }
+
     /**
      * @brief Convenience wrapper returning the smallest map key.
      *
@@ -284,21 +326,6 @@ namespace util {
      */
     size_t pickMostTrailingZeros(const std::vector<size_t>& v);
 
-    /**
-     * @brief Align and expand search boundaries used in cache size benchmarks.
-     *
-     * The boundaries are rounded to multiples of CACHE_SIZE_BENCH_RESOLUTION. If possible, the lower
-     * boundary is decreased by an additional CACHE_SIZE_BENCH_RESOLUTION while staying above
-     * @p minAllowed. The upper boundary is increased by an extra CACHE_SIZE_BENCH_RESOLUTION when it
-     * does not exceed @p maxAllowed.
-     *
-     * @param begin      Lower boundary in bytes.
-     * @param end        Upper boundary in bytes.
-     * @param minAllowed Minimal allowed boundary value.
-     * @param maxAllowed Maximal allowed boundary value.
-     * @param strictUpper If true, the rounded up boundary must remain strictly
-     *                    below @p maxAllowed.
-     */
     /**
      * @brief Align and expand search boundaries used in cache size benchmarks.
      *

@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <fstream>
 #include <filesystem>
+#include <vector>
+#include <algorithm>
 #include <memory>
 #include <iostream>
 #include <nlohmann/json.hpp>
@@ -63,17 +65,16 @@ void sharedHelper(nlohmann::json& cache1, nlohmann::json& cache2, const std::str
     auto c1Size = getNumeric<size_t>(cache1, "size", "size");
     auto c1Fetch = getNumeric<size_t>(cache1, "fetchGranularity", "size");
     auto c1Latency = getNumeric<double>(cache1, "latency", "mean");
-    auto c1MissPenalty = getNumeric<double>(cache1, "missPenalty"); // falls verschachtelt, z.B. ("some", "missPenalty") anpassen
+    auto c1MissPenalty = getNumeric<double>(cache1, "missPenalty", "value"); // falls verschachtelt, z.B. ("some", "missPenalty") anpassen
 
     auto c2Size = getNumeric<size_t>(cache2, "size", "size");
     auto c2Fetch = getNumeric<size_t>(cache2, "fetchGranularity", "size");
     auto c2Latency = getNumeric<double>(cache2, "latency", "mean");
-    auto c2MissPenalty = getNumeric<double>(cache2, "missPenalty");
+    auto c2MissPenalty = getNumeric<double>(cache2, "missPenalty", "value");
 
     if (!(c1Size && c1Fetch && c1Latency && c1MissPenalty &&
           c2Size && c2Fetch && c2Latency && c2MissPenalty)) {
-        std::cout << "Missing metric values for " << name1 << " or " << name2
-                  << ", skipping measurement.\n";
+        std::cout << "Missing metric values for " << name1 << " or " << name2 << ", skipping measurement.\n";
         return;
     }
 
@@ -103,8 +104,8 @@ int main(int argc, char* argv[]) {
 
     std::string fancyName = deviceProperties.name;
 
-    std::filesystem::path graphDir = fancyName;
-    if (opts.graphs || opts.rawData) {
+    std::filesystem::path graphDir = "results/" + fancyName;
+    if (opts.graphs || opts.rawData || opts.fullReport) {
         std::error_code ec;
         std::filesystem::create_directories(graphDir, ec);
         if (ec) {
@@ -112,7 +113,18 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    nlohmann::json metaInfo = {
+        {"timestamp", util::getCurrentTimestamp()},
+        {"hostCompiler", util::getHostCompilerVersion()}
+    };
+    if (auto gpuCompiler = util::getGpuCompilerVersion()) metaInfo["gpuCompiler"] = *gpuCompiler;
+    if (auto cpu = util::getHostCpuModel()) metaInfo["hostCpu"] = *cpu;
+    if (auto os = util::getOsDescription()) metaInfo["os"] = *os;
+    if (auto driver = util::getDriverVersion()) metaInfo["driver"] = *driver;
+    if (auto runtimeVersion = util::getRuntimeVersion()) metaInfo["runtime"] = *runtimeVersion;
+
     nlohmann::json result = {
+        {"meta", metaInfo},
         {
             "general", {
                 {"name", deviceProperties.name},
@@ -233,6 +245,48 @@ int main(int argc, char* argv[]) {
         }
     };
 
+    #ifdef __HIP_PLATFORM_AMD__
+    auto l2Size = util::getL2SizeBytes();
+    auto l2Amount = util::getL2Amount();
+    if (l2Size.has_value() && l2Amount.has_value()) {
+        result["memory"]["l2"]["size"] = {
+            {"value", l2Size.value()},
+            {"unit", "bytes"}
+        };
+        result["memory"]["l2"]["amount"] = l2Amount.value();
+    } else {
+        result["memory"]["l2"]["size"] = {
+            {"value", deviceProperties.l2CacheSize},
+            {"unit", "bytes"}
+        };
+    }
+    auto l2LineSize = util::getL2LineSizeBytes();
+    if (l2LineSize.has_value()) {
+        result["memory"]["l2"]["lineSize"] = {
+            {"value", l2LineSize.value()},
+            {"unit", "bytes"}
+        };
+    }
+    auto l3Size = util::getL3SizeBytes();
+    if (l3Size.has_value()) {
+        result["memory"]["l3"]["size"] = {
+            {"value", l3Size.value()},
+            {"unit", "bytes"}
+        };
+        auto l3Amount = util::getL3Amount();
+        if (l3Amount.has_value()) {
+            result["memory"]["l3"]["amount"] = l3Amount.value();
+        }
+        auto l3LineSize = util::getL3LineSizeBytes();
+        if (l3LineSize.has_value()) {
+            result["memory"]["l3"]["lineSize"] = {
+                {"value", l3LineSize.value()},
+                {"unit", "bytes"}
+            };
+        }
+    }
+    #endif
+
     if (opts.runL1) {
         std::cout << "[L1] Starting Benchmarks" << std::endl;
         std::cout << "[L1] Latency" << std::endl;
@@ -249,18 +303,30 @@ int main(int argc, char* argv[]) {
 
         if (l1FetchGranularity.confidence > VALIDITY_THRESHOLD && l1Size.confidence > VALIDITY_THRESHOLD) {
             std::cout << "[L1] Line Size" << std::endl;
-            CacheSizeResult l1LineSize = benchmark::measureL1LineSize(l1Size.size, l1FetchGranularity.size);
+            CacheLineSizeResult l1LineSize = benchmark::measureL1LineSize(l1Size.size, l1FetchGranularity.size);
             result["memory"]["l1"]["lineSize"] = l1LineSize;
+            if (opts.graphs) {
+                util::exportChartsReduced(l1LineSize.timings, util::average<uint32_t>, fancyName + " - L1 Line Size", {}, "Bytes", "Cycles", graphDir.string());
+            }
             if (opts.rawData) {
-                util::writeMapToFile(l1LineSize.timings, (graphDir / (fancyName + " - L1 Line Size.txt")).string());
+                util::writeNestedMapToFile(l1LineSize.timings, (graphDir / (fancyName + " - L1 Line Size.txt")).string());
             }
 
             if (l1LineSize.confidence > VALIDITY_THRESHOLD) {
                 std::cout << "[L1] Miss Penalty" << std::endl;
-                double l1MissPenalty = result["memory"]["l1"]["missPenalty"] = benchmark::measureL1MissPenalty(l1Size.size, l1LineSize.size, l1Latency.mean);
+                double l1MissPenalty = benchmark::measureL1MissPenalty(l1Size.size, l1LineSize.size, l1Latency.mean);
+                result["memory"]["l1"]["missPenalty"] = {
+                    {"value", l1MissPenalty},
+                    {"unit", "cycles"}
+                };
 
                 std::cout << "[L1] Amount" << std::endl;
-                result["memory"]["l1"]["amountPerMultiprocessor"] = benchmark::measureL1Amount(l1Size.size, l1FetchGranularity.size, l1MissPenalty);
+                auto l1Amount = benchmark::measureL1Amount(l1Size.size, l1FetchGranularity.size, l1MissPenalty);
+                if (l1Amount.has_value()) {
+                    result["memory"]["l1"]["amountPerMultiprocessor"] = *l1Amount;
+                } else {
+                    std::cout << "Could not measure valid L1 Amount, skipping L1 Amount benchmark." << std::endl;
+                }
             } else {
                 std::cout << "Could not measure valid L1 Line Size, skipping L1 Miss Penalty and Amount benchmarks." << std::endl;
             }
@@ -269,8 +335,8 @@ int main(int argc, char* argv[]) {
         }
         
         if (opts.graphs) {
-            util::pipeMapToPython(l1Size.timings, fancyName + " - L1 Size", {l1Size.size}, "Bytes", "Cycles", graphDir.string());
-            util::pipeMapToPython(l1FetchGranularity.timings, fancyName + " - L1 Fetch Granularity", {l1FetchGranularity.size}, "Bytes", "Cycles", graphDir.string());
+            util::exportChartMinMaxAvgRed(l1Size.timings, fancyName + " - L1 Size", {l1Size.size}, "Bytes", "Cycles", graphDir.string());
+            util::exportChartsMinMaxAvg(l1FetchGranularity.timings, fancyName + " - L1 Fetch Granularity", {l1FetchGranularity.size}, "Bytes", "Cycles", graphDir.string());
         }
         if (opts.rawData) {
             util::writeVectorToFile(l1Latency.timings, (graphDir / (fancyName + " - L1 Latency.txt")).string());
@@ -298,7 +364,7 @@ int main(int argc, char* argv[]) {
             CacheSizeResult l2SegmentSize = benchmark::measureL2SegmentSize(deviceProperties.l2CacheSize, l2FetchGranularity.confidence > VALIDITY_THRESHOLD ? l2FetchGranularity.size : MIN_EXPECTED_LINE_SIZE);
             result["memory"]["l2"]["segmentSize"] = l2SegmentSize;
             if (opts.graphs) {
-                util::pipeMapToPython(l2SegmentSize.timings, fancyName + " - L2 Segment Size", {l2SegmentSize.size}, "Bytes", "Cycles", graphDir.string());
+                util::exportChartMinMaxAvgRed(l2SegmentSize.timings, fancyName + " - L2 Segment Size", {l2SegmentSize.size}, "Bytes", "Cycles", graphDir.string());
             }
             if (opts.rawData) {
                 util::writeMapToFile(l2SegmentSize.timings, (graphDir / (fancyName + " - L2 Segment Size.txt")).string());
@@ -306,22 +372,34 @@ int main(int argc, char* argv[]) {
         }
 
         
-        if (l2FetchGranularity.confidence > VALIDITY_THRESHOLD) {
-            std::cout << "[L2] Line Size" << std::endl;
-            CacheSizeResult l2LineSize = benchmark::measureL2LineSize(deviceProperties.l2CacheSize, l2FetchGranularity.size);
-            result["memory"]["l2"]["lineSize"] = l2LineSize;
-            if (opts.rawData) {
-                util::writeMapToFile(l2LineSize.timings, (graphDir / (fancyName + " - L2 Line Size.txt")).string());
-            }
-
-            if (l2LineSize.confidence > VALIDITY_THRESHOLD) {
-                std::cout << "[L2] Miss Penalty" << std::endl;
-                result["memory"]["l2"]["missPenalty"] = benchmark::measureL2MissPenalty(deviceProperties.l2CacheSize, l2LineSize.size, l2Latency.mean);
+        auto l2LineSizeValue = getNumeric<size_t>(result, "memory", "l2", "lineSize", "value");
+        if (!l2LineSizeValue.has_value()) {
+            if (l2FetchGranularity.confidence > VALIDITY_THRESHOLD) {
+                std::cout << "[L2] Line Size" << std::endl;
+                CacheLineSizeResult l2LineSize = benchmark::measureL2LineSize(deviceProperties.l2CacheSize, l2FetchGranularity.size); // Unreliable on AMD because L2 Size Benchmarks are complicated
+                result["memory"]["l2"]["lineSize"] = l2LineSize;
+                if (opts.graphs) {
+                    util::exportChartsReduced(l2LineSize.timings, util::average<uint32_t>, fancyName + " - L2 Line Size", {}, "Bytes", "Cycles", graphDir.string());
+                }
+                if (opts.rawData) {
+                    util::writeNestedMapToFile(l2LineSize.timings, (graphDir / (fancyName + " - L2 Line Size.txt")).string());
+                }
+                if (l2LineSize.confidence > VALIDITY_THRESHOLD) {
+                    l2LineSizeValue = l2LineSize.size;
+                }
             } else {
-                std::cout << "Could not measure valid L2 Line Size, skipping L2 Miss Penalty and Amount benchmarks." << std::endl;
+                std::cout << "Could not measure valid L2 Fetch Granularitys, skipping L2 Line Size benchmarks." << std::endl;
             }
+        }
+        if (l2LineSizeValue.has_value()) {
+            std::cout << "[L2] Miss Penalty" << std::endl;
+            double l2MissPenalty = benchmark::measureL2MissPenalty(deviceProperties.l2CacheSize, l2LineSizeValue.value(), l2Latency.mean);
+            result["memory"]["l2"]["missPenalty"] = {
+                {"value", l2MissPenalty},
+                {"unit", "cycles"}
+            };
         } else {
-            std::cout << "Could not measure valid L2 Fetch Granularitys, skipping L2 Line Size benchmarks." << std::endl;
+            std::cout << "Could not gather valid L2 Line Size, skipping L2 Miss Penalty benchmarks." << std::endl;
         }
 
         std::cout << "[L2] Read Bandwidth" << std::endl;
@@ -336,7 +414,7 @@ int main(int argc, char* argv[]) {
         };
 
         if (opts.graphs) {
-            util::pipeMapToPython(l2FetchGranularity.timings, fancyName + " - L2 Fetch Granularity", {l2FetchGranularity.size}, "Bytes", "Cycles", graphDir.string());
+            util::exportChartsMinMaxAvg(l2FetchGranularity.timings, fancyName + " - L2 Fetch Granularity", {l2FetchGranularity.size}, "Bytes", "Cycles", graphDir.string());
         }
         if (opts.rawData) {
             util::writeVectorToFile(l2Latency.timings, (graphDir / (fancyName + " - L2 Latency.txt")).string());
@@ -365,12 +443,8 @@ int main(int argc, char* argv[]) {
             CacheSizeResult l3FetchGranularity = benchmark::amd::measureL3FetchGranularity();
             result["memory"]["l3"]["fetchGranularity"] = l3FetchGranularity;
             */
-            auto l3LineSize = util::getL3LineSizeBytes();
+            auto l3LineSize = getNumeric<size_t>(result, "memory", "l3", "lineSize", "value");
             if (l3LineSize.has_value()) {
-                result["memory"]["l3"]["lineSize"] = {
-                    {"value", l3LineSize.value()},
-                    {"unit", "bytes"}
-                };
                 /* Not working yet because of Latency dep.
                 std::cout << "[L3] Miss Penalty" << std::endl;
                 result["memory"]["l3"]["missPenalty"] = benchmark::amd::measureL3MissPenalty(l3Size.value(), l3LineSize.value(), l3Latency.mean);
@@ -393,7 +467,7 @@ int main(int argc, char* argv[]) {
 
             /* Not working yet
             if (opts.graphs) {
-                util::pipeMapToPython(l3FetchGranularity.timings, fancyName + " - L3 Fetch Granularity", {l3FetchGranularity.size}, "Bytes", "Cycles", graphDir.string());
+            util::exportChartsMinMaxAvg(l3FetchGranularity.timings, fancyName + " - L3 Fetch Granularity", {l3FetchGranularity.size}, "Bytes", "Cycles", graphDir.string());
             }
             if (opts.rawData) {
                 util::writeVectorToFile(l3Latency.timings, (graphDir / (fancyName + " - L3 Latency.txt")).string());
@@ -427,19 +501,31 @@ int main(int argc, char* argv[]) {
 
         if (constantL1Size.confidence > VALIDITY_THRESHOLD && constantL1FetchGranularity.confidence > VALIDITY_THRESHOLD) {
             std::cout << "[Constant] L1 Line Size" << std::endl;
-            CacheSizeResult constantL1LineSize = benchmark::nvidia::measureConstantL1LineSize(constantL1Size.size, constantL1FetchGranularity.size);
+            CacheLineSizeResult constantL1LineSize = benchmark::nvidia::measureConstantL1LineSize(constantL1Size.size, constantL1FetchGranularity.size);
             result["memory"]["constant"]["l1"]["lineSize"] = constantL1LineSize;
+            if (opts.graphs) {
+                util::exportChartsReduced(constantL1LineSize.timings, util::average<uint32_t>, fancyName + " - Constant L1 Line Size", {}, "Bytes", "Cycles", graphDir.string());
+            }
             if (opts.rawData) {
-                util::writeMapToFile(constantL1LineSize.timings, (graphDir / (fancyName + " - Constant L1 Line Size.txt")).string());
+                util::writeNestedMapToFile(constantL1LineSize.timings, (graphDir / (fancyName + " - Constant L1 Line Size.txt")).string());
             }
 
             if (constantL1LineSize.confidence > VALIDITY_THRESHOLD) {
                 std::cout << "[Constant] L1 Miss Penalty" << std::endl;
-                double constantL1MissPenalty = result["memory"]["constant"]["l1"]["missPenalty"] = benchmark::nvidia::measureConstantL1MissPenalty(constantL1Size.size, constantL1LineSize.size, constantL1Latency.mean);
+                double constantL1MissPenalty = benchmark::nvidia::measureConstantL1MissPenalty(constantL1Size.size, constantL1LineSize.size, constantL1Latency.mean);
+                result["memory"]["constant"]["l1"]["missPenalty"] = {
+                    {"value", constantL1MissPenalty},
+                    {"unit", "cycles"}
+                };
                 
                 
                 std::cout << "[Constant] L1 Amount" << std::endl;
-                result["memory"]["constant"]["l1"]["amountPerMultiprocessor"] = benchmark::nvidia::measureConstantL1Amount(constantL1Size.size, constantL1FetchGranularity.size, constantL1MissPenalty);
+                auto constantL1Amount = benchmark::nvidia::measureConstantL1Amount(constantL1Size.size, constantL1FetchGranularity.size, constantL1MissPenalty);
+                if (constantL1Amount.has_value()) {
+                    result["memory"]["constant"]["l1"]["amountPerMultiprocessor"] = *constantL1Amount;
+                } else {
+                    std::cout << "Could not measure valid Constant L1 Amount, skipping Constant L1 Amount benchmark." << std::endl;
+                }
             } else {
                 std::cout << "Could not measure valid Constant L1 Line Size, skipping Constant L1 Miss Penalty and Amount benchmarks." << std::endl;
             }
@@ -456,19 +542,22 @@ int main(int argc, char* argv[]) {
 
         if (constantL15Size.confidence > VALIDITY_THRESHOLD && constantL1FetchGranularity.confidence > VALIDITY_THRESHOLD) {
             std::cout << "[Constant] L1.5 Line Size" << std::endl;
-            CacheSizeResult constantL15LineSize = benchmark::nvidia::measureConstantL15LineSize(constantL15Size.size, constantL15FetchGranularity.size);
+            CacheLineSizeResult constantL15LineSize = benchmark::nvidia::measureConstantL15LineSize(constantL15Size.size, constantL15FetchGranularity.size);
             result["memory"]["constant"]["l1.5"]["lineSize"] = constantL15LineSize;
+            if (opts.graphs) {
+                util::exportChartsReduced(constantL15LineSize.timings, util::average<uint32_t>, fancyName + " - Constant L1.5 Line Size", {}, "Bytes", "Cycles", graphDir.string());
+            }
             if (opts.rawData) {
-                util::writeMapToFile(constantL15LineSize.timings, (graphDir / (fancyName + " - Constant L1.5 Line Size.txt")).string());
+                util::writeNestedMapToFile(constantL15LineSize.timings, (graphDir / (fancyName + " - Constant L1.5 Line Size.txt")).string());
             }
         } else {
             std::cerr << "Could not measure valid Constant L1.5 Size or Fetch Granularity, skipping Constant L1.5 Line Size benchmarks." << std::endl;
         }
         if (opts.graphs) {
-            util::pipeMapToPython(constantL1Size.timings, fancyName + " - Constant L1 Size", {constantL1Size.size}, "Bytes", "Cycles", graphDir.string());
-            util::pipeMapToPython(constantL1FetchGranularity.timings, fancyName + " - Constant L1 Fetch Granularity", {constantL1FetchGranularity.size}, "Bytes", "Cycles", graphDir.string());
-            util::pipeMapToPython(constantL15Size.timings, fancyName + " - Constant L1.5 Size", {constantL15Size.size}, "Bytes", "Cycles", graphDir.string());
-            util::pipeMapToPython(constantL15FetchGranularity.timings, fancyName + " - Constant L1.5 Fetch Granularity", {constantL15FetchGranularity.size}, "Bytes", "Cycles", graphDir.string());
+            util::exportChartMinMaxAvgRed(constantL1Size.timings, fancyName + " - Constant L1 Size", {constantL1Size.size}, "Bytes", "Cycles", graphDir.string());
+            util::exportChartsMinMaxAvg(constantL1FetchGranularity.timings, fancyName + " - Constant L1 Fetch Granularity", {constantL1FetchGranularity.size}, "Bytes", "Cycles", graphDir.string());
+            util::exportChartMinMaxAvgRed(constantL15Size.timings, fancyName + " - Constant L1.5 Size", {constantL15Size.size}, "Bytes", "Cycles", graphDir.string());
+            util::exportChartsMinMaxAvg(constantL15FetchGranularity.timings, fancyName + " - Constant L1.5 Fetch Granularity", {constantL15FetchGranularity.size}, "Bytes", "Cycles", graphDir.string());
         }
         if (opts.rawData) {
             util::writeVectorToFile(constantL1Latency.timings, (graphDir / (fancyName + " - Constant L1 Latency.txt")).string());
@@ -496,18 +585,30 @@ int main(int argc, char* argv[]) {
 
         if (readOnlySize.confidence > VALIDITY_THRESHOLD && readOnlyFetchGranularity.confidence > VALIDITY_THRESHOLD) {
             std::cout << "[Read Only] Line Size" << std::endl;
-            CacheSizeResult readOnlyLineSize = benchmark::nvidia::measureReadOnlyLineSize(readOnlySize.size, readOnlyFetchGranularity.size);
+            CacheLineSizeResult readOnlyLineSize = benchmark::nvidia::measureReadOnlyLineSize(readOnlySize.size, readOnlyFetchGranularity.size);
             result["memory"]["readOnly"]["lineSize"] = readOnlyLineSize;
+            if (opts.graphs) {
+                util::exportChartsReduced(readOnlyLineSize.timings, util::average<uint32_t>, fancyName + " - Read Only Line Size", {}, "Bytes", "Cycles", graphDir.string());
+            }
             if (opts.rawData) {
-                util::writeMapToFile(readOnlyLineSize.timings, (graphDir / (fancyName + " - Read Only Line Size.txt")).string());
+                util::writeNestedMapToFile(readOnlyLineSize.timings, (graphDir / (fancyName + " - Read Only Line Size.txt")).string());
             }
 
             if (readOnlyLineSize.confidence > VALIDITY_THRESHOLD) {
                 std::cout << "[Read Only] Miss Penalty" << std::endl;
-                double readOnlyMissPenalty = result["memory"]["readOnly"]["missPenalty"] = benchmark::nvidia::measureReadOnlyMissPenalty(readOnlySize.size, readOnlyLineSize.size, readOnlyLatency.mean);
+                double readOnlyMissPenalty = benchmark::nvidia::measureReadOnlyMissPenalty(readOnlySize.size, readOnlyLineSize.size, readOnlyLatency.mean);
+                result["memory"]["readOnly"]["missPenalty"] = {
+                    {"value", readOnlyMissPenalty},
+                    {"unit", "cycles"}
+                };
 
                 std::cout << "[Read Only] Amount" << std::endl;
-                result["memory"]["readOnly"]["amountPerMultiprocessor"] = benchmark::nvidia::measureReadOnlyAmount(readOnlySize.size, readOnlyFetchGranularity.size, readOnlyMissPenalty);
+                auto readOnlyAmount = benchmark::nvidia::measureReadOnlyAmount(readOnlySize.size, readOnlyFetchGranularity.size, readOnlyMissPenalty);
+                if (readOnlyAmount.has_value()) {
+                    result["memory"]["readOnly"]["amountPerMultiprocessor"] = *readOnlyAmount;
+                } else {
+                    std::cout << "Could not measure valid Read Only Amount, skipping Read Only Amount benchmark." << std::endl;
+                }
             } else {
                 std::cout << "Could not measure valid Read Only Line Size, skipping Read Only Miss Penalty and Amount benchmarks." << std::endl;
             }
@@ -516,8 +617,8 @@ int main(int argc, char* argv[]) {
         }
 
         if (opts.graphs) {
-            util::pipeMapToPython(readOnlySize.timings, fancyName + " - Read Only Size", {readOnlySize.size}, "Bytes", "Cycles", graphDir.string());
-            util::pipeMapToPython(readOnlyFetchGranularity.timings, fancyName + " - Read Only Fetch Granularity", {readOnlyFetchGranularity.size}, "Bytes", "Cycles", graphDir.string());
+            util::exportChartMinMaxAvgRed(readOnlySize.timings, fancyName + " - Read Only Size", {readOnlySize.size}, "Bytes", "Cycles", graphDir.string());
+            util::exportChartsMinMaxAvg(readOnlyFetchGranularity.timings, fancyName + " - Read Only Fetch Granularity", {readOnlyFetchGranularity.size}, "Bytes", "Cycles", graphDir.string());
         }
         if (opts.rawData) {
             util::writeVectorToFile(readOnlyLatency.timings, (graphDir / (fancyName + " - Read Only Latency.txt")).string());
@@ -543,18 +644,30 @@ int main(int argc, char* argv[]) {
 
         if (textureSize.confidence > VALIDITY_THRESHOLD && textureFetchGranularity.confidence > VALIDITY_THRESHOLD) {
             std::cout << "[Texture] Line Size" << std::endl;
-            CacheSizeResult textureLineSize = benchmark::nvidia::measureTextureLineSize(textureSize.size, textureFetchGranularity.size);
+            CacheLineSizeResult textureLineSize = benchmark::nvidia::measureTextureLineSize(textureSize.size, textureFetchGranularity.size);
             result["memory"]["texture"]["lineSize"] = textureLineSize;
+            if (opts.graphs) {
+                util::exportChartsReduced(textureLineSize.timings, util::average<uint32_t>, fancyName + " - Texture Line Size", {}, "Bytes", "Cycles", graphDir.string());
+            }
             if (opts.rawData) {
-                util::writeMapToFile(textureLineSize.timings, (graphDir / (fancyName + " - Texture Line Size.txt")).string());
+                util::writeNestedMapToFile(textureLineSize.timings, (graphDir / (fancyName + " - Texture Line Size.txt")).string());
             }
 
             if (textureLineSize.confidence > VALIDITY_THRESHOLD) {
                 std::cout << "[Texture] Miss Penalty" << std::endl;
-                double textureMissPenalty = result["memory"]["texture"]["missPenalty"] = benchmark::nvidia::measureTextureMissPenalty(textureSize.size, textureLineSize.size, textureLatency.mean);
+                double textureMissPenalty = benchmark::nvidia::measureTextureMissPenalty(textureSize.size, textureLineSize.size, textureLatency.mean);
+                result["memory"]["texture"]["missPenalty"] = {
+                    {"value", textureMissPenalty},
+                    {"unit", "cycles"}
+                };
                 
                 std::cout << "[Texture] Amount" << std::endl;
-                result["memory"]["texture"]["amountPerMultiprocessor"] = benchmark::nvidia::measureTextureAmount(textureSize.size, textureFetchGranularity.size, textureMissPenalty);
+                auto textureAmount = benchmark::nvidia::measureTextureAmount(textureSize.size, textureFetchGranularity.size, textureMissPenalty);
+                if (textureAmount.has_value()) {
+                    result["memory"]["texture"]["amountPerMultiprocessor"] = *textureAmount;
+                } else {
+                    std::cout << "Could not measure valid Texture Amount, skipping Texture Amount benchmark." << std::endl;
+                }
             } else {
                 std::cout << "Could not measure valid Texture Line Size, skipping Texture Miss Penalty and Amount benchmarks." << std::endl;
             }
@@ -563,8 +676,8 @@ int main(int argc, char* argv[]) {
         }
 
         if (opts.graphs) {
-            util::pipeMapToPython(textureSize.timings, fancyName + " - Texture Size", {textureSize.size}, "Bytes", "Cycles", graphDir.string());
-            util::pipeMapToPython(textureFetchGranularity.timings, fancyName + " - Texture Fetch Granularity", {textureFetchGranularity.size}, "Bytes", "Cycles", graphDir.string());
+            util::exportChartMinMaxAvgRed(textureSize.timings, fancyName + " - Texture Size", {textureSize.size}, "Bytes", "Cycles", graphDir.string());
+            util::exportChartsMinMaxAvg(textureFetchGranularity.timings, fancyName + " - Texture Fetch Granularity", {textureFetchGranularity.size}, "Bytes", "Cycles", graphDir.string());
         }
         if (opts.rawData) {
             util::writeVectorToFile(textureLatency.timings, (graphDir / (fancyName + " - Texture Latency.txt")).string());
@@ -591,15 +704,22 @@ int main(int argc, char* argv[]) {
 
         if (scalarL1Size.confidence > VALIDITY_THRESHOLD && scalarL1FetchGranularity.confidence > VALIDITY_THRESHOLD) {
             std::cout << "[Scalar L1] Line Size" << std::endl;
-            CacheSizeResult scalarL1LineSize = benchmark::amd::measureScalarL1LineSize(scalarL1Size.size, scalarL1FetchGranularity.size);
+            CacheLineSizeResult scalarL1LineSize = benchmark::amd::measureScalarL1LineSize(scalarL1Size.size, scalarL1FetchGranularity.size);
             result["memory"]["scalarL1"]["lineSize"] = scalarL1LineSize;
+            if (opts.graphs) {
+                util::exportChartsReduced(scalarL1LineSize.timings, util::average<uint32_t>, fancyName + " - Scalar L1 Line Size", {}, "Bytes", "Cycles", graphDir.string());
+            }
             if (opts.rawData) {
-                util::writeMapToFile(scalarL1LineSize.timings, (graphDir / (fancyName + " - Scalar L1 Line Size.txt")).string());
+                util::writeNestedMapToFile(scalarL1LineSize.timings, (graphDir / (fancyName + " - Scalar L1 Line Size.txt")).string());
             }
 
             if (scalarL1LineSize.confidence > VALIDITY_THRESHOLD) {
                 std::cout << "[Scalar L1] Miss Penalty" << std::endl;
-                result["memory"]["scalarL1"]["missPenalty"] = benchmark::amd::measureScalarL1MissPenalty(scalarL1Size.size, scalarL1LineSize.size, scalarL1Latency.mean);
+                double scalarL1MissPenalty = benchmark::amd::measureScalarL1MissPenalty(scalarL1Size.size, scalarL1LineSize.size, scalarL1Latency.mean);
+                result["memory"]["scalarL1"]["missPenalty"] = {
+                    {"value", scalarL1MissPenalty},
+                    {"unit", "cycles"}
+                };
             } else {
                 std::cout << "Could not measure valid Scalar L1 Line Size, skipping Scalar L1 Miss Penalty benchmarks." << std::endl;
             }
@@ -613,8 +733,8 @@ int main(int argc, char* argv[]) {
         }
 
         if (opts.graphs) {
-            util::pipeMapToPython(scalarL1Size.timings, fancyName + " - Scalar L1 Size", {scalarL1Size.size}, "Bytes", "Cycles", graphDir.string());
-            util::pipeMapToPython(scalarL1FetchGranularity.timings, fancyName + " - Scalar L1 Fetch Granularity", {scalarL1FetchGranularity.size}, "Bytes", "Cycles", graphDir.string());
+            util::exportChartMinMaxAvgRed(scalarL1Size.timings, fancyName + " - Scalar L1 Size", {scalarL1Size.size}, "Bytes", "Cycles", graphDir.string());
+            util::exportChartsMinMaxAvg(scalarL1FetchGranularity.timings, fancyName + " - Scalar L1 Fetch Granularity", {scalarL1FetchGranularity.size}, "Bytes", "Cycles", graphDir.string());
         }
         if (opts.rawData) {
             util::writeVectorToFile(scalarL1Latency.timings, (graphDir / (fancyName + " - Scalar L1 Latency.txt")).string());
@@ -687,6 +807,11 @@ int main(int argc, char* argv[]) {
         std::cout << "[Resource Sharing] Benchmarks finished" << std::endl;
     }
     if (silencer) silencer.reset();
+
+    if (opts.fullReport) {
+        util::writeMarkdownReport(graphDir, fancyName, result);
+    }
+
     std::cout << result.dump(4) << std::endl;
     return 0;
 }

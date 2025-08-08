@@ -75,7 +75,7 @@ namespace util {
     }
 
     bool hasFlukeOccured(const std::map<size_t, std::vector<uint32_t>>& data) {
-        return false;
+        return false; // Deactivated for now. Someone should look for a more robust of doing this.
         std::vector<uint32_t> averages;
         averages.reserve(data.size());  
         for (auto& [_, vec] : data) {

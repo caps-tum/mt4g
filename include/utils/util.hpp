@@ -18,6 +18,7 @@ inline constexpr std::size_t GiB = 1024 * MiB;
 
 #include "utils/errorHandling.hpp"
 #include "utils/statistics.hpp"
+#include "utils/kolmogorovSmirnov.hpp"
 #include "utils/tools.hpp"
 #include "utils/printing.hpp"
 #include "utils/binarySearch.hpp"
@@ -25,5 +26,6 @@ inline constexpr std::size_t GiB = 1024 * MiB;
 #include "utils/heuristic.hpp"
 #include "utils/translation.hpp"
 #include "utils/hip/helpers.hpp"
+#include "utils/meta.hpp"
 
 #include "config.hpp"

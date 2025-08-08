@@ -6,7 +6,7 @@
 
 static constexpr auto SAMPLE_SIZE = DEFAULT_SAMPLE_SIZE;
 
-__global__ void textureMissPenaltyKernel(hipTextureObject_t tex, uint32_t *timingResults, size_t steps) {
+__global__ void textureMissPenaltyKernel([[maybe_unused]]hipTextureObject_t tex, uint32_t *timingResults, size_t steps) {
     uint32_t index = 0;
     __shared__ uint64_t s_timings[SAMPLE_SIZE];
 
@@ -53,7 +53,7 @@ __global__ void textureMissPenaltyKernel(hipTextureObject_t tex, uint32_t *timin
 }
 
 std::vector<uint32_t> textureMissPenaltyLauncher(size_t textureCacheSizeBytes, size_t textureCacheLineSizeBytes) {
-    util::hipCheck(hipDeviceReset());
+    util::hipDeviceReset();
 
     size_t steps = textureCacheSizeBytes / textureCacheLineSizeBytes;
     size_t resultBufferLength = util::min(steps, SAMPLE_SIZE);

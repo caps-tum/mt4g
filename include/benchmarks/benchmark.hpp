@@ -1,8 +1,12 @@
+/**
+ * @brief Central include that aggregates all benchmark declarations.
+ */
 #pragma once
 
 #include "benchmarks/base.hpp"
 
 #include "typedef/cacheSizeResult.hpp"
+#include "typedef/cacheLineSizeResult.hpp"
 #include "typedef/cacheLatencyResult.hpp"
 #include "typedef/vectorTypes.hpp"
 

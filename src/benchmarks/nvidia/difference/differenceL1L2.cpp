@@ -82,7 +82,7 @@ __global__ void l2DifferKernel([[maybe_unused]] uint32_t *pChaseArray, uint32_t 
 namespace benchmark {
     namespace nvidia {
         bool isL1UsedForGlobalLoads(double tolerance) {
-            util::hipCheck(hipDeviceReset());
+            util::hipDeviceReset();
 
 
             uint32_t *d_pChaseArray = util::allocateGPUMemory(util::generatePChaseArray(SAMPLE_SIZE, sizeof(uint32_t)));
@@ -93,7 +93,7 @@ namespace benchmark {
             std::vector<uint32_t> timingResultBufferL2 = util::copyFromDevice(d_timingResultBuffer, SAMPLE_SIZE);
 
 
-            //util::hipCheck(hipDeviceReset()); // Flush caches
+            //util::hipDeviceReset(); // Flush caches
 
             
             util::hipCheck(hipDeviceSynchronize());
@@ -101,7 +101,7 @@ namespace benchmark {
             std::vector<uint32_t> timingResultBufferL1 = util::copyFromDevice(d_timingResultBuffer, SAMPLE_SIZE);
             
 
-            util::hipCheck(hipDeviceReset());
+            util::hipDeviceReset();
 
             std::cout << "L1 " << util::average(timingResultBufferL1) << " L2 " << util::average(timingResultBufferL2) << std::endl;
 

@@ -10,7 +10,7 @@
 
 static constexpr auto SAMPLE_SIZE = DEFAULT_SAMPLE_SIZE;// DEFAULT_SAMPLE_SIZE loads should suffice to rule out random flukes
 
-__global__ void textureLatencyKernel(hipTextureObject_t tex, uint32_t *timingResults) {
+__global__ void textureLatencyKernel([[maybe_unused]]hipTextureObject_t tex, uint32_t *timingResults) {
     uint32_t index = 0;
     __shared__ uint64_t s_timings[SAMPLE_SIZE];
 
@@ -39,7 +39,7 @@ __global__ void textureLatencyKernel(hipTextureObject_t tex, uint32_t *timingRes
 }
 
 std::vector<uint32_t> textureLatencyLauncher(size_t arraySizeBytes, size_t strideBytes) { 
-    util::hipCheck(hipDeviceReset()); 
+    util::hipDeviceReset(); 
 
     // Initialize device Arrays
     uint32_t *d_pChaseArray = util::allocateGPUMemory(util::generatePChaseArray(arraySizeBytes, strideBytes));
@@ -54,7 +54,7 @@ std::vector<uint32_t> textureLatencyLauncher(size_t arraySizeBytes, size_t strid
 
     timingResultBuffer.erase(timingResultBuffer.begin());
 
-    util::hipCheck(hipDeviceReset());
+    util::hipDeviceReset();
     return timingResultBuffer;
 }
 
@@ -68,7 +68,7 @@ namespace benchmark {
                 util::average(timings),
                 util::percentile(timings, 0.5),
                 util::percentile(timings, 0.95),
-                util::stddev(timings),
+                util::stdev(timings),
                 timings.size(),
                 SAMPLE_SIZE,
                 CYCLE,

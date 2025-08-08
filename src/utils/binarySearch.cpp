@@ -70,7 +70,7 @@ namespace util {
         const double maxTiming = samplePivot(launch, upperBytes, strideBytes, rmsMinReference, lowerBytes, upperBytes);
         const double tol = (maxTiming - minTiming) / TOL_FACTOR;
 
-        std::cout << rmsMinReference << " " << minTiming << " " << maxTiming << " " << tol << std::endl;
+        // std::cout << rmsMinReference << " " << minTiming << " " << maxTiming << " " << tol << std::endl;
 
         double prev = minTiming;
         size_t n = lowerBytes;

@@ -34,7 +34,7 @@ __global__ void l1MissPenaltyKernel(uint32_t* pChaseArray, uint32_t *timingResul
 }
 
 std::vector<uint32_t> l1MissPenaltyLauncher(size_t l1CacheSizeBytes, size_t l1CacheLineSizeBytes) {
-    util::hipCheck(hipDeviceReset());
+    util::hipDeviceReset();
 
     size_t steps = l1CacheSizeBytes / l1CacheLineSizeBytes;
     size_t resultBufferLength = util::min(steps, SAMPLE_SIZE);

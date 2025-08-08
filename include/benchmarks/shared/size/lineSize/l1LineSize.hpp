@@ -10,5 +10,5 @@ namespace benchmark {
      * @param cacheFetchGranularityBytes Sector size used during the measurement.
      * @return Detected line size in bytes if successful.
      */
-    CacheSizeResult measureL1LineSize(size_t cacheSizeBytes, size_t cacheFetchGranularityBytes);
+    CacheLineSizeResult measureL1LineSize(size_t cacheSizeBytes, size_t cacheFetchGranularityBytes);
 }

@@ -58,7 +58,7 @@ __global__ void constantL15LatencyKernel(uint32_t *timingResults, uint32_t *timi
 }
 
 std::vector<uint32_t> constantL15LatencyLauncher(size_t arraySizeBytes, size_t strideBytes) {
-    util::hipCheck(hipDeviceReset());
+    util::hipDeviceReset();
 
     size_t resultBufferLength = util::min(arraySizeBytes / strideBytes, SAMPLE_SIZE);
 
@@ -86,7 +86,7 @@ namespace benchmark {
                 util::average(timings),
                 util::percentile(timings, 0.5),
                 util::percentile(timings, 0.95),
-                util::stddev(timings),
+                util::stdev(timings),
                 timings.size(),
                 SAMPLE_SIZE,
                 CYCLE,
