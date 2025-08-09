@@ -139,8 +139,8 @@ namespace benchmark {
         bool measureTextureAndL1Shared(size_t textureCacheSizeBytes, size_t textureFetchGranularityBytes, double textureLatency, double textureMissPenalty, size_t l1CacheSizeBytes, size_t l1FetchGranularityBytes, double l1Latency, double l1MissPenalty) {
             auto [timingsTexture, timingsL1] = textureSharedL1Launcher(textureCacheSizeBytes, textureFetchGranularityBytes, l1CacheSizeBytes, l1FetchGranularityBytes);
             
-            std::cout << "Texture Latency: " << util::average(timingsTexture) << ", L1 Latency: " << util::average(timingsL1) << std::endl;
-            std::cout << textureLatency << " " << textureMissPenalty << " " << l1Latency << " " << l1MissPenalty << std::endl;
+            //std::cout << "Texture Latency: " << util::average(timingsTexture) << ", L1 Latency: " << util::average(timingsL1) << std::endl;
+            //std::cout << textureLatency << " " << textureMissPenalty << " " << l1Latency << " " << l1MissPenalty << std::endl;
             
             return util::average(timingsTexture) - textureLatency > textureMissPenalty / SHARED_THRESHOLD || util::average(timingsL1) - l1Latency > l1MissPenalty / SHARED_THRESHOLD;
         }

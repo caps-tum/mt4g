@@ -13,11 +13,12 @@ static constexpr auto TESTING_THREADS = 2;
 
 __global__ void constantL1AmountKernel(uint32_t *timingResultsBaseCore, uint32_t *timingResultsTestCore, size_t steps, size_t stride, uint32_t baseCore, uint32_t testCore) {
     // 4 = Amount of Multiprocessor Partitions / SIMDs
-    if (__getWarpId() % 4 == testCore / 32 && threadIdx.x == testCore % 32) {
+    if (__getWarpId() % 4 == testCore / warpSize && threadIdx.x == testCore % warpSize) {
         testCore = threadIdx.x;
-    } else if (__getWarpId() % 4 == baseCore / 32 && threadIdx.x == baseCore % 32) {
+    } else if (__getWarpId() % 4 == baseCore / warpSize && threadIdx.x == baseCore % warpSize) {
         baseCore = threadIdx.x;
-    } 
+    } else return;
+
     uint32_t start, end;
     uint32_t index = 0;
     
