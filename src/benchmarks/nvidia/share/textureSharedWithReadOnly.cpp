@@ -144,8 +144,8 @@ namespace benchmark {
         bool measureTextureAndReadOnlyShared(size_t textureCacheSizeBytes, size_t textureFetchGranularityBytes, double textureLatency, double textureMissPenalty, size_t readOnlyCacheSizeBytes, size_t readOnlyFetchGranularityBytes, double readOnlyLatency, double readOnlyMissPenalty) {
             auto [timingsTexture, timingsReadOnly] = textureSharedReadOnlyLauncher(textureCacheSizeBytes, textureFetchGranularityBytes, readOnlyCacheSizeBytes, readOnlyFetchGranularityBytes);
             
-            std::cout << util::average(timingsTexture) << " " << util::average(timingsReadOnly) << std::endl;
-            std::cout << textureLatency << " " << textureMissPenalty << " " << readOnlyLatency << " " << readOnlyMissPenalty << std::endl;
+            //std::cout << util::average(timingsTexture) << " " << util::average(timingsReadOnly) << std::endl;
+            //std::cout << textureLatency << " " << textureMissPenalty << " " << readOnlyLatency << " " << readOnlyMissPenalty << std::endl;
             
             return util::average(timingsTexture) - textureLatency > textureMissPenalty / SHARED_THRESHOLD || util::average(timingsReadOnly) - readOnlyLatency > readOnlyMissPenalty / SHARED_THRESHOLD;
         }

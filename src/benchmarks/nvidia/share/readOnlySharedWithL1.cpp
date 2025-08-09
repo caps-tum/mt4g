@@ -131,8 +131,8 @@ namespace benchmark {
         bool measureReadOnlyAndL1Shared(size_t readOnlyCacheSizeBytes, size_t readOnlyFetchGranularityBytes, double readOnlyLatency, double readOnlyMissPenalty, size_t l1CacheSizeBytes,size_t l1FetchGranularityBytes, double l1Latency, double l1MissPenalty) {
             auto [timingsReadOnly, timingsL1] = readOnlySharedL1Launcher(readOnlyCacheSizeBytes, readOnlyFetchGranularityBytes, l1CacheSizeBytes, l1FetchGranularityBytes);
             
-            std::cout << "ReadOnly Latency: " << util::average(timingsReadOnly) << ", L1 Latency: " << util::average(timingsL1) << std::endl;
-            std::cout << readOnlyLatency << " " << readOnlyMissPenalty << " " << l1Latency << " " << l1MissPenalty << std::endl;
+            //std::cout << "ReadOnly Latency: " << util::average(timingsReadOnly) << ", L1 Latency: " << util::average(timingsL1) << std::endl;
+            //std::cout << readOnlyLatency << " " << readOnlyMissPenalty << " " << l1Latency << " " << l1MissPenalty << std::endl;
             
             return util::average(timingsReadOnly) - readOnlyLatency > readOnlyMissPenalty / SHARED_THRESHOLD || util::average(timingsL1) - l1Latency > l1MissPenalty / SHARED_THRESHOLD;
         }
