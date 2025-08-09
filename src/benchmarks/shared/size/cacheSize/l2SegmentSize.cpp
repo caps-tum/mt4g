@@ -105,7 +105,8 @@ std::vector<uint32_t> l2SegmentSizeLauncher(size_t arraySizeBytes, size_t stride
     size_t resultBufferLength = util::min(steps, MEASURE_SIZE / sizeof(uint32_t)); 
     
     // Allocate GPU VMemory
-    uint32_t *d_pChaseArray = util::allocateGPUMemory(util::generateRandomizedPChaseArray(arraySizeBytes, strideBytes));
+    // uint32_t *d_pChaseArray = util::allocateGPUMemory(util::generateRandomizedPChaseArray(arraySizeBytes, strideBytes));
+    uint32_t *d_pChaseArray = util::allocateGPUMemory(util::generatePChaseArray(arraySizeBytes, strideBytes));
     uint32_t *d_timingResultBuffer = util::allocateGPUMemory(resultBufferLength);
     
     util::hipCheck(hipDeviceSynchronize());

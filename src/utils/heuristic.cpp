@@ -146,7 +146,7 @@ namespace util {
         size_t new_base = base / divisor;
 
         // similarity: how close divisor is to original target, normalized to [0,1]
-        double similarity = 1.0 - std::fabs(static_cast<double>(divisor) - static_cast<double>(target))
+        double similarity = 1.0 - std::fabs(static_cast<double>(base/divisor) - static_cast<double>(target))
                             / static_cast<double>(target);
 
         if (similarity < 0.0) similarity = 0.0;
