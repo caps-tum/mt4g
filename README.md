@@ -7,14 +7,7 @@ evaluated results as structured JSON.
 
 ## Available sample results
 
-| GPU | Report |
-| --- | ------ |
-| NVIDIA P6000  | [Details](results/Quadro%20P6000/README.md) |
-| NVIDIA V100   | [Details](results/Tesla%20V100-PCIE-16GB/README.md) |
-| NVIDIA H100   | [Details](results/NVIDIA%20H100%2080GB%20HBM3/README.md) |
-| AMD MI100     | [Details](results/AMD%20Instinct%20MI100/README.md) |
-| AMD MI210     | [Details](results/AMD%20Instinct%20MI210/README.md) |
-| AMD MI300X VF | [Details](results/AMD%20Instinct%20MI300X%20VF/README.md) |
+See the `sample_results` folder.
 
 ## Features
 

@@ -1,0 +1,443 @@
+{
+    "compute": {
+        "computeUnitsPerDie": 104,
+        "concurrentKernels": true,
+        "maxBlocksPerMultiProcessor": 2,
+        "maxThreadsPerBlock": 1024,
+        "maxThreadsPerMultiProcessor": 2048,
+        "multiProcessorCount": 104,
+        "numSIMDsPerCU": 4,
+        "numXCDs": 1,
+        "numberOfCoresPerMultiProcessor": 64,
+        "regsPerBlock": 65536,
+        "regsPerMultiProcessor": 65536,
+        "supportsCooperativeLaunch": true,
+        "warpSize": 64
+    },
+    "general": {
+        "asicRevision": 1,
+        "clockRate": {
+            "unit": "kHz",
+            "value": 1700000
+        },
+        "computeCapability": {
+            "major": 9,
+            "minor": 0
+        },
+        "name": "AMD Instinct MI210",
+        "vendor": "AMD"
+    },
+    "memory": {
+        "constant": {
+            "totalConstMem": {
+                "unit": "bytes",
+                "value": 2147483647
+            }
+        },
+        "l1": {
+            "amountPerMultiprocessor": 1,
+            "fetchGranularity": {
+                "confidence": 0.9679006419871603,
+                "method": "p-chase",
+                "randomized": false,
+                "size": 64,
+                "unit": "bytes"
+            },
+            "globalL1CacheSupported": true,
+            "latency": {
+                "mean": 124.0,
+                "measurements": 255,
+                "method": "p-chase",
+                "p50": 124.0,
+                "p95": 124.0,
+                "sampleSize": 256,
+                "stdev": 0.0,
+                "unit": "cycles"
+            },
+            "lineSize": {
+                "confidence": 0.9746311193759021,
+                "method": "p-chase",
+                "randomized": false,
+                "size": 64,
+                "unit": "bytes"
+            },
+            "localL1CacheSupported": true,
+            "missPenalty": {
+                "unit": "cycles",
+                "value": 164.40784313725493
+            },
+            "size": {
+                "confidence": 0.9739013049347532,
+                "method": "p-chase",
+                "randomized": false,
+                "size": 16384,
+                "unit": "bytes"
+            }
+        },
+        "l2": {
+            "amount": 1,
+            "fetchGranularity": {
+                "confidence": 0.9678006439871203,
+                "method": "p-chase",
+                "randomized": false,
+                "size": 64,
+                "unit": "bytes"
+            },
+            "latency": {
+                "mean": 302.1490196078431,
+                "measurements": 255,
+                "method": "p-chase",
+                "p50": 292.0,
+                "p95": 324.0,
+                "sampleSize": 256,
+                "stdev": 23.341890400313403,
+                "unit": "cycles"
+            },
+            "lineSize": {
+                "unit": "bytes",
+                "value": 128
+            },
+            "missPenalty": {
+                "unit": "cycles",
+                "value": 412.83137254901965
+            },
+            "persistingL2CacheMaxSize": {
+                "unit": "bytes",
+                "value": 8388608
+            },
+            "readBandwidth": {
+                "unit": "GiB/s",
+                "value": 4014.1185476901746
+            },
+            "size": {
+                "unit": "bytes",
+                "value": 8388608
+            },
+            "writeBandwidth": {
+                "unit": "GiB/s",
+                "value": 2403.7476546766156
+            }
+        },
+        "main": {
+            "latency": {
+                "mean": 740.8832437713727,
+                "measurements": 2047,
+                "method": "p-chase",
+                "p50": 684.0,
+                "p95": 1208.0,
+                "sampleSize": 2048,
+                "stdev": 186.54251268736903,
+                "unit": "cycles"
+            },
+            "memoryBusWidth": {
+                "unit": "bit",
+                "value": 4096
+            },
+            "memoryClockRate": {
+                "unit": "kHz",
+                "value": 1600000
+            },
+            "readBandwidth": {
+                "unit": "GiB/s",
+                "value": 1085.4164756189655
+            },
+            "totalGlobalMem": {
+                "unit": "bytes",
+                "value": 68702699520
+            },
+            "writeBandwidth": {
+                "unit": "GiB/s",
+                "value": 966.7072954012621
+            }
+        },
+        "scalarL1": {
+            "fetchGranularity": {
+                "confidence": 0.998920021599568,
+                "method": "p-chase",
+                "randomized": false,
+                "size": 64,
+                "unit": "bytes"
+            },
+            "latency": {
+                "mean": 52.76862745098039,
+                "measurements": 255,
+                "method": "p-chase",
+                "p50": 48.0,
+                "p95": 48.0,
+                "sampleSize": 256,
+                "stdev": 59.81471881310992,
+                "unit": "cycles"
+            },
+            "lineSize": {
+                "confidence": 0.9934507078808761,
+                "method": "p-chase",
+                "randomized": false,
+                "size": 64,
+                "unit": "bytes"
+            },
+            "missPenalty": {
+                "unit": "cycles",
+                "value": 126.94901960784314
+            },
+            "sharedBetween": [
+                [
+                    0,
+                    1
+                ],
+                [
+                    3
+                ],
+                [
+                    4,
+                    5
+                ],
+                [
+                    6,
+                    7
+                ],
+                [
+                    8,
+                    9
+                ],
+                [
+                    10,
+                    11
+                ],
+                [
+                    12,
+                    13
+                ],
+                [
+                    16,
+                    17
+                ],
+                [
+                    18,
+                    19
+                ],
+                [
+                    20,
+                    21
+                ],
+                [
+                    22,
+                    23
+                ],
+                [
+                    24,
+                    25
+                ],
+                [
+                    26,
+                    27
+                ],
+                [
+                    28
+                ],
+                [
+                    32,
+                    33
+                ],
+                [
+                    34,
+                    35
+                ],
+                [
+                    36,
+                    37
+                ],
+                [
+                    38
+                ],
+                [
+                    40,
+                    41
+                ],
+                [
+                    42,
+                    43
+                ],
+                [
+                    44,
+                    45
+                ],
+                [
+                    48,
+                    49
+                ],
+                [
+                    50,
+                    51
+                ],
+                [
+                    52,
+                    53
+                ],
+                [
+                    54,
+                    55
+                ],
+                [
+                    56,
+                    57
+                ],
+                [
+                    58,
+                    59
+                ],
+                [
+                    60
+                ],
+                [
+                    64,
+                    65
+                ],
+                [
+                    66,
+                    67
+                ],
+                [
+                    68,
+                    69
+                ],
+                [
+                    70,
+                    71
+                ],
+                [
+                    72,
+                    73
+                ],
+                [
+                    74,
+                    75
+                ],
+                [
+                    76
+                ],
+                [
+                    80,
+                    81
+                ],
+                [
+                    82,
+                    83
+                ],
+                [
+                    84,
+                    85
+                ],
+                [
+                    86,
+                    87
+                ],
+                [
+                    88,
+                    89
+                ],
+                [
+                    90,
+                    91
+                ],
+                [
+                    92
+                ],
+                [
+                    96,
+                    97
+                ],
+                [
+                    98,
+                    99
+                ],
+                [
+                    100,
+                    101
+                ],
+                [
+                    102,
+                    103
+                ],
+                [
+                    104,
+                    105
+                ],
+                [
+                    106,
+                    107
+                ],
+                [
+                    108
+                ],
+                [
+                    112,
+                    113
+                ],
+                [
+                    114,
+                    115
+                ],
+                [
+                    116,
+                    117
+                ],
+                [
+                    118,
+                    119
+                ],
+                [
+                    120,
+                    121
+                ],
+                [
+                    122,
+                    123
+                ],
+                [
+                    124
+                ]
+            ],
+            "size": {
+                "confidence": 0.5104897902041959,
+                "method": "p-chase",
+                "randomized": false,
+                "size": 16896,
+                "unit": "bytes"
+            },
+            "uniqueAmount": 56
+        },
+        "shared": {
+            "latency": {
+                "mean": 49.94509803921569,
+                "measurements": 255,
+                "method": "p-chase",
+                "p50": 48.0,
+                "p95": 48.0,
+                "sampleSize": 256,
+                "stdev": 29.331343006570542,
+                "unit": "cycles"
+            },
+            "reservedSharedMemPerBlock": {
+                "unit": "bytes",
+                "value": 0
+            },
+            "sharedMemPerBlock": {
+                "unit": "bytes",
+                "value": 65536
+            },
+            "sharedMemPerMultiProcessor": {
+                "unit": "bytes",
+                "value": 6815744
+            }
+        }
+    },
+    "meta": {
+        "driver": 60342134,
+        "gpuCompiler": "hipcc 6.3.42134",
+        "hostCompiler": "clang 18.0.0",
+        "hostCpu": "AMD EPYC 7773X 64-Core Processor",
+        "os": "Linux 5.14.21-150400.24.63-default",
+        "runtime": 60342134,
+        "timestamp": "2025-08-08T22:15:20Z"
+    }
+}
