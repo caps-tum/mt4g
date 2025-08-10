@@ -11,10 +11,11 @@ static constexpr auto GRACE = DEFAULT_GRACE_FACTOR;// Factor
 static constexpr auto TESTING_THREADS = 2;
 
 __global__ void textureAmountKernel([[maybe_unused]]hipTextureObject_t texBase, [[maybe_unused]]hipTextureObject_t texTest, uint32_t *timingResultsBaseCore, uint32_t *timingResultsTestCore, size_t steps, uint32_t baseCore, uint32_t testCore) {
-    // 4 = Amount of Multiprocessor Partitions / SIMDs
-    if (__getWarpId() % 4 == testCore / warpSize && threadIdx.x == testCore % warpSize) {
+    if (__getWarpId() == testCore / warpSize && threadIdx.x % warpSize == testCore % warpSize) {
+        // printf("testCore: %d __getWarpId: %d, threadIdx.x: %d\n", testCore, __getWarpId(), threadIdx.x);
         testCore = threadIdx.x;
-    } else if (__getWarpId() % 4 == baseCore / warpSize && threadIdx.x == baseCore % warpSize) {
+    } else if (__getWarpId() == baseCore / warpSize && threadIdx.x % warpSize == baseCore % warpSize) {
+        // printf("baseCore: %d __getWarpId: %d, threadIdx.x: %d\n", baseCore, __getWarpId(), threadIdx.x);
         baseCore = threadIdx.x;
     } else return;
 
@@ -116,7 +117,7 @@ std::tuple<std::vector<uint32_t>, std::vector<uint32_t>> textureAmountLauncher(s
     hipTextureObject_t texTest = util::createTextureObject(d_pChaseArrayTestCore, textureSizeBytes);
 
     util::hipCheck(hipDeviceSynchronize());
-    textureAmountKernel<<<1, util::getMaxThreadsPerBlock()>>>(texBase, texTest, d_timingResultsBaseCore, d_timingResultsTestCore, textureSizeBytes / textureFetchGranularityBytes, baseCore, testCore);
+    textureAmountKernel<<<1, util::getNumberOfCoresPerSM()>>>(texBase, texTest, d_timingResultsBaseCore, d_timingResultsTestCore, textureSizeBytes / textureFetchGranularityBytes, baseCore, testCore);
 
     std::vector<uint32_t> baseCoreTimingResultsBuffer = util::copyFromDevice(d_timingResultsBaseCore, resultBufferLength);
     std::vector<uint32_t> testCoreTimingResultsBuffer = util::copyFromDevice(d_timingResultsTestCore, resultBufferLength);
@@ -136,7 +137,7 @@ namespace benchmark {
 
             for (uint32_t i = 1; i <= util::getNumberOfCoresPerSM(); i *= 2) {
                 auto [baseTimings, testTimings] = testCoreToTimingResults[i] = textureAmountLauncher(textureSizeBytes, textureFetchGranularityBytes, 0, i);
-                if (baseTimings[0] == 0 || testTimings[0] == 0) {
+                if ( i<util::getNumberOfCoresPerSM() && (baseTimings[0] == 0 || testTimings[0] == 0)) {
                     std::cout << "Error: Base or Test Core timings are zero, indicating an error in the measurement." << std::endl;
                     return std::nullopt;
                 }
