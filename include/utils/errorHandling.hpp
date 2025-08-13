@@ -31,7 +31,7 @@ namespace util {
 
     #define hipCheck(expr) hipCheckImpl((expr), __FILE__, __LINE__, __func__)
 
-#ifdef __HIP_PLATFORM_AMD__
+    #ifdef __HIP_PLATFORM_AMD__
     /**
      * @brief Validate ROCm SMI API results.
      *
@@ -44,5 +44,5 @@ namespace util {
             throw std::runtime_error("RSMI-Fehler");
         }
     }
-#endif
+    #endif
 }

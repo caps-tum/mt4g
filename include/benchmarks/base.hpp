@@ -49,6 +49,7 @@ __device__ __forceinline__ uint32_t __getPhysicalCUId() {
 return __smid();
 #endif
 }
+
 /**
  * @brief Query the warp identifier of the calling thread.
  *
