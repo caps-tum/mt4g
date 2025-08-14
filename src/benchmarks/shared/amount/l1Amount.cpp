@@ -84,17 +84,20 @@ __global__ void l1AmountKernel(uint32_t* pChaseArrayBaseCore, uint32_t *pChaseAr
     if (core != __getPhysicalCUId() || warp != __getWarpId()) {
         return; // Not on the same SM anymore
     }
+    
 
     if (threadIdx.x == baseCore) {
         for (uint32_t k = 1; k < measureLength; k++) {
             timingResultsBaseCore[k] = s_timingResultsBaseCore[k];
         }
+        //printf("%u = %u ;;;; BASE\n", baseCore, threadIdx.x);
     }
 
     if (threadIdx.x == testCore) {
         for (uint32_t k = 1; k < measureLength; k++) {
             timingResultsTestCore[k] = s_timingResultsTestCore[k];
         }
+        //printf("%u = %u ;;;; TEST\n", testCore, threadIdx.x);
     }
 }
 

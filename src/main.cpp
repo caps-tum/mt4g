@@ -301,7 +301,7 @@ int main(int argc, char* argv[]) {
         }
 
         
-        auto l2LineSizeValue = getNumeric<size_t>(result, "memory", "l2", "lineSize", "value");
+        auto l2LineSizeValue = util::getNumeric<size_t>(result, "memory", "l2", "lineSize", "value");
         if (!l2LineSizeValue.has_value()) {
             if (l2FetchGranularity.confidence > VALIDITY_THRESHOLD) {
                 std::cout << "[L2] Line Size" << std::endl;
@@ -372,7 +372,7 @@ int main(int argc, char* argv[]) {
             CacheSizeResult l3FetchGranularity = benchmark::amd::measureL3FetchGranularity();
             result["memory"]["l3"]["fetchGranularity"] = l3FetchGranularity;
             */
-            auto l3LineSize = getNumeric<size_t>(result, "memory", "l3", "lineSize", "value");
+            auto l3LineSize = util::getNumeric<size_t>(result, "memory", "l3", "lineSize", "value");
             if (l3LineSize.has_value()) {
                 /* Not working yet because of Latency dep.
                 std::cout << "[L3] Miss Penalty" << std::endl;
@@ -713,22 +713,22 @@ int main(int argc, char* argv[]) {
         std::cout << "[Resource Sharing] Starting Benchmarks" << std::endl;
 
         if (opts.runConstant && opts.runL1) {
-            sharedHelper(result["memory"]["constant"]["l1"], result["memory"]["l1"],
+            util::sharedHelper(result["memory"]["constant"]["l1"], result["memory"]["l1"],
                          "Constant L1", "L1",
                          benchmark::nvidia::measureConstantL1AndL1Shared);
         }
         if (opts.runReadOnly && opts.runL1) {
-            sharedHelper(result["memory"]["readOnly"], result["memory"]["l1"],
+            util::sharedHelper(result["memory"]["readOnly"], result["memory"]["l1"],
                          "Read Only", "L1",
                          benchmark::nvidia::measureReadOnlyAndL1Shared);
         }
         if (opts.runTexture && opts.runL1) {
-            sharedHelper(result["memory"]["texture"], result["memory"]["l1"],
+            util::sharedHelper(result["memory"]["texture"], result["memory"]["l1"],
                          "Texture", "L1",
                          benchmark::nvidia::measureTextureAndL1Shared);
         }
         if (opts.runTexture && opts.runReadOnly) {
-            sharedHelper(result["memory"]["texture"], result["memory"]["readOnly"],
+            util::sharedHelper(result["memory"]["texture"], result["memory"]["readOnly"],
                          "Texture", "Read Only",
                          benchmark::nvidia::measureTextureAndReadOnlyShared);
         }
