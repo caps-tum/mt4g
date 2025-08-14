@@ -74,6 +74,76 @@ void _exportChartImpl(
 }
 
 namespace util {
+    // Variadic helper: safely drill into nested keys and extract numeric types.
+    template <typename T, typename... Keys>
+    std::optional<T> getNumeric(const nlohmann::json& j, const std::string& key, const Keys&... rest) {
+        auto it = j.find(key);
+        if (it == j.end()) return std::nullopt;
+        if constexpr (sizeof...(rest) == 0) {
+            const nlohmann::json& leaf = *it;
+            if constexpr (std::is_same_v<T, double>) {
+                if (!leaf.is_number()) return std::nullopt;
+                return leaf.get<double>();
+            } else if constexpr (std::is_same_v<T, size_t>) {
+                if (!leaf.is_number_unsigned() && !leaf.is_number_integer()) return std::nullopt;
+                return static_cast<size_t>(leaf.get<unsigned long long>());
+            } else {
+                static_assert(!sizeof(T), "Unsupported type for getNumeric");
+            }
+        } else {
+            if (!it->is_object()) return std::nullopt;
+            return getNumeric<T>(*it, rest...); // recurse with remaining keys
+        }
+    }
+
+    template <typename MeasureFunc>
+    void sharedHelper(nlohmann::json& cache1, nlohmann::json& cache2, const std::string& name1, const std::string& name2, MeasureFunc measureFunction) {
+        constexpr double validityThreshold = 0.0; // anpassen wie gebraucht
+
+        auto c1SizeConf = getNumeric<double>(cache1, "size", "confidence");
+        auto c2SizeConf = getNumeric<double>(cache2, "size", "confidence");
+        auto c1FetchConf = getNumeric<double>(cache1, "fetchGranularity", "confidence");
+        auto c2FetchConf = getNumeric<double>(cache2, "fetchGranularity", "confidence");
+
+        if (!(c1SizeConf && c2SizeConf && c1FetchConf && c2FetchConf &&
+            *c1SizeConf > validityThreshold &&
+            *c2SizeConf > validityThreshold &&
+            *c1FetchConf > validityThreshold &&
+            *c2FetchConf > validityThreshold)) {
+            std::cout << "Could not measure valid " << name1 << " or " << name2
+                    << " cache or fetch granularities, skipping " << name1
+                    << " shared with " << name2 << " benchmark\n";
+            return;
+        }
+
+        auto c1Size = getNumeric<size_t>(cache1, "size", "size");
+        auto c1Fetch = getNumeric<size_t>(cache1, "fetchGranularity", "size");
+        auto c1Latency = getNumeric<double>(cache1, "latency", "mean");
+        auto c1MissPenalty = getNumeric<double>(cache1, "missPenalty", "value"); // falls verschachtelt, z.B. ("some", "missPenalty") anpassen
+
+        auto c2Size = getNumeric<size_t>(cache2, "size", "size");
+        auto c2Fetch = getNumeric<size_t>(cache2, "fetchGranularity", "size");
+        auto c2Latency = getNumeric<double>(cache2, "latency", "mean");
+        auto c2MissPenalty = getNumeric<double>(cache2, "missPenalty", "value");
+
+        if (!(c1Size && c1Fetch && c1Latency && c1MissPenalty &&
+            c2Size && c2Fetch && c2Latency && c2MissPenalty)) {
+            std::cout << "Missing metric values for " << name1 << " or " << name2 << ", skipping measurement.\n";
+            return;
+        }
+
+        std::cout << "[Resource Sharing] Running " << name1 << " shared with " << name2 << std::endl;
+
+        bool isShared = measureFunction(*c1Size, *c1Fetch, *c1Latency, *c1MissPenalty, *c2Size, *c2Fetch, *c2Latency, *c2MissPenalty);
+
+        if (isShared) {
+            if (!cache1.contains("sharedWith")) cache1["sharedWith"] = nlohmann::json::array();
+            if (!cache2.contains("sharedWith")) cache2["sharedWith"] = nlohmann::json::array();
+            cache1["sharedWith"].push_back(name2);
+            cache2["sharedWith"].push_back(name1);
+        }
+    }
+
     /**
      * @brief Convert command line arguments into a CLIOptions object.
      *
