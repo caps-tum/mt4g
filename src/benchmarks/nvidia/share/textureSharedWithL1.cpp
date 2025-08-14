@@ -5,7 +5,6 @@
 #include "utils/util.hpp"
 
 static constexpr auto SAMPLE_SIZE = DEFAULT_SAMPLE_SIZE;
-static constexpr auto TESTING_THREADS = 2;
 
 __global__ void textureSharedL1Kernel([[maybe_unused]]hipTextureObject_t tex, uint32_t *pChaseArrayL1, uint32_t *timingResultsTexture, uint32_t *timingResultsL1, size_t stepsTexture, size_t stepsL1) {
     if (blockIdx.x != 0 || threadIdx.x >= 2) return; // Ensure only two threads are used
@@ -18,42 +17,39 @@ __global__ void textureSharedL1Kernel([[maybe_unused]]hipTextureObject_t tex, ui
     size_t measureLengthTexture = util::min(stepsTexture, SAMPLE_SIZE);
     size_t measureLengthL1 = util::min(stepsL1, SAMPLE_SIZE);
 
-    __localBarrier(TESTING_THREADS);
+    for (uint32_t k = 0; k < stepsTexture; k++) {
+        #ifdef __HIP_PLATFORM_NVIDIA__
+        index = tex1Dfetch<uint32_t>(tex, index);
+        #endif
+    }
+
+
+    for (uint32_t k = 0; k < stepsL1; k++) {
+        index = __allowL1Read(pChaseArrayL1, index);
+    }
+
+
+    timingResultsTexture[0] += index;
+
+    //second round
+    for (uint32_t k = 0; k < measureLengthTexture; k++) {
+        start = clock();
+        #ifdef __HIP_PLATFORM_NVIDIA__
+        index = tex1Dfetch<uint32_t>(tex, index);
+        s_timings1[0] += index;
+        #endif
+        end = clock();
+        s_timings1[k] = end - start;
+    }
     
-    if (threadIdx.x == 0) {
-        for (uint32_t k = 0; k < stepsTexture; k++) {
-            #ifdef __HIP_PLATFORM_NVIDIA__
-            index = tex1Dfetch<uint32_t>(tex, index);
-            #endif
-        }
-    }
-
-    __localBarrier(TESTING_THREADS);
-
-    if (threadIdx.x == 1) {
-        for (uint32_t k = 0; k < stepsL1; k++) {
-            index = __allowL1Read(pChaseArrayL1, index);
-        }
-    }
-
-    __localBarrier(TESTING_THREADS);
-
-    if (threadIdx.x == 0) {
-        timingResultsTexture[0] += index;
-
-        //second round
-        for (uint32_t k = 0; k < measureLengthTexture; k++) {
-            start = clock();
-            #ifdef __HIP_PLATFORM_NVIDIA__
-            index = tex1Dfetch<uint32_t>(tex, index);
-            #endif
-            end = clock();
-            s_timings1[0] += index;
-            s_timings1[k] = end - start;
-        }
-    }
-
-    __localBarrier(TESTING_THREADS);
+    #ifdef __HIP_PLATFORM_NVIDIA__
+    asm volatile(
+        "mov.u32 %0, 0;\n\t"
+        : "=r"(index)
+        : 
+        : "memory"
+    );
+    #endif
 
     #ifdef __HIP_PLATFORM_NVIDIA__
     asm volatile(
@@ -64,41 +60,33 @@ __global__ void textureSharedL1Kernel([[maybe_unused]]hipTextureObject_t tex, ui
     );
     #endif
 
-    if (threadIdx.x == 1) {
-        timingResultsL1[0] += index;
+    timingResultsL1[0] += index;
 
-        for (uint32_t k = 0; k < measureLengthL1; k++) {
-            #ifdef __HIP_PLATFORM_NVIDIA__
-                uint32_t start, end;
-                uint32_t *addr = pChaseArrayL1 + index;
-                asm volatile (
-                    "mov.u32 %0, %%clock;\n\t"
-                    "ld.global.ca.u32 %1, [%3];\n\t"
-                    "st.shared.u32 [smem_ptr64], %1;\n\t"
-                    "mov.u32 %2, %%clock;\n\t"
-                    : "=r"(start)
-                    , "=r"(index)
-                    , "=r"(end)
-                    : "l"(addr)
-                    : "memory"
-                );
-            #endif
-            s_timings2[k] = end - start;
-        }
+    for (uint32_t k = 0; k < measureLengthL1; k++) {
+        #ifdef __HIP_PLATFORM_NVIDIA__
+            uint32_t start, end;
+            uint32_t *addr = pChaseArrayL1 + index;
+            asm volatile (
+                "mov.u32 %0, %%clock;\n\t"
+                "ld.global.ca.u32 %1, [%3];\n\t"
+                "st.shared.u32 [smem_ptr64], %1;\n\t"
+                "mov.u32 %2, %%clock;\n\t"
+                : "=r"(start)
+                , "=r"(index)
+                , "=r"(end)
+                : "l"(addr)
+                : "memory"
+            );
+        #endif
+        s_timings2[k] = end - start;
     }
 
-    __localBarrier(TESTING_THREADS);
-
-    if (threadIdx.x == 0) {
-        for (uint32_t k = 0; k < measureLengthTexture; k++) {
-            timingResultsTexture[k] = s_timings1[k];
-        }
+    for (uint32_t k = 1; k < measureLengthTexture; k++) {
+        timingResultsTexture[k] = s_timings1[k];
     }
 
-    if (threadIdx.x == 1) {
-        for (uint32_t k = 0; k < measureLengthL1; k++) {
-            timingResultsL1[k] = s_timings2[k];
-        }
+    for (uint32_t k = 1; k < measureLengthL1; k++) {
+        timingResultsL1[k] = s_timings2[k];
     }
 }
 

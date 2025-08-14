@@ -5,10 +5,9 @@
 #include "utils/util.hpp"
 
 static constexpr auto SAMPLE_SIZE = DEFAULT_SAMPLE_SIZE;
-static constexpr auto TESTING_THREADS = 2;
 
 __global__ void readOnlySharedL1Kernel(const uint32_t* __restrict__ pChaseArrayReadOnly, uint32_t* pChaseArrayL1, uint32_t *timingResultsReadOnly, uint32_t *timingResultsL1, size_t stepsReadOnly, size_t stepsL1) {
-    if (blockIdx.x != 0 || threadIdx.x >= 2) return; // Ensure only two threads are used
+    if (blockIdx.x != 0 || threadIdx.x != 1) return; // Ensure only two threads are used
     uint64_t start, end;
     uint32_t index = 0;
 
@@ -18,39 +17,37 @@ __global__ void readOnlySharedL1Kernel(const uint32_t* __restrict__ pChaseArrayR
     size_t measureLengthReadOnly = util::min(stepsReadOnly, SAMPLE_SIZE);
     size_t measureLengthL1 = util::min(stepsL1, SAMPLE_SIZE);
 
-    __localBarrier(TESTING_THREADS);
-
-    if (threadIdx.x == 0) {
-        for (uint32_t k = 0; k < stepsReadOnly; k++) {
-            index = __ldg(&pChaseArrayReadOnly[index]);
-        }
+    for (uint32_t k = 0; k < stepsReadOnly; k++) {
+        index = __ldg(&pChaseArrayReadOnly[index]);
     }
 
-    __localBarrier(TESTING_THREADS);
 
-    if (threadIdx.x == 1) {
-        for (uint32_t k = 0; k < stepsL1; k++) {
-            index = __allowL1Read(pChaseArrayL1, index);
-        }
+    for (uint32_t k = 0; k < stepsL1; k++) {
+        index = __allowL1Read(pChaseArrayL1, index);
     }
 
-    __localBarrier(TESTING_THREADS);
 
-    if (threadIdx.x == 0) {
-        timingResultsReadOnly[0] += index >> util::min(stepsReadOnly, 32);
+    timingResultsReadOnly[0] += index >> util::min(stepsReadOnly, 32);
 
-        //second round
-        for (uint32_t k = 0; k < measureLengthReadOnly; k++) {
-            start = clock();
-            index = __ldg(&pChaseArrayReadOnly[index]);
-            s_timings1[0] += index;
-            end = clock();
-            s_timings1[k] = end - start;
-        }
+    //second round
+    for (uint32_t k = 0; k < measureLengthReadOnly; k++) {
+        start = clock();
+        index = __ldg(&pChaseArrayReadOnly[index]);
+        s_timings1[0] += index;
+        end = clock();
+        s_timings1[k] = end - start;
     }
 
-    __localBarrier(TESTING_THREADS);
     
+    #ifdef __HIP_PLATFORM_NVIDIA__
+    asm volatile(
+        "mov.u32 %0, 0;\n\t"
+        : "=r"(index)
+        : 
+        : "memory"
+    );
+    #endif
+
     #ifdef __HIP_PLATFORM_NVIDIA__
     asm volatile(
         ".reg .u64 smem_ptr64;\n\t"
@@ -60,41 +57,35 @@ __global__ void readOnlySharedL1Kernel(const uint32_t* __restrict__ pChaseArrayR
     );
     #endif
 
-    if (threadIdx.x == 1) {
-        timingResultsL1[0] += index >> util::min(stepsL1, 32);
+    timingResultsL1[0] += index >> util::min(stepsL1, 32);
 
-        for (uint32_t k = 0; k < measureLengthL1; k++) {
-            #ifdef __HIP_PLATFORM_NVIDIA__
-                uint32_t start, end;
-                uint32_t *addr = pChaseArrayL1 + index;
-                asm volatile (
-                    "mov.u32 %0, %%clock;\n\t"
-                    "ld.global.ca.u32 %1, [%3];\n\t"
-                    "st.shared.u32 [smem_ptr64], %1;\n\t"
-                    "mov.u32 %2, %%clock;\n\t"
-                    : "=r"(start)
-                    , "=r"(index)
-                    , "=r"(end)
-                    : "l"(addr)
-                    : "memory"
-                );
-            #endif
-            s_timings2[k] = end - start;
-        }
+    for (uint32_t k = 0; k < measureLengthL1; k++) {
+        #ifdef __HIP_PLATFORM_NVIDIA__
+            uint32_t start, end;
+            uint32_t *addr = pChaseArrayL1 + index;
+            asm volatile (
+                "mov.u32 %0, %%clock;\n\t"
+                "ld.global.ca.u32 %1, [%3];\n\t"
+                "st.shared.u32 [smem_ptr64], %1;\n\t"
+                "mov.u32 %2, %%clock;\n\t"
+                : "=r"(start)
+                , "=r"(index)
+                , "=r"(end)
+                : "l"(addr)
+                : "memory"
+            );
+        #endif
+        s_timings2[k] = end - start;
     }
 
-    __localBarrier(TESTING_THREADS);
 
-    if (threadIdx.x == 0) {
-        for (uint32_t k = 0; k < measureLengthReadOnly; k++) {
-            timingResultsReadOnly[k] = s_timings1[k];
-        }
+    for (uint32_t k = 1; k < measureLengthReadOnly; k++) {
+        timingResultsReadOnly[k] = s_timings1[k];
     }
+    
 
-    if (threadIdx.x == 1) {
-        for (uint32_t k = 0; k < measureLengthL1; k++) {
-            timingResultsL1[k] = s_timings2[k];
-        }
+    for (uint32_t k = 1; k < measureLengthL1; k++) {
+        timingResultsL1[k] = s_timings2[k];
     }
 }
 
