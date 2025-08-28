@@ -3,7 +3,7 @@
 
 #include <hip/hip_runtime.h>
 
-__global__ void cuShareScalarL1Kernel(uint32_t *resultBuffer, uint32_t logicalId) {
+__global__ void translateKernel(uint32_t *resultBuffer, uint32_t logicalId) {
     resultBuffer[logicalId] = __getPhysicalCUId();
 }
 
@@ -14,7 +14,7 @@ namespace util {
 
         for (uint32_t i = 0; i < numCUs; ++i) {
             hipStream_t stream = util::createStreamForCU(i); // Not supported on NVIDIA, hence will not work
-            cuShareScalarL1Kernel<<<1, 1, 0, stream>>>(d_resultBuffer, i); // Not reliable on CDNA 3...
+            translateKernel<<<1, 1, 0, stream>>>(d_resultBuffer, i); // Not reliable on CDNA 3...
             // wait for this kernel to finish before destroying the stream
             util::hipCheck(hipStreamSynchronize(stream));
             util::hipCheck(hipStreamDestroy(stream));
