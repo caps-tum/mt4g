@@ -24,31 +24,6 @@ namespace util {
     bool hasFlukeOccured(const std::map<size_t, std::vector<uint32_t>>& data);
 
     /**
-     * @brief Estimate a reasonable block count for bandwidth kernels.
-     *
-     * @param data            Timing measurements used to gauge latency.
-     * @param threadBlockSize Block size used by the kernel.
-     * @return Suggested thread block count.
-     */
-    uint32_t tryComputeOptimalBandwidthBlockCount(const std::vector<uint32_t>& data, size_t threadBlockSize);
-
-    /**
-     * @brief Choose the most plausible cache line size candidate.
-     *
-     * @param changePoints Detected change points in bytes.
-     * @return Selected candidate size in bytes.
-     */
-    size_t tryGetMostLikelyLineSizeCandidate(const std::vector<size_t>& changePoints);
-
-    /**
-     * @brief Choose the most plausible cache size candidate.
-     *
-     * @param changePoints Detected cache size candidates.
-     * @return Selected candidate size in bytes.
-     */
-    size_t tryGetMostLikelyCacheSizeCandidate(const std::vector<size_t>& changePoints);
-
-    /**
      * @brief Compute the segment size closest to @p target that divides @p base.
      *
      * @param base    Base size that will be divided.

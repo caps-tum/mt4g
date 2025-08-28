@@ -86,52 +86,7 @@ namespace util {
         noiseTol += 1; // 0 = problems
 
         return !util::isAlmostMonotonic(averages, noiseTol, spikeTol); 
-    }
-
-    size_t tryGetMostLikelyLineSizeCandidate(const std::vector<size_t>& changePoints) {
-        if (changePoints.empty()) return 0;
-
-        size_t candidate = changePoints.front();
-
-        size_t nearestPowerOf2 = util::closestPowerOfTwo(candidate);
-
-        // Cache Line Size is most likely a power of 2
-        if (std::find(changePoints.begin(), changePoints.end(), nearestPowerOf2) != changePoints.end()) {
-            return nearestPowerOf2;
-        }
-
-        return candidate;
-    }
-
-    size_t tryGetMostLikelyCacheSizeCandidate(const std::vector<size_t>& changePoints) {
-        // best bet as a cache size will most likely be (near) a power of two
-        return pickMostTrailingZeros(changePoints);
-    }
-
-    // Not working
-    uint32_t tryComputeOptimalBandwidthBlockCount(const std::vector<uint32_t>& latencyTimingResults, size_t threadBlockSize) {
-        // Each CU has util::getSIMDsPerCU() (= 4 in CDNA 2) SIMD Units, each can execute util::getWarpSize() (= 64 in CDNA 2). 
-        // Multiply that by the amount of CUs to get the maximum number of threads that can be scheduled concurrently. However, this does not account for
-        // latency hiding
-        uint32_t maxConcurrentlySchedulableGlobalThreads = util::getNumberOfComputeUnits() * util::getSIMDsPerCU() * util::getWarpSize();
-
-        // No Measurements => we cannot compute "optimal" latency hiding intervals
-        if (latencyTimingResults.empty()) return maxConcurrentlySchedulableGlobalThreads / threadBlockSize;
-
-        auto averageRaw = util::average(latencyTimingResults);
-
-        // This supresses TLB Miss outliers that are irrelevant for bandwidth benchmarks
-        auto cappedAtAvg = util::cap(latencyTimingResults, (uint32_t)averageRaw);
-
-        // We use this average to predict how many threads the scheduler needs to hide latencies while keeping scheduling overhead minimal
-        auto average = util::average(cappedAtAvg);
-
-        // This is how many threads the scheduler should need to handle latency hiding somewhat well while also not having too much overhead
-        auto threads = maxConcurrentlySchedulableGlobalThreads * (uint32_t)average;
-
-        // In my testing the optimal value tended to be the nearest power of 2 of the measured threads value
-        return util::closestPowerOfTwo(threads / threadBlockSize);
-    }
+    }   
 
     std::tuple<size_t, double> tryComputeNearestSegmentSize(size_t base, size_t target) {
         if (target == 0) {
@@ -139,15 +94,14 @@ namespace util {
             return { base, 0.0 };
         }
         double raw = static_cast<double>(base) / static_cast<double>(target);
-        double rounded = std::round(raw);                // round to nearest integer
+        double rounded = std::round(raw); // round to nearest integer
         size_t divisor = static_cast<size_t>(rounded);
-        if (divisor == 0) divisor = 1;                    // avoid division by zero again
+        if (divisor == 0) divisor = 1; // avoid division by zero again
 
         size_t new_base = base / divisor;
 
         // similarity: how close divisor is to original target, normalized to [0,1]
-        double similarity = 1.0 - std::fabs(static_cast<double>(base/divisor) - static_cast<double>(target))
-                            / static_cast<double>(target);
+        double similarity = 1.0 - std::fabs(static_cast<double>(base/divisor) - static_cast<double>(target)) / static_cast<double>(target);
 
         if (similarity < 0.0) similarity = 0.0;
 
