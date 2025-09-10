@@ -33,6 +33,8 @@ int main(int argc, char* argv[]) {
 
     std::string fancyName = deviceProperties.name;
 
+    std::cout << "[mt4g] Starting Benchmarks on " << fancyName << std::endl;
+
     std::filesystem::path graphDir = "results/" + fancyName;
     if (opts.graphs || opts.rawData || opts.fullReport) {
         std::error_code ec;
