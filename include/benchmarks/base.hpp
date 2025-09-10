@@ -46,37 +46,37 @@ __device__ __forceinline__ uint32_t __getPhysicalCUId() {
     #endif
 
     #ifdef __HIP_PLATFORM_AMD__
-return __smid();
+    return __smid();
 #endif
 }
 
 /**
- * @brief Query the warp identifier of the calling thread.
+ * @brief Query the SIMD (or warp on NVIDIA) identifier of the calling thread.
  *
- * @return Warp ID Register content.
+ * @return SIMD ID Register content.
  */
-__device__ __forceinline__ uint32_t __getWarpId() {
+__device__ __forceinline__ uint32_t __getSIMDId() {
     #ifdef __HIP_PLATFORM_NVIDIA__
-    uint32_t wid;
-    asm volatile ("mov.u32 %0, %warpid;" : "=r"(wid));
-    return wid;
+    uint32_t warpId;
+    asm volatile ("mov.u32 %0, %warpid;" : "=r"(warpId)); // While not optimal, it is sufficient for our purposes due to a warp being bound to a single SMSP during its lifetime. As of August 2025 it is not possible to natively determine the exectuing SMSP of a thread.
+    return warpId;
     #endif
     #ifdef __HIP_PLATFORM_AMD__
     // Read HW_ID into an SGPR, then extract fields.
     uint32_t hwid;
     asm volatile ("s_getreg_b32 %0, hwreg(HW_REG_HW_ID)" : "=s"(hwid));
 
-    // wave_id = bits [3:0]  (scheduler's wave slot within a SIMD)
-    // simd_id = bits [5:4]  (which SIMD within the CU)
-    const uint32_t wave_id =  hwid        & 0xF;   // [0..15]
-    //const uint32_t simd_id = (hwid >> 4)  & 0x3;   // [0..3]
+    // waveId = bits [3:0]  (scheduler's wave slot within a SIMD)
+    // simdId = bits [5:4]  (which SIMD within the CU)
+    //const uint32_t waveId =  hwid        & 0xF;   // [0..15]
+    const uint32_t simdId = (hwid >> 4)  & 0x3;   // [0..3]
 
-    return wave_id;  
+    return simdId;  
     #endif
 
     // Portable fallback
-    const uint32_t linear_tid = threadIdx.x + blockDim.x * (threadIdx.y + blockDim.y * threadIdx.z);
-    return linear_tid / warpSize;
+    const uint32_t linearTid = threadIdx.x + blockDim.x * (threadIdx.y + blockDim.y * threadIdx.z);
+    return linearTid / warpSize;
 }
 
 // While a bit sketchy it is sufficient for our purposes
@@ -347,6 +347,8 @@ __device__ __forceinline__ uint32_t __l3Read(uint32_t *baseAddress, uint32_t ind
     return result;
 }
 
+
+// Currently unused. Maybe interesting for future usage. Moves variables of various width in VGPRs to SGPRs 
 
 #define V_TO_SGPR32(dest_s, src_var) \
     asm volatile ( \

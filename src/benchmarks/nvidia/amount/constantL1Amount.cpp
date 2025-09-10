@@ -12,11 +12,11 @@ static constexpr auto GRACE = DEFAULT_GRACE_FACTOR;// Factor
 static constexpr auto TESTING_THREADS = 2;
 
 __global__ void constantL1AmountKernel(uint32_t *timingResultsBaseCore, uint32_t *timingResultsTestCore, size_t steps, size_t stride, uint32_t baseCore, uint32_t testCore) {
-    if (__getWarpId() == testCore / warpSize && threadIdx.x % warpSize == testCore % warpSize) {
-        // printf("testCore: %d __getWarpId: %d, threadIdx.x: %d\n", testCore, __getWarpId(), threadIdx.x);
+    if (__getSIMDId() == testCore / warpSize && threadIdx.x % warpSize == testCore % warpSize) {
+        // printf("testCore: %d __getSIMDId: %d, threadIdx.x: %d\n", testCore, __getSIMDId(), threadIdx.x);
         testCore = threadIdx.x;
-    } else if (__getWarpId() == baseCore / warpSize && threadIdx.x % warpSize == baseCore % warpSize) {
-        // printf("baseCore: %d __getWarpId: %d, threadIdx.x: %d\n", baseCore, __getWarpId(), threadIdx.x);
+    } else if (__getSIMDId() == baseCore / warpSize && threadIdx.x % warpSize == baseCore % warpSize) {
+        // printf("baseCore: %d __getSIMDId: %d, threadIdx.x: %d\n", baseCore, __getSIMDId(), threadIdx.x);
         baseCore = threadIdx.x;
     } else return;
 
