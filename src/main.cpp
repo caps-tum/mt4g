@@ -20,77 +20,6 @@
 static constexpr auto MIN_EXPECTED_LINE_SIZE = 4;// Bytes
 static constexpr auto VALIDITY_THRESHOLD = 0.5;// Factor
 
-// Variadic helper: safely drill into nested keys and extract numeric types.
-template <typename T, typename... Keys>
-std::optional<T> getNumeric(const nlohmann::json& j, const std::string& key, const Keys&... rest) {
-    auto it = j.find(key);
-    if (it == j.end()) return std::nullopt;
-    if constexpr (sizeof...(rest) == 0) {
-        const nlohmann::json& leaf = *it;
-        if constexpr (std::is_same_v<T, double>) {
-            if (!leaf.is_number()) return std::nullopt;
-            return leaf.get<double>();
-        } else if constexpr (std::is_same_v<T, size_t>) {
-            if (!leaf.is_number_unsigned() && !leaf.is_number_integer()) return std::nullopt;
-            return static_cast<size_t>(leaf.get<unsigned long long>());
-        } else {
-            static_assert(!sizeof(T), "Unsupported type for getNumeric");
-        }
-    } else {
-        if (!it->is_object()) return std::nullopt;
-        return getNumeric<T>(*it, rest...); // recurse with remaining keys
-    }
-}
-
-template <typename MeasureFunc>
-void sharedHelper(nlohmann::json& cache1, nlohmann::json& cache2, const std::string& name1, const std::string& name2, MeasureFunc measureFunction) {
-    constexpr double validityThreshold = 0.0; // anpassen wie gebraucht
-
-    auto c1SizeConf = getNumeric<double>(cache1, "size", "confidence");
-    auto c2SizeConf = getNumeric<double>(cache2, "size", "confidence");
-    auto c1FetchConf = getNumeric<double>(cache1, "fetchGranularity", "confidence");
-    auto c2FetchConf = getNumeric<double>(cache2, "fetchGranularity", "confidence");
-
-    if (!(c1SizeConf && c2SizeConf && c1FetchConf && c2FetchConf &&
-          *c1SizeConf > validityThreshold &&
-          *c2SizeConf > validityThreshold &&
-          *c1FetchConf > validityThreshold &&
-          *c2FetchConf > validityThreshold)) {
-        std::cout << "Could not measure valid " << name1 << " or " << name2
-                  << " cache or fetch granularities, skipping " << name1
-                  << " shared with " << name2 << " benchmark\n";
-        return;
-    }
-
-    auto c1Size = getNumeric<size_t>(cache1, "size", "size");
-    auto c1Fetch = getNumeric<size_t>(cache1, "fetchGranularity", "size");
-    auto c1Latency = getNumeric<double>(cache1, "latency", "mean");
-    auto c1MissPenalty = getNumeric<double>(cache1, "missPenalty", "value"); // falls verschachtelt, z.B. ("some", "missPenalty") anpassen
-
-    auto c2Size = getNumeric<size_t>(cache2, "size", "size");
-    auto c2Fetch = getNumeric<size_t>(cache2, "fetchGranularity", "size");
-    auto c2Latency = getNumeric<double>(cache2, "latency", "mean");
-    auto c2MissPenalty = getNumeric<double>(cache2, "missPenalty", "value");
-
-    if (!(c1Size && c1Fetch && c1Latency && c1MissPenalty &&
-          c2Size && c2Fetch && c2Latency && c2MissPenalty)) {
-        std::cout << "Missing metric values for " << name1 << " or " << name2 << ", skipping measurement.\n";
-        return;
-    }
-
-    std::cout << "[Resource Sharing] Running " << name1 << " shared with " << name2 << std::endl;
-
-    bool isShared = measureFunction(*c1Size, *c1Fetch, *c1Latency, *c1MissPenalty, *c2Size, *c2Fetch, *c2Latency, *c2MissPenalty);
-
-    if (isShared) {
-        if (!cache1.contains("sharedWith")) cache1["sharedWith"] = nlohmann::json::array();
-        if (!cache2.contains("sharedWith")) cache2["sharedWith"] = nlohmann::json::array();
-        cache1["sharedWith"].push_back(name2);
-        cache2["sharedWith"].push_back(name1);
-    }
-}
-
-
 int main(int argc, char* argv[]) {
     CLIOptions opts = util::parseCommandLine(argc, argv);
 
@@ -103,6 +32,8 @@ int main(int argc, char* argv[]) {
     auto deviceProperties = util::getDeviceProperties();
 
     std::string fancyName = deviceProperties.name;
+
+    std::cout << "[mt4g] Starting Benchmarks on " << fancyName << std::endl;
 
     std::filesystem::path graphDir = "results/" + fancyName;
     if (opts.graphs || opts.rawData || opts.fullReport) {
@@ -372,7 +303,7 @@ int main(int argc, char* argv[]) {
         }
 
         
-        auto l2LineSizeValue = getNumeric<size_t>(result, "memory", "l2", "lineSize", "value");
+        auto l2LineSizeValue = util::getNumeric<size_t>(result, "memory", "l2", "lineSize", "value");
         if (!l2LineSizeValue.has_value()) {
             if (l2FetchGranularity.confidence > VALIDITY_THRESHOLD) {
                 std::cout << "[L2] Line Size" << std::endl;
@@ -443,7 +374,7 @@ int main(int argc, char* argv[]) {
             CacheSizeResult l3FetchGranularity = benchmark::amd::measureL3FetchGranularity();
             result["memory"]["l3"]["fetchGranularity"] = l3FetchGranularity;
             */
-            auto l3LineSize = getNumeric<size_t>(result, "memory", "l3", "lineSize", "value");
+            auto l3LineSize = util::getNumeric<size_t>(result, "memory", "l3", "lineSize", "value");
             if (l3LineSize.has_value()) {
                 /* Not working yet because of Latency dep.
                 std::cout << "[L3] Miss Penalty" << std::endl;
@@ -784,22 +715,22 @@ int main(int argc, char* argv[]) {
         std::cout << "[Resource Sharing] Starting Benchmarks" << std::endl;
 
         if (opts.runConstant && opts.runL1) {
-            sharedHelper(result["memory"]["constant"]["l1"], result["memory"]["l1"],
+            util::sharedHelper(result["memory"]["constant"]["l1"], result["memory"]["l1"],
                          "Constant L1", "L1",
                          benchmark::nvidia::measureConstantL1AndL1Shared);
         }
         if (opts.runReadOnly && opts.runL1) {
-            sharedHelper(result["memory"]["readOnly"], result["memory"]["l1"],
+            util::sharedHelper(result["memory"]["readOnly"], result["memory"]["l1"],
                          "Read Only", "L1",
                          benchmark::nvidia::measureReadOnlyAndL1Shared);
         }
         if (opts.runTexture && opts.runL1) {
-            sharedHelper(result["memory"]["texture"], result["memory"]["l1"],
+            util::sharedHelper(result["memory"]["texture"], result["memory"]["l1"],
                          "Texture", "L1",
                          benchmark::nvidia::measureTextureAndL1Shared);
         }
         if (opts.runTexture && opts.runReadOnly) {
-            sharedHelper(result["memory"]["texture"], result["memory"]["readOnly"],
+            util::sharedHelper(result["memory"]["texture"], result["memory"]["readOnly"],
                          "Texture", "Read Only",
                          benchmark::nvidia::measureTextureAndReadOnlyShared);
         }

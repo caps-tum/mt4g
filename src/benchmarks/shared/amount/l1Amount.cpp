@@ -13,11 +13,11 @@ static constexpr auto TESTING_THREADS = 2;
 
 __global__ void l1AmountKernel(uint32_t* pChaseArrayBaseCore, uint32_t *pChaseArrayTestCore, uint32_t *timingResultsBaseCore, uint32_t *timingResultsTestCore, size_t steps, uint32_t baseCore, uint32_t testCore) {
 
-    if (__getWarpId() == testCore / warpSize && threadIdx.x % warpSize == testCore % warpSize) {
-        // printf("testCore: %d __getWarpId: %d, threadIdx.x: %d\n", testCore, __getWarpId(), threadIdx.x);
+    if (__getSIMDId() == testCore / warpSize && threadIdx.x % warpSize == testCore % warpSize) {
+        // printf("testCore: %d __getSIMDId: %d, threadIdx.x: %d\n", testCore, __getSIMDId(), threadIdx.x);
         testCore = threadIdx.x;
-    } else if (__getWarpId() == baseCore / warpSize && threadIdx.x % warpSize == baseCore % warpSize) {
-        // printf("baseCore: %d __getWarpId: %d, threadIdx.x: %d\n", baseCore, __getWarpId(), threadIdx.x);
+    } else if (__getSIMDId() == baseCore / warpSize && threadIdx.x % warpSize == baseCore % warpSize) {
+        // printf("baseCore: %d __getSIMDId: %d, threadIdx.x: %d\n", baseCore, __getSIMDId(), threadIdx.x);
         baseCore = threadIdx.x;
     } else return;
     
@@ -25,7 +25,7 @@ __global__ void l1AmountKernel(uint32_t* pChaseArrayBaseCore, uint32_t *pChaseAr
     __shared__ uint64_t s_timingResultsTestCore[MEASURE_SIZE];
 
     uint32_t core = __getPhysicalCUId();
-    uint32_t warp = __getWarpId();  
+    uint32_t warp = __getSIMDId();  
 
     uint32_t start, end;
     uint32_t index = 0;
@@ -81,20 +81,23 @@ __global__ void l1AmountKernel(uint32_t* pChaseArrayBaseCore, uint32_t *pChaseAr
 
     __localBarrier(TESTING_THREADS);
 
-    if (core != __getPhysicalCUId() || warp != __getWarpId()) {
+    if (core != __getPhysicalCUId() || warp != __getSIMDId()) {
         return; // Not on the same SM anymore
     }
+    
 
     if (threadIdx.x == baseCore) {
         for (uint32_t k = 1; k < measureLength; k++) {
             timingResultsBaseCore[k] = s_timingResultsBaseCore[k];
         }
+        //printf("%u = %u ;;;; BASE\n", baseCore, threadIdx.x);
     }
 
     if (threadIdx.x == testCore) {
         for (uint32_t k = 1; k < measureLength; k++) {
             timingResultsTestCore[k] = s_timingResultsTestCore[k];
         }
+        //printf("%u = %u ;;;; TEST\n", testCore, threadIdx.x);
     }
 }
 

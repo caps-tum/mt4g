@@ -120,10 +120,7 @@ namespace util {
         return result;
     }
 
-    std::tuple<size_t, size_t> adjustKiBBoundaries(size_t begin, size_t end,
-                                                   size_t minAllowed,
-                                                   size_t maxAllowed,
-                                                   bool strictUpper) {
+    std::tuple<size_t, size_t> adjustKiBBoundaries(size_t begin, size_t end, size_t minAllowed, size_t maxAllowed, bool strictUpper) {
         size_t adjustedBegin = begin;
         size_t adjustedEnd   = end;
 

@@ -5,10 +5,9 @@
 #include "utils/util.hpp"
 
 static constexpr auto SAMPLE_SIZE = DEFAULT_SAMPLE_SIZE;
-static constexpr auto TESTING_THREADS = 2;
 
 __global__ void textureSharedReadOnlyKernel([[maybe_unused]]hipTextureObject_t tex, const uint32_t* __restrict__ pChaseArrayReadOnly, uint32_t *timingResultsTexture, uint32_t *timingResultsReadOnly, size_t stepsTexture, size_t stepsReadOnly) {
-    if (blockIdx.x != 0 || threadIdx.x >= 2) return; // Ensure only two threads are used
+    if (blockIdx.x != 0 || threadIdx.x != 0) return; // Ensure only two threads are used
     uint32_t index = 0;
 
     __shared__ uint64_t s_timings1[SAMPLE_SIZE];
@@ -17,43 +16,41 @@ __global__ void textureSharedReadOnlyKernel([[maybe_unused]]hipTextureObject_t t
     size_t measureLengthTexture = util::min(stepsTexture, SAMPLE_SIZE);
     size_t measureLengthReadOnly = util::min(stepsReadOnly, SAMPLE_SIZE);
 
-    __localBarrier(TESTING_THREADS);
-
-    if (threadIdx.x == 0) {
-        for (uint32_t k = 0; k < stepsReadOnly; k++) {
-            #ifdef __HIP_PLATFORM_NVIDIA__
-            index = tex1Dfetch<uint32_t>(tex, index);
-            #endif
-        }
+    for (uint32_t k = 0; k < stepsReadOnly; k++) {
+        #ifdef __HIP_PLATFORM_NVIDIA__
+        index = tex1Dfetch<uint32_t>(tex, index);
+        #endif
     }
 
-    __localBarrier(TESTING_THREADS);
 
-    if (threadIdx.x == 1) {
-        for (uint32_t k = 0; k < stepsReadOnly; k++) {
-            index = __ldg(&pChaseArrayReadOnly[index]);
-        }
+    for (uint32_t k = 0; k < stepsReadOnly; k++) {
+        index = __ldg(&pChaseArrayReadOnly[index]);
     }
+    
 
-    __localBarrier(TESTING_THREADS);
+    timingResultsTexture[0] += index;
 
-    if (threadIdx.x == 0) {
-        timingResultsTexture[0] += index;
+    //second round
+    for (uint32_t k = 0; k < measureLengthTexture; k++) {
+        #ifdef __HIP_PLATFORM_NVIDIA__
+        uint64_t start = __timer();
+        index = tex1Dfetch<uint32_t>(tex, index);
+        s_timings1[0] += index; 
+        uint64_t end = __timer();
 
-        //second round
-        for (uint32_t k = 0; k < measureLengthTexture; k++) {
-            #ifdef __HIP_PLATFORM_NVIDIA__
-            uint64_t start = __timer();
-            index = tex1Dfetch<uint32_t>(tex, index);
-            uint64_t end = __timer();
-
-            s_timings1[k] = end - start;
-            s_timings1[0] += index; 
-            #endif
-        }
+        s_timings1[k] = end - start;
+        #endif
     }
+    
 
-    __localBarrier(TESTING_THREADS);
+    #ifdef __HIP_PLATFORM_NVIDIA__
+    asm volatile(
+        "mov.u32 %0, 0;\n\t"
+        : "=r"(index)
+        : 
+        : "memory"
+    );
+    #endif
 
     #ifdef __HIP_PLATFORM_NVIDIA__
     uint64_t s_MemSinkAddr;
@@ -64,46 +61,37 @@ __global__ void textureSharedReadOnlyKernel([[maybe_unused]]hipTextureObject_t t
     );
     #endif
 
-    if (threadIdx.x == 1) {
-        timingResultsReadOnly[0] += index;
+    timingResultsReadOnly[0] += index;
 
-        for (uint32_t k = 0; k < measureLengthReadOnly; k++) {
-            #ifdef __HIP_PLATFORM_NVIDIA__
-            uint64_t start, end;
-            const uint32_t* addr = pChaseArrayReadOnly + index;
+    for (uint32_t k = 0; k < measureLengthReadOnly; k++) {
+        #ifdef __HIP_PLATFORM_NVIDIA__
+        uint64_t start, end;
+        const uint32_t* addr = pChaseArrayReadOnly + index;
 
-            asm volatile ( 
-                "mov.u64 %0, %%clock64;\n\t" // start = clock()
-                "ld.global.nc.u32 %1, [%3];\n\t" // read-only load 
-                "st.shared.u32 [%4], %1;\n\t" // sink: force use of loaded value before proceeding
-                "mov.u64 %2, %%clock64;\n\t" // end = clock()
-                : "=l"(start) // uint64_t
-                , "=r"(index) // uint32_t
-                , "=l"(end) // uint64_t
-                : "l"(addr) // uint32_t*
-                , "l"(s_MemSinkAddr) // uint64_t* (shared memory sink)
-                : "memory"
-            );
+        asm volatile ( 
+            "mov.u64 %0, %%clock64;\n\t" // start = clock()
+            "ld.global.nc.u32 %1, [%3];\n\t" // read-only load 
+            "st.shared.u32 [%4], %1;\n\t" // sink: force use of loaded value before proceeding
+            "mov.u64 %2, %%clock64;\n\t" // end = clock()
+            : "=l"(start) // uint64_t
+            , "=r"(index) // uint32_t
+            , "=l"(end) // uint64_t
+            : "l"(addr) // uint32_t*
+            , "l"(s_MemSinkAddr) // uint64_t* (shared memory sink)
+            : "memory"
+        );
 
-            s_timings2[k] = end - start; 
-            #endif
-        }
+        s_timings2[k] = end - start; 
+        #endif
+    }
+    
+
+    for (uint32_t k = 1; k < measureLengthTexture; k++) {
+        timingResultsTexture[k] = s_timings1[k];
     }
 
-    __localBarrier(TESTING_THREADS);
-
-    if (threadIdx.x == 0) {
-        for (uint32_t k = 0; k < measureLengthTexture; k++) {
-            timingResultsTexture[k] = s_timings1[k];
-        }
-        timingResultsTexture[0] += index; // dead code elimination prevention
-    }
-
-    if (threadIdx.x == 1) {
-        for (uint32_t k = 0; k < measureLengthReadOnly; k++) {
-            timingResultsReadOnly[k] = s_timings2[k];
-        }
-        timingResultsReadOnly[0] += index; // dead code elimination prevention
+    for (uint32_t k = 1; k < measureLengthReadOnly; k++) {
+        timingResultsReadOnly[k] = s_timings2[k];
     }
 }
 
