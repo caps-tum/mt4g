@@ -34,7 +34,7 @@ A suitable HIP environment can be obtained most easily via
 
 ```bash
 spack install hip           # for AMD targets
-spack install hip cuda      # includes NVCC backend for NVIDIA targets
+spack install hip+cuda      # includes NVCC backend for NVIDIA targets
 spack load hip              # sets HIP_PATH and exposes hipcc
 ```
 
@@ -160,3 +160,4 @@ Uni. = Unique
 R/W = Read Bandwidth and Write Bandwidth
 FB = Fallback Benchmark implemented
 API = HIP Device Prop / HSA / AMDGPU KFD Kernel Module
+
