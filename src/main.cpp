@@ -33,6 +33,7 @@ int main(int argc, char* argv[]) {
     auto deviceProperties = util::getDeviceProperties();
 
     std::string fancyName = deviceProperties.name;
+
     std::cout << "[mt4g] Starting Benchmarks on " << fancyName << std::endl;
 
     std::string fancyFileName;
@@ -43,7 +44,7 @@ int main(int argc, char* argv[]) {
         fancyFileName = opts.fileName;
     }
 
-    std::filesystem::path graphDir = opts.location + "results/" + fancyFileName;
+    std::filesystem::path graphDir = opts.location / ("results/" + fancyFileName);
     if (opts.graphs || opts.rawData || opts.fullReport) {
         std::error_code ec;
         std::filesystem::create_directories(graphDir, ec);
@@ -754,7 +755,7 @@ int main(int argc, char* argv[]) {
     if (opts.useStdout) {
         std::cout << result.dump(4) << std::endl;
     } else {
-        std::ofstream jsonFile(opts.location + fancyFileName + ".json");
+        std::ofstream jsonFile(opts.location / (fancyFileName + ".json"));
         if (!jsonFile) {
             std::cerr << "Could not write JSON file '" << fancyFileName << ".json'" << std::endl;
             return EXIT_FAILURE;
