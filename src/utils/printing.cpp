@@ -22,7 +22,7 @@ namespace util {
         opts.graphs = false;
         opts.rawData = false;
         opts.fullReport = false;
-        opts.writeJson = false;
+        opts.useStdout = false;
         opts.randomize = false;
         opts.runSilently = false;
 
@@ -47,15 +47,19 @@ namespace util {
             // ------- Core options -------
             ("d,device-id", "Int: GPU ID to use",
                 cxxopts::value<int>()->default_value("0"))
+            ("f,file", "Specify name of output files",
+                cxxopts::value<std::string>()->default_value(""))
             ("g,graphs", "Generate graphs for each benchmark",
                 cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
+            ("l,location", "Specify location of output files",
+                cxxopts::value<std::string>()->default_value(""))
             ("o,raw", "Write raw timing data",
                 cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
             ("p,report", "Create Markdown report in output directory",
                 cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
-            ("j,json", "Write final JSON to <GPU_NAME>.json in current directory",
-                cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
             ("r,random", "Randomize P-Chase arrays",
+                cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
+            ("s,stdout", "Use stdout to write the final JSON result",
                 cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
             ("q,quiet", "Suppress intermediate console output",
                 cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
@@ -108,11 +112,13 @@ namespace util {
         }
 
         // ------- Core options -------
+        opts.fileName   = result["file"].as<std::string>();
+        opts.location   = result["location"].as<std::string>();
         opts.deviceId   = result["device-id"].as<int>();
         opts.graphs     = result["graphs"].as<bool>();
         opts.rawData    = result["raw"].as<bool>();
         opts.fullReport = result["report"].as<bool>();
-        opts.writeJson  = result["json"].as<bool>();
+        opts.useStdout  = result["stdout"].as<bool>();
         opts.randomize  = result["random"].as<bool>();
         opts.runSilently= result["quiet"].as<bool>();
 
