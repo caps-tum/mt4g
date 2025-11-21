@@ -2,6 +2,7 @@
 #include <nlohmann/json.hpp>
 #include <hip/hip_runtime.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <fstream>
 #include <filesystem>
 #include <vector>
@@ -35,7 +36,15 @@ int main(int argc, char* argv[]) {
 
     std::cout << "[mt4g] Starting Benchmarks on " << fancyName << std::endl;
 
-    std::filesystem::path graphDir = "results/" + fancyName;
+    std::string fancyFileName;
+    if (opts.fileName.empty()) {
+        fancyFileName.resize(fancyName.size());
+        std::replace_copy(fancyName.begin(), fancyName.end(), fancyFileName.begin(), ' ', '_');
+    } else {
+        fancyFileName = opts.fileName;
+    }
+
+    std::filesystem::path graphDir = opts.location / ("results/" + fancyFileName);
     if (opts.graphs || opts.rawData || opts.fullReport) {
         std::error_code ec;
         std::filesystem::create_directories(graphDir, ec);
@@ -240,7 +249,7 @@ int main(int argc, char* argv[]) {
                 util::exportChartsReduced(l1LineSize.timings, util::average<uint32_t>, fancyName + " - L1 Line Size", {}, "Bytes", "Cycles", graphDir.string());
             }
             if (opts.rawData) {
-                util::writeNestedMapToFile(l1LineSize.timings, (graphDir / (fancyName + " - L1 Line Size.txt")).string());
+                util::writeNestedMapToFile(l1LineSize.timings, (graphDir / (fancyFileName + "__L1_Line_Size.txt")).string());
             }
 
             if (l1LineSize.confidence > VALIDITY_THRESHOLD) {
@@ -270,9 +279,9 @@ int main(int argc, char* argv[]) {
             util::exportChartsMinMaxAvg(l1FetchGranularity.timings, fancyName + " - L1 Fetch Granularity", {l1FetchGranularity.size}, "Bytes", "Cycles", graphDir.string());
         }
         if (opts.rawData) {
-            util::writeVectorToFile(l1Latency.timings, (graphDir / (fancyName + " - L1 Latency.txt")).string());
-            util::writeMapToFile(l1FetchGranularity.timings, (graphDir / (fancyName + " - L1 Fetch Granularity.txt")).string());
-            util::writeMapToFile(l1Size.timings, (graphDir / (fancyName + " - L1 Size.txt")).string());
+            util::writeVectorToFile(l1Latency.timings, (graphDir / (fancyFileName + "__L1_Latency.txt")).string());
+            util::writeMapToFile(l1FetchGranularity.timings, (graphDir / (fancyFileName + "__L1_Fetch_Granularity.txt")).string());
+            util::writeMapToFile(l1Size.timings, (graphDir / (fancyFileName + "__L1_Size.txt")).string());
         }
 
         std::cout << "[L1] Benchmarks finished" << std::endl;
@@ -298,7 +307,7 @@ int main(int argc, char* argv[]) {
                 util::exportChartMinMaxAvgRed(l2SegmentSize.timings, fancyName + " - L2 Segment Size", {l2SegmentSize.size}, "Bytes", "Cycles", graphDir.string());
             }
             if (opts.rawData) {
-                util::writeMapToFile(l2SegmentSize.timings, (graphDir / (fancyName + " - L2 Segment Size.txt")).string());
+                util::writeMapToFile(l2SegmentSize.timings, (graphDir / (fancyFileName + "__L2_Segment_Size.txt")).string());
             }
         }
 
@@ -313,7 +322,7 @@ int main(int argc, char* argv[]) {
                     util::exportChartsReduced(l2LineSize.timings, util::average<uint32_t>, fancyName + " - L2 Line Size", {}, "Bytes", "Cycles", graphDir.string());
                 }
                 if (opts.rawData) {
-                    util::writeNestedMapToFile(l2LineSize.timings, (graphDir / (fancyName + " - L2 Line Size.txt")).string());
+                    util::writeNestedMapToFile(l2LineSize.timings, (graphDir / (fancyFileName + "__L2_Line_Size.txt")).string());
                 }
                 if (l2LineSize.confidence > VALIDITY_THRESHOLD) {
                     l2LineSizeValue = l2LineSize.size;
@@ -348,8 +357,8 @@ int main(int argc, char* argv[]) {
             util::exportChartsMinMaxAvg(l2FetchGranularity.timings, fancyName + " - L2 Fetch Granularity", {l2FetchGranularity.size}, "Bytes", "Cycles", graphDir.string());
         }
         if (opts.rawData) {
-            util::writeVectorToFile(l2Latency.timings, (graphDir / (fancyName + " - L2 Latency.txt")).string());
-            util::writeMapToFile(l2FetchGranularity.timings, (graphDir / (fancyName + " - L2 Fetch Granularity.txt")).string());
+            util::writeVectorToFile(l2Latency.timings, (graphDir / (fancyFileName + "__L2_Latency.txt")).string());
+            util::writeMapToFile(l2FetchGranularity.timings, (graphDir / (fancyFileName + "__L2_Fetch_Granularity.txt")).string());
         }
 
         std::cout << "[L2] Benchmarks finished" << std::endl;
@@ -438,7 +447,7 @@ int main(int argc, char* argv[]) {
                 util::exportChartsReduced(constantL1LineSize.timings, util::average<uint32_t>, fancyName + " - Constant L1 Line Size", {}, "Bytes", "Cycles", graphDir.string());
             }
             if (opts.rawData) {
-                util::writeNestedMapToFile(constantL1LineSize.timings, (graphDir / (fancyName + " - Constant L1 Line Size.txt")).string());
+                util::writeNestedMapToFile(constantL1LineSize.timings, (graphDir / (fancyFileName + "__Constant_L1_Line_Size.txt")).string());
             }
 
             if (constantL1LineSize.confidence > VALIDITY_THRESHOLD) {
@@ -465,7 +474,7 @@ int main(int argc, char* argv[]) {
             CacheLatencyResult constantL15Latency = benchmark::nvidia::measureConstantL15Latency(8 * KiB, constantL1FetchGranularity.size);
             result["memory"]["constant"]["l1.5"]["latency"] = constantL15Latency;
             if (opts.rawData) {
-                util::writeVectorToFile(constantL15Latency.timings, (graphDir / (fancyName + " - Constant L1.5 Latency.txt")).string());
+                util::writeVectorToFile(constantL15Latency.timings, (graphDir / (fancyFileName + "__Constant_L1.5_Latency.txt")).string());
             }
         } else {
             std::cout << "Could not measure valid Constant L1 Size or Fetch Granularity, skipping Constant L1 Amount, Line Size, Miss Penalty and Constant L1.5 Latency benchmarks." << std::endl;
@@ -479,7 +488,7 @@ int main(int argc, char* argv[]) {
                 util::exportChartsReduced(constantL15LineSize.timings, util::average<uint32_t>, fancyName + " - Constant L1.5 Line Size", {}, "Bytes", "Cycles", graphDir.string());
             }
             if (opts.rawData) {
-                util::writeNestedMapToFile(constantL15LineSize.timings, (graphDir / (fancyName + " - Constant L1.5 Line Size.txt")).string());
+                util::writeNestedMapToFile(constantL15LineSize.timings, (graphDir / (fancyFileName + "__Constant_L1.5_Line_Size.txt")).string());
             }
         } else {
             std::cerr << "Could not measure valid Constant L1.5 Size or Fetch Granularity, skipping Constant L1.5 Line Size benchmarks." << std::endl;
@@ -491,11 +500,11 @@ int main(int argc, char* argv[]) {
             util::exportChartsMinMaxAvg(constantL15FetchGranularity.timings, fancyName + " - Constant L1.5 Fetch Granularity", {constantL15FetchGranularity.size}, "Bytes", "Cycles", graphDir.string());
         }
         if (opts.rawData) {
-            util::writeVectorToFile(constantL1Latency.timings, (graphDir / (fancyName + " - Constant L1 Latency.txt")).string());
-            util::writeMapToFile(constantL1FetchGranularity.timings, (graphDir / (fancyName + " - Constant L1 Fetch Granularity.txt")).string());
-            util::writeMapToFile(constantL1Size.timings, (graphDir / (fancyName + " - Constant L1 Size.txt")).string());
-            util::writeMapToFile(constantL15FetchGranularity.timings, (graphDir / (fancyName + " - Constant L1.5 Fetch Granularity.txt")).string());
-            util::writeMapToFile(constantL15Size.timings, (graphDir / (fancyName + " - Constant L1.5 Size.txt")).string());
+            util::writeVectorToFile(constantL1Latency.timings, (graphDir / (fancyFileName + "__Constant_L1_Latency.txt")).string());
+            util::writeMapToFile(constantL1FetchGranularity.timings, (graphDir / (fancyFileName + "__Constant_L1_Fetch_Granularity.txt")).string());
+            util::writeMapToFile(constantL1Size.timings, (graphDir / (fancyFileName + "__Constant_L1_Size.txt")).string());
+            util::writeMapToFile(constantL15FetchGranularity.timings, (graphDir / (fancyFileName + "__Constant_L1.5_Fetch_Granularity.txt")).string());
+            util::writeMapToFile(constantL15Size.timings, (graphDir / (fancyFileName + "__Constant_L1.5_Size.txt")).string());
         }
         std::cout << "[Constant] Benchmarks finished" << std::endl;
     }
@@ -522,7 +531,7 @@ int main(int argc, char* argv[]) {
                 util::exportChartsReduced(readOnlyLineSize.timings, util::average<uint32_t>, fancyName + " - Read Only Line Size", {}, "Bytes", "Cycles", graphDir.string());
             }
             if (opts.rawData) {
-                util::writeNestedMapToFile(readOnlyLineSize.timings, (graphDir / (fancyName + " - Read Only Line Size.txt")).string());
+                util::writeNestedMapToFile(readOnlyLineSize.timings, (graphDir / (fancyFileName + "__Read_Only_Line_Size.txt")).string());
             }
 
             if (readOnlyLineSize.confidence > VALIDITY_THRESHOLD) {
@@ -552,9 +561,9 @@ int main(int argc, char* argv[]) {
             util::exportChartsMinMaxAvg(readOnlyFetchGranularity.timings, fancyName + " - Read Only Fetch Granularity", {readOnlyFetchGranularity.size}, "Bytes", "Cycles", graphDir.string());
         }
         if (opts.rawData) {
-            util::writeVectorToFile(readOnlyLatency.timings, (graphDir / (fancyName + " - Read Only Latency.txt")).string());
-            util::writeMapToFile(readOnlyFetchGranularity.timings, (graphDir / (fancyName + " - Read Only Fetch Granularity.txt")).string());
-            util::writeMapToFile(readOnlySize.timings, (graphDir / (fancyName + " - Read Only Size.txt")).string());
+            util::writeVectorToFile(readOnlyLatency.timings, (graphDir / (fancyFileName + "__Read_Only_Latency.txt")).string());
+            util::writeMapToFile(readOnlyFetchGranularity.timings, (graphDir / (fancyFileName + "__Read_Only_Fetch_Granularity.txt")).string());
+            util::writeMapToFile(readOnlySize.timings, (graphDir / (fancyFileName + "__Read_Only_Size.txt")).string());
         }
         std::cout << "[Read Only] Benchmarks finished" << std::endl;
     }
@@ -581,7 +590,7 @@ int main(int argc, char* argv[]) {
                 util::exportChartsReduced(textureLineSize.timings, util::average<uint32_t>, fancyName + " - Texture Line Size", {}, "Bytes", "Cycles", graphDir.string());
             }
             if (opts.rawData) {
-                util::writeNestedMapToFile(textureLineSize.timings, (graphDir / (fancyName + " - Texture Line Size.txt")).string());
+                util::writeNestedMapToFile(textureLineSize.timings, (graphDir / (fancyFileName + "__Texture_Line_Size.txt")).string());
             }
 
             if (textureLineSize.confidence > VALIDITY_THRESHOLD) {
@@ -611,9 +620,9 @@ int main(int argc, char* argv[]) {
             util::exportChartsMinMaxAvg(textureFetchGranularity.timings, fancyName + " - Texture Fetch Granularity", {textureFetchGranularity.size}, "Bytes", "Cycles", graphDir.string());
         }
         if (opts.rawData) {
-            util::writeVectorToFile(textureLatency.timings, (graphDir / (fancyName + " - Texture Latency.txt")).string());
-            util::writeMapToFile(textureFetchGranularity.timings, (graphDir / (fancyName + " - Texture Fetch Granularity.txt")).string());
-            util::writeMapToFile(textureSize.timings, (graphDir / (fancyName + " - Texture Size.txt")).string());
+            util::writeVectorToFile(textureLatency.timings, (graphDir / (fancyFileName + "__Texture_Latency.txt")).string());
+            util::writeMapToFile(textureFetchGranularity.timings, (graphDir / (fancyFileName + "__Texture_Fetch_Granularity.txt")).string());
+            util::writeMapToFile(textureSize.timings, (graphDir / (fancyFileName + "__Texture_Size.txt")).string());
         }
         std::cout << "[Texture] Benchmarks finished" << std::endl;
     }
@@ -641,7 +650,7 @@ int main(int argc, char* argv[]) {
                 util::exportChartsReduced(scalarL1LineSize.timings, util::average<uint32_t>, fancyName + " - Scalar L1 Line Size", {}, "Bytes", "Cycles", graphDir.string());
             }
             if (opts.rawData) {
-                util::writeNestedMapToFile(scalarL1LineSize.timings, (graphDir / (fancyName + " - Scalar L1 Line Size.txt")).string());
+                util::writeNestedMapToFile(scalarL1LineSize.timings, (graphDir / (fancyFileName + "__Scalar_L1_Line_Size.txt")).string());
             }
 
             if (scalarL1LineSize.confidence > VALIDITY_THRESHOLD) {
@@ -668,9 +677,9 @@ int main(int argc, char* argv[]) {
             util::exportChartsMinMaxAvg(scalarL1FetchGranularity.timings, fancyName + " - Scalar L1 Fetch Granularity", {scalarL1FetchGranularity.size}, "Bytes", "Cycles", graphDir.string());
         }
         if (opts.rawData) {
-            util::writeVectorToFile(scalarL1Latency.timings, (graphDir / (fancyName + " - Scalar L1 Latency.txt")).string());
-            util::writeMapToFile(scalarL1FetchGranularity.timings, (graphDir / (fancyName + " - Scalar L1 Fetch Granularity.txt")).string());
-            util::writeMapToFile(scalarL1Size.timings, (graphDir / (fancyName + " - Scalar L1 Size.txt")).string());
+            util::writeVectorToFile(scalarL1Latency.timings, (graphDir / (fancyFileName + "__Scalar_L1_Latency.txt")).string());
+            util::writeMapToFile(scalarL1FetchGranularity.timings, (graphDir / (fancyFileName + "__Scalar_L1_Fetch_Granularity.txt")).string());
+            util::writeMapToFile(scalarL1Size.timings, (graphDir / (fancyFileName + "__Scalar_L1_Size.txt")).string());
         }
 
         std::cout << "[Scalar L1] Benchmarks finished" << std::endl;
@@ -682,7 +691,7 @@ int main(int argc, char* argv[]) {
         CacheLatencyResult sharedLatency = benchmark::measureSharedMemoryLatency();
         result["memory"]["shared"]["latency"] = sharedLatency;
         if (opts.rawData) {
-            util::writeVectorToFile(sharedLatency.timings, (graphDir / (fancyName + " - Shared Memory Latency.txt")).string());
+            util::writeVectorToFile(sharedLatency.timings, (graphDir / (fancyFileName + "__Shared_Memory_Latency.txt")).string());
         }
         std::cout << "[Shared Memory] Benchmarks finished" << std::endl;
     }
@@ -694,7 +703,7 @@ int main(int argc, char* argv[]) {
         CacheLatencyResult mainMemLatency = benchmark::measureMainMemoryLatency();
         result["memory"]["main"]["latency"] = mainMemLatency;
         if (opts.rawData) {
-            util::writeVectorToFile(mainMemLatency.timings, (graphDir / (fancyName + " - Main Memory Latency.txt")).string());
+            util::writeVectorToFile(mainMemLatency.timings, (graphDir / (fancyFileName + "__Main_Memory_Latency.txt")).string());
         }
 
         std::cout << "[Main Memory] Read Bandwidth" << std::endl;
@@ -742,15 +751,18 @@ int main(int argc, char* argv[]) {
     if (opts.fullReport) {
         util::writeMarkdownReport(graphDir, fancyName, result);
     }
-    if (opts.writeJson) {
-        std::ofstream jsonFile(fancyName + ".json");
+
+    if (opts.useStdout) {
+        std::cout << result.dump(4) << std::endl;
+    } else {
+        std::ofstream jsonFile(opts.location / (fancyFileName + ".json"));
         if (!jsonFile) {
-            std::cerr << "Could not write JSON file '" << fancyName << ".json'" << std::endl;
-        } else {
-            jsonFile << result.dump(4) << std::endl;
+            std::cerr << "Could not write JSON file '" << fancyFileName << ".json'" << std::endl;
+            return EXIT_FAILURE;
         }
+
+        jsonFile << result.dump(4) << std::endl;
     }
 
-    std::cout << result.dump(4) << std::endl;
-    return 0;
+    return EXIT_SUCCESS;
 }

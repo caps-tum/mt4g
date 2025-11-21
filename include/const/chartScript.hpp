@@ -114,5 +114,5 @@ ax.set_title(args.title)
 plt.tight_layout()
 outdir = Path(args.outdir)
 outdir.mkdir(parents=True, exist_ok=True)
-plt.savefig(outdir / f"{args.title}.png", dpi=dpi)
+plt.savefig(outdir / f"{args.title.replace("-", "").replace(" ", "_")}.png", dpi=dpi)
 )PY";
