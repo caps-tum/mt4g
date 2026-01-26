@@ -273,7 +273,17 @@ int main(int argc, char* argv[]) {
         } else {
             std::cout << "Could not measure valid L1 Size or Fetch Granularity, skipping L1 Line Size, Amount and Miss Penalty benchmarks." << std::endl;
         }
-        
+
+        if (l1Size.confidence > VALIDITY_THRESHOLD) {
+            std::cout << "[L1] Read Bandwidth per CU / MultiProcessor" << std::endl;
+            result["memory"]["l1"]["readBandwidth"] = {
+                {"value", benchmark::measureL1ReadBandwidthCU(l1Size.size)},
+                {"unit", "GiB/s"}
+            };
+        } else {
+            std::cout << "Could not measure valid L1 Size, skipping L1 Bandwidth benchmarks." << std::endl;
+        }
+
         if (opts.graphs) {
             util::exportChartMinMaxAvgRed(l1Size.timings, fancyName + " - L1 Size", {l1Size.size}, "Bytes", "Cycles", graphDir.string());
             util::exportChartsMinMaxAvg(l1FetchGranularity.timings, fancyName + " - L1 Fetch Granularity", {l1FetchGranularity.size}, "Bytes", "Cycles", graphDir.string());
