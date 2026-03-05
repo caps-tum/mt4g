@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.12)
 
-project(mt4g VERSION 1.1.1 LANGUAGES CXX)
+# fix compiler
+set(CMAKE_CXX_COMPILER hipcc)
+
+project(mt4g VERSION 1.2.0 LANGUAGES CXX)
 
 set(GPU_TARGET_ARCH "" CACHE STRING "The target GPU architecture")
 if(GPU_TARGET_ARCH STREQUAL "")
