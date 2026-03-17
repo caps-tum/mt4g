@@ -46,17 +46,24 @@ The following dependencies should be installed on the system:
 - nlohmann-json
 - cxxopts
 
-To build **mt4g**, run
+To build and install **mt4g**, run
 
 ```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Release -DGPU_TARGET_ARCH=<sm_XX|gfxXXX>
-cmake --build build/ -j $(nproc)
+cmake -S . -B build \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DGPU_TARGET_ARCH=<sm_XX|gfxXXX>
+```
+```bash
+cmake --build build --parallel
+```
+```bash
+cmake --install build
 ```
 
 ## Usage
 
 ```bash
-./build/mt4g [options]
+mt4g [options]
 ```
 
 Common options:
@@ -98,11 +105,11 @@ generated graphs with links to raw data.
 ## Repository layout
 
 ```
-include/   - Public headers and utilities
-results/   - Available sample results
-src/       - Benchmark implementation and CLI helpers
-docs/      - Additional documentation
-Makefile   - Build configuration
+include/          - Public headers and utilities
+results/          - Available sample results
+src/              - Benchmark implementation and CLI helpers
+docs/             - Additional documentation
+CMakeLists.txt    - Build configuration
 ```
 
 See [docs/usage.md](docs/usage.md) for a comprehensive description of the

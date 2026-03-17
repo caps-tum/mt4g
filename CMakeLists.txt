@@ -66,3 +66,5 @@ endif()
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/src/*.cpp")
 
 add_executable(mt4g ${SOURCES})
+
+install(TARGETS mt4g DESTINATION bin)
