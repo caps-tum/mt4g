@@ -30,7 +30,7 @@ The project has been verified with CUDA 12.8 and `hipcc` 6.3.3.
 ## Build
 
 A suitable HIP environment can be obtained most easily via
-[Spack](https://spack.io):
+[Spack](https://spack.readthedocs.io/en/latest/getting_started.html):
 
 ```bash
 spack install hip           # for AMD targets
@@ -39,20 +39,24 @@ spack load hip              # sets HIP_PATH and exposes hipcc
 ```
 
 Make sure to set `HIP_PATH` and `CUDA_PATH` when compiling for NVIDIA.
-Choose the desired GPU architecture and invoke the build:
-Note that you may have to run make twice if it fails because of missing dependencies.
+Choose the desired GPU architecture and invoke the build.
+
+The following dependencies should be installed on the system:
+
+- nlohmann-json
+- cxxopts
+
+To build **mt4g**, run
 
 ```bash
-make -j$(nproc) GPU_TARGET_ARCH=<sm_XX|gfxXXX>
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DGPU_TARGET_ARCH=<sm_XX|gfxXXX>
+cmake --build build/ -j $(nproc)
 ```
-
-External dependencies (`cxxopts`, `nlohmann/json`) are fetched automatically
-when missing.
 
 ## Usage
 
 ```bash
-./mt4g [options]
+./build/mt4g [options]
 ```
 
 Common options:
