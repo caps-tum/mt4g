@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 3.12)
 
-# fix compiler
 set(CMAKE_CXX_COMPILER hipcc)
 
 project(mt4g VERSION 1.2.0 LANGUAGES CXX)
