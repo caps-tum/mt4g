@@ -1,21 +1,31 @@
 # mt4g - Memory Topology 4 GPUs
 
-**mt4g** is a HIP‑based collection of microbenchmarks that explores the memory
-hierarchy of modern GPUs. It measures cache sizes, line sizes, latencies,
-resource‑sharing behaviour, ... on both NVIDIA and AMD hardware and emits automatically 
-evaluated results as structured JSON.
+**mt4g** is a vendor-agnostic collection of microbenchmarks and APIs that
+explores the compute and memory topologies of both AMD and NVIDIA GPUs based on
+the HIP toolchain. By capturing system properties such as the number of SMs/CUs,
+warp size, memory and cache sizes, cache line sizes, load and store latencies
+as well as exposing deep cache subsystems and their physical layouts, it
+provides critical support for GPU performance modeling and analysis within one
+unified interface.
+
+## Overview
+
+The **mt4g** CLI tool enables a unified and cross-platform introspection of the
+hardware topology of GPUs and thus provides crucial information that is either
+scattered throughout vendor-specific APIs and data sheets or otherwise
+programmatically unavailable. Key features include:
+
+- Compilation of existing APIs and over 50 microbenchmarks for statistical
+  topology attribute measurement
+- Unified build system for AMD (`gfxXXXX`) and NVIDIA (`sm_XX`) targets
+- Comprehensive report of collected benchmark results as structured JSON with
+  optional plot generation for visualization
+
+The research paper of this work can be found [here](https://doi.org/10.1145/3731599.3767518).
 
 ## Available sample results
 
 See the `sample_results` folder.
-
-## Features
-
-- Unified build system for NVIDIA (`sm_XX`) and AMD (`gfxXXXX`) targets
-- Benchmarks for L1/L2/L3 caches, scalar caches, shared and main memory
-- Optional NVIDIA‑specific constant, read‑only and texture cache tests
-- Graph generation and raw timing export
-- JSON output summarising all measured metrics
 
 ## Requirements
 
