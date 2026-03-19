@@ -12,6 +12,7 @@
 #include <nlohmann/json.hpp>
 #include <sstream>
 
+#include "version.hpp"
 #include "typedef/cliOptions.hpp"
 
 namespace util {
@@ -113,11 +114,7 @@ namespace util {
             std::cout << parser.help({""}) << std::endl;
             std::exit(EXIT_SUCCESS);
         } else if (result.count("version")) {
-#ifdef MT4G_VERSION
             std::cout << "mt4g " << MT4G_VERSION << std::endl;
-#else
-            std::cout << "version unknown" << std::endl;
-#endif
             std::exit(EXIT_SUCCESS);
         }
 
