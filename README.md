@@ -49,21 +49,20 @@ The following dependencies should be installed on the system:
 To build and install **mt4g**, run
 
 ```bash
-cmake -S . -B build \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DGPU_TARGET_ARCH=<sm_XX|gfxXXX>
-```
-```bash
-cmake --build build --parallel
-```
-```bash
-cmake --install build
+git clone https://github.com/caps-tum/mt4g.git
+cd mt4g
+mkdir build && cd build
+cmake .. -DGPU_TARGET_ARCH=<sm_XX|gfxXXX>
+# build options:
+# -DCMAKE_BUILD_TYPE=<Release|Debug>             -- to choose between release and debug builds
+# -DCMAKE_INSTALL_PREFIX=<install_prefix>        -- to set the install destination (default on UNIX platforms: /usr/local)
+make all install -j $(nproc)
 ```
 
 ## Usage
 
 ```bash
-mt4g [options]
+<install_prefix>/bin/mt4g [options]
 ```
 
 Common options:
