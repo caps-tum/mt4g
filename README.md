@@ -17,53 +17,58 @@ programmatically unavailable. Key features include:
 
 - Compilation of existing APIs and over 50 microbenchmarks for statistical
   topology attribute measurement
-- Unified build system for AMD (`gfxXXXX`) and NVIDIA (`sm_XX`) targets
+- Unified build system for AMD and NVIDIA targets
 - Comprehensive report of collected benchmark results as structured JSON with
   optional plot generation for visualization
 
 The research paper of this work can be found [here](https://doi.org/10.1145/3731599.3767518).
 
-## Available sample results
+## Installation
 
-See the `sample_results` folder.
+### Dependencies
 
-## Requirements
+- ROCm or CUDA backend including drivers, compilers and libraries for AMD or
+  NVIDIA targets respectively
+- HIP SDK with the `hipcc` compiler
+- `nlohmann-json` for JSON output
+- `cxxopts` for CLI parsing
+- Python 3 including the `matplotlib`, `pandas` and `numpy` packages for
+  graphical plots
 
-    - HIP SDK with the `hipcc` compiler
-    - GPU drivers and runtime libraries
-    - `HIP_PATH` environment variable pointing to the HIP installation
-    - `GPU_TARGET_ARCH` set to the desired architecture (e.g. `sm_70`, `gfx90a`)
-    - Python 3 with the `matplotlib`, `pandas` and `numpy` packages for graph generation
-
-The project has been verified with CUDA 12.8 and `hipcc` 6.3.3.
-
-## Build
-
-A suitable HIP environment can be obtained most easily via
+A suitable HIP environment can for instance be obtained via
 [Spack](https://spack.readthedocs.io/en/latest/getting_started.html):
 
 ```bash
-spack install hip           # for AMD targets
-spack install hip+cuda      # includes NVCC backend for NVIDIA targets
-spack load hip              # sets HIP_PATH and exposes hipcc
+spack install hip           # includes ROCm backend for AMD targets
+spack install hip+cuda      # includes CUDA backend for NVIDIA targets
+
+spack load hip              # exports binaries and libraries
 ```
 
-Make sure to set `HIP_PATH` and `CUDA_PATH` when compiling for NVIDIA.
-Choose the desired GPU architecture and invoke the build.
+The `HIP_PATH` environment variable should be set to the HIP installation
+directory. Please export manually if not automatically set by `spack`, e.g.
 
-The following dependencies should be installed on the system:
+```bash
+export HIP_PATH=<path_to_spack_installation>/opt/spack/<system_architecture>/hip-<version>-<hash>
+```
 
-- nlohmann-json
-- cxxopts
+Additionally for NVIDIA targets, the `CUDA_PATH` environment variable needs to
+be set to the CUDA installation directory.
 
-To build and install **mt4g**, run
+**mt4g** has been tested successfully with `hip@6.3.3` and `cuda@12.8`.
+
+### Build
+
+Use the `GPU_TARGET_ARCH` build flag to select the target GPU architecture for
+AMD (e.g. `gfx90a`) and NVIDIA (e.g. `sm_90`) respectively. To build and
+install **mt4g**, run
 
 ```bash
 git clone https://github.com/caps-tum/mt4g.git
 cd mt4g
 mkdir build && cd build
-cmake .. -DGPU_TARGET_ARCH=<sm_XX|gfxXXX>
-# build options:
+cmake .. -DGPU_TARGET_ARCH=<gfxXXX|sm_XX>
+# optional build flags:
 # -DCMAKE_BUILD_TYPE=<Release|Debug>             -- to choose between release and debug builds
 # -DCMAKE_INSTALL_PREFIX=<install_prefix>        -- to set the install destination (default on UNIX platforms: /usr/local)
 make all install -j $(nproc)
@@ -75,7 +80,7 @@ make all install -j $(nproc)
 <install_prefix>/bin/mt4g [options]
 ```
 
-Common options:
+### Options
 
 | Option | Description |
 | ------ | ----------- |
@@ -87,18 +92,24 @@ Common options:
 | `-p, --report` | Create Markdown report in output directory |
 | `-r, --random` | Randomize P-Chase arrays |
 | `-s, --stdout` | Dump final JSON result into stdout |
-| `-q, --quiet` | Reduce console output |
-| `--l1`, `--l2`, `--l3` | Run cache benchmarks for selected levels |
-| `--scalar`, `--shared`, `--memory` | Run scalar, shared and main memory tests |
-| `--constant`, `--readonly`, `--texture` | NVIDIA specific cache benchmarks |
+| `-q, --quiet` | Only write the final JSON to stdout |
+| `--l1` | Run L1 cache benchmarks |
+| `--l2` | Run L2 cache benchmarks |
+| `--l3` | Run L3 cache benchmarks (AMD only) |
+| `--scalar` | Run AMD scalar cache benchmarks |
+| `--constant` | Run NVIDIA constant cache benchmarks |
+| `--readonly` | Run NVIDIA read-only cache benchmarks |
+| `--texture` | Run NVIDIA texture cache benchmarks |
+| `--shared` | Run shared memory benchmarks |
+| `--memory` | Run main memory benchmarks |
+| `--departuredelay` | Run departure delay benchmarks |
 | `--resourceshare` | Run resource sharing benchmarks |
-| `-v, --version` | Show version of mt4g |
-| `-h, --help` | Show full help |
+| `-v, --version` | Display the version of mt4g and exit |
+| `-h, --help` | Display a detailed help message and exit |
 
-If no benchmark group is chosen all available groups are executed. Unsupported
-groups are disabled automatically depending on the platform.
-
-Make sure to have exclusive GPU access, otherwise results are far less reliable.
+If no benchmark group is chosen, all available groups are executed. Unsupported
+groups are disabled automatically depending on the platform. Exclusive GPU
+access is recommended for more reliable measurement results.
 
 ### Output
 
@@ -106,10 +117,20 @@ Usually, benchmark results are written as structured JSON into the file
 `<GPU_NAME>.json` of the current working directory. However, the name and path
 of the output file and directory may be changed through the flags `-f`/`--file`
 and `-l`/`--location` respectively. With `-s`/`--stdout`, the final JSON output
-file may be dumped into `stdout` instead. When graph, raw or report output is
-enabled the files are written to a directory named after the detected GPU. The
-`--report` flag writes a `README.md` containing the JSON summary and embeds all
-generated graphs with links to raw data.
+file may be dumped into `stdout` instead. When `--graphs`, `--raw` or `--report`
+is enabled, additional files are written to `results/<GPU_NAME>`. The `--report`
+flag generates a `README.md` that embeds all graphs and links to the raw data.
+
+If you would like to contribute results for hardware not yet covered, please
+run the tool with `--raw --graphs --report` and send us the generated directory
+via pull request.
+
+## Supported Architectures
+
+**mt4g** works reliably on all AMD CDNA GPUs and all recent NVIDIA
+microarchitectures from Pascal onwards. However, the Ada Lovelace and Blackwell
+architectures have not yet been tested due to missing access. Furthermore, we
+do not consider AMD's RDNA GPUs.
 
 ## Repository layout
 
