@@ -3,10 +3,10 @@
 **mt4g** is a vendor-agnostic collection of microbenchmarks and APIs that
 explores the compute and memory topologies of both AMD and NVIDIA GPUs based on
 the HIP toolchain. By capturing system properties such as the number of SMs/CUs,
-warp size, memory and cache sizes, cache line sizes, load and store latencies
-as well as exposing deep cache subsystems and their physical layouts, it
-provides critical support for GPU performance modeling and analysis within one
-unified interface.
+warp size, memory and cache sizes, cache line sizes and load latencies as well
+as exposing deep cache subsystems and their physical layouts, it provides
+critical support for GPU performance modeling and analysis within one unified
+interface.
 
 ## Overview
 
@@ -20,8 +20,6 @@ programmatically unavailable. Key features include:
 - Unified build system for AMD and NVIDIA targets
 - Comprehensive report of collected benchmark results as structured JSON with
   optional plot generation for visualization
-
-The research paper of this work can be found [here](https://doi.org/10.1145/3731599.3767518).
 
 ## Installation
 
@@ -49,7 +47,7 @@ The `HIP_PATH` environment variable should be set to the HIP installation
 directory. Please export manually if not automatically set by `spack`, e.g.
 
 ```bash
-export HIP_PATH=<path_to_spack_installation>/opt/spack/<system_architecture>/hip-<version>-<hash>
+export HIP_PATH=<path_to_spack>/opt/spack/<system_architecture>/hip-<version>-<hash>
 ```
 
 Additionally for NVIDIA targets, the `CUDA_PATH` environment variable needs to
@@ -60,8 +58,11 @@ be set to the CUDA installation directory.
 ### Build
 
 Use the `GPU_TARGET_ARCH` build flag to select the target GPU architecture for
-AMD (e.g. `gfx90a`) and NVIDIA (e.g. `sm_90`) respectively. To build and
-install **mt4g**, run
+AMD (e.g. `gfx90a`) and NVIDIA (e.g. `sm_90`) respectively. Some of the
+identifiers of the LLVM targets for AMD can be found
+[here](https://rocm.docs.amd.com/projects/install-on-linux/en/latest/reference/system-requirements.html#supported-gpus),
+while the compute capabilites for NVIDIA can be found [here](https://developer.nvidia.com/cuda/gpus).
+To build and install **mt4g**, run
 
 ```bash
 git clone https://github.com/caps-tum/mt4g.git
@@ -86,7 +87,7 @@ make all install -j $(nproc)
 | ------ | ----------- |
 | `-d, --device-id <id>` | GPU device to use (default `0`) |
 | `-f, --file <name>` | Specify name of output files (default `<GPU_NAME>`) |
-| `-g, --graphs` | Generate graphs for each benchmark |
+| `-g, --graphs` | Generate graphical plots for each benchmark |
 | `-l, --location <path>` | Specify location of output files (default `.`) |
 | `-o, --raw` | Write raw timing data |
 | `-p, --report` | Create Markdown report in output directory |
@@ -130,80 +131,87 @@ via pull request.
 **mt4g** works reliably on all AMD CDNA GPUs and all recent NVIDIA
 microarchitectures from Pascal onwards. However, the Ada Lovelace and Blackwell
 architectures have not yet been tested due to missing access. Furthermore, we
-do not consider AMD's RDNA GPUs.
+do not consider AMD's RDNA GPUs since we focus on HPC/AI workloads. Support for
+UDNA GPUs is planned in the future.
 
-## Repository layout
+## Topological metrics
 
-```
-include/          - Public headers and utilities
-results/          - Available sample results
-src/              - Benchmark implementation and CLI helpers
-docs/             - Additional documentation
-CMakeLists.txt    - Build configuration
-```
+The information on the attributes provided by **mt4g** is depicted below
 
-See [docs/usage.md](docs/usage.md) for a comprehensive description of the
-command line interface and [docs/development.md](docs/development.md) for
-contribution guidelines.
+### AMD
 
-## Sample results and contributions
+| _Memory Element_ | Size | Load Latency | Read & Write Bandwidth | Cache Line Size | Fetch Granularity | Amount per SM/CU or GPU | Physically Shared With |
+| ---------------- | ---- | ------------ | ---------------------- | --------------- | ----------------- | ----------------------- | ---------------------- |
+| **vL1 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ❌ |
+| **sL1d cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ |
+| **L2 cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| **L3 cache** | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ | ❌ |
+| **LDS** | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Device Memory** | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 
-Pre-measured results for selected GPUs live in the
-[results](results/) directory. If your hardware is not yet listed,
-we would greatly appreciate additional reports: run the tool with
-`--raw --graphs --report` and open a pull request to share your measurements.
+### NVIDIA
 
-## Project background
+| _Memory Element_ | Size | Load Latency | Read & Write Bandwidth | Cache Line Size | Fetch Granularity | Amount per SM/CU or GPU | Physically Shared With |
+| ---------------- | ---- | ------------ | ---------------------- | --------------- | ----------------- | ----------------------- | ---------------------- |
+| **L1 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| **L2 cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| **Texture cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| **Readonly cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| **Constant L1 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| **Constant L1.5 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ | ❌ |
+| **Shared Memory** | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Device Memory** | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 
-Developed at the Chair for Computer Architecture and Parallel Systems (CAPS) at
-the Technical University of Munich. Originally authored by Dominik Größler,
-completely reworked by Manuel Walter Mußbacher and currently maintained by
-Stepan Vanecek.
-
-## Known issues and limitations
+## Known Issues and Limitations
 
 - L2 segment size measurements on AMD GPUs are currently unreliable due to the platform's complex cache behaviour.
 - Constant L1.5 Cache Size detection is capped at 64 KiB. Denoted by 64 KiB + 1 and confidence = 0. (> 64 KiB)
 - Bandwidths are not optimal because we currently do not use a (dynamically found) optimal number of blocks.
 - Cache Line Size detection uses a heuristical approach and is therefore not guaranteed to be correct.
 - Constant L1 shared with L1 is not too reliable. Hence, as a hotfix we repeat the measurements 10 times and on one unsuccessful run return not shared. We are working on a cleaner solution.
-- Parallel build fails if depedencies were not fetched.
 - Runs only on Linux.
 
-## License
+## Repository Layout & Contribution Guidelines
+
+```
+mt4g
+├── CMakeLists.txt        -- Build configuration
+├── include               -- Header files
+├── LICENSE               -- Project license
+├── README.md             -- Project description
+├── sample_results        -- Exemplary output files from selected hardware
+└── src                   -- Benchmark implementation and CLI helpers
+```
+
+### Adding new Measurements
+
+Pre-measured results for selected GPUs live in the
+[sample_results](sample_results/) directory. If your hardware is not yet listed,
+we would greatly appreciate additional reports: Run the tool with
+`--raw --graphs --report` and open a pull request to share your measurements.
+
+### Adding a new Benchmark
+
+To add a new benchmark to the **mt4g**, follow the subsequent instructions:
+
+1. Implement the benchmark in `src/benchmarks/` and expose a suitable interface
+   in `include/`.
+2. Try to follow the pattern of `measureXXX()`, `XXXLauncher()` and `XXXKernel()` to keep the structure modular and readable.
+   Every benchmark should get its own file to keep code flow as easy as possible to follow -- this is not about software engineering!
+4. Update `CMakeLists.txt` if necessary.
+5. Document the new benchmark and its command line switch in the `README.md` if suitable.
+
+### Coding Style
+
+The codebase follows modern C++20 guidelines. Use `-Wall -Wextra -Wpedantic`
+for clean builds and keep functions small and well documented.
+
+## About
+
+Developed at the Chair for Computer Architecture and Parallel Systems
+at the Technical University of Munich ([CAPS TUM](https://www.ce.cit.tum.de/en/caps/homepage/)).
+Originally authored by Dominik Größler, completely reworked by Manuel Walter
+Mußbacher and currently maintained by Stepan Vanecek. The research paper
+surrounding this work can be found [here](https://doi.org/10.1145/3731599.3767518).
 
 This project is licensed under the [Apache License 2.0](LICENSE).
-
-#### Benchmark Overview – NVIDIA
-
-| Cache             | L1       | L2          | RO  | TXT | C1  | C1.5 | SM  | M    |
-|-------------------|----------|-------------|-----|-----|-----|------|-----|------|
-| **Size**          | Yes      | API, Seg.   | Yes | Yes | Yes | Yes  | API | API  |
-| **Line Size**     | Yes      | Yes         | Yes | Yes | Yes | Yes  | –   | –    |
-| **Fetch Gran.**   | Yes      | Yes         | Yes | Yes | Yes | Yes  | –   | –    |
-| **Latency**       | Yes      | Yes         | Yes | Yes | Yes | Yes  | Yes | Yes  |
-| **Count**         | Yes      | Yes, Seg.   | Yes | Yes | Yes | No   | –   | –    |
-| **Miss Penalty**  | Yes      | Yes         | Yes | Yes | Yes | No   | –   | –    |
-| **Bandwidth**     | No       | R/W         | No  | No  | No  | No   | No  | R/W  |
-| **Shared With**   | RO, C1, TXT |      | L1, TXT | L1, RO    |     |      |     |      |
-
-#### Benchmark Overview – AMD
-
-| Cache             | vL1d     | L2          | L3  | sL1d | SM  | M    |
-|-------------------|----------|-------------|-----|------|-----|------|
-| **Size**          | Yes      | API, Seg.   | API | Yes  | API | API  |
-| **Line Size**     | Yes      | API, FB     | API | Yes  | –   | –    |
-| **Fetch Gran.**   | Yes      | Yes         | No  | Yes  | –   | –    |
-| **Latency**       | Yes      | Yes         | No  | Yes  | Yes | Yes  |
-| **Count**         | Yes      | API         | API | Uni. | –   | –    |
-| **Miss Penalty**  | Yes      | Yes         | No  | Yes  | –   | –    |
-| **Bandwidth**     | No       | R/W         | R/W | No   | No  | R/W  |
-| **Shared With**   |          |             |     | CU   |     |      |
-
-
-Seg. = Segment
-Uni. = Unique
-R/W = Read Bandwidth and Write Bandwidth
-FB = Fallback Benchmark implemented
-API = HIP Device Prop / HSA / AMDGPU KFD Kernel Module
-
