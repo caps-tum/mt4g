@@ -1,0 +1,3 @@
+#pragma once
+
+#define MT4G_VERSION "${MT4G_VERSION}"
