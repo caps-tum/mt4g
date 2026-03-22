@@ -4,18 +4,18 @@
 
 namespace benchmark {
     /**
-     * @brief Measure achievable L1 read bandwidth of single CU.
+     * @brief Measure achievable L1 write bandwidth of a single CU.
      *
      * @param arraySizeBytes Size of the array in bytes used for the test.
      * @return Bandwidth in GiB/s.
      */
-    double measureL1ReadBandwidth(size_t arraySizeBytes);
+    double measureL1WriteBandwidth(size_t arraySizeBytes);
 
     /**
-     * @brief Measure achievable L1 read bandwidth of single CU with optimal number search for threads, blocks and reps.
+     * @brief Measure achievable L1 write bandwidth of a single CU with optimal number search for threads, blocks and reps.
      *
      * @param arraySizeBytes Size of the array in bytes used for the test.
      * @return Bandwidth in GiB/s and the optimal configuration.
      */
-    CacheBandwidthResult measureL1ReadBandwidthSweep(size_t arraySizeBytes);
+    CacheBandwidthResult measureL1WriteBandwidthSweep(size_t arraySizeBytes);
 }

@@ -11,6 +11,7 @@
 #include <nlohmann/json.hpp>
 
 #include "utils/util.hpp"
+#include "typedef/cacheBandwidthResult.hpp"
 #include "const/chartScript.hpp"
 
 template <typename T> struct is_vector : std::false_type {};
@@ -457,5 +458,63 @@ namespace util {
             return;
         }
         for (auto v : data) ofs << v << '\n';
+    }
+
+    inline void writeBandwidthGridToCSV(const CacheBandwidthResult& result, const std::string& filePath)
+    {
+        std::ofstream ofs(filePath);
+        if (!ofs)
+        {
+            std::cerr << "Could not open '" << filePath << "' for writing" << std::endl;
+            return;
+        }
+
+        const auto& threads = result.threadsTested;
+        const auto& reps = result.repsTested;
+
+        if (result.blocksTested.empty()) // 2D Grid
+        {
+            const auto& gridGiBs = result.bandwidthGridGiBs;
+
+            ofs << "threads";
+            for (auto r : reps) ofs << ',' << r;
+            ofs << '\n';
+
+            for (size_t i = 0; i < threads.size(); ++i)
+            {
+                ofs << threads[i];
+                for (size_t j = 0; j < reps.size(); ++j)
+                {
+                    double v = (i < gridGiBs.size() && j < gridGiBs[i].size()) ? gridGiBs[i][j] : 0.0;
+                    ofs << ',' << v;
+                }
+                ofs << '\n';
+            }
+        }
+        else
+        {
+            const auto& blocks = result.blocksTested;
+            const auto& grid3D = result.bandwidth3D;
+
+            // blocks,threads,reps,bandwidth
+            ofs << "blocks,threads,reps,bandwidth\n";
+
+            for (size_t b = 0; b < blocks.size(); ++b)
+            {
+                for (size_t t = 0; t < threads.size(); ++t)
+                {
+                    for (size_t r = 0; r < reps.size(); ++r)
+                    {
+                        double v = 0.0;
+                        if (b < grid3D.size() && t < grid3D[b].size() && r < grid3D[b][t].size())
+                        {
+                            v = grid3D[b][t][r];
+                        }
+
+                        ofs << blocks[b] << ',' << threads[t] << ',' << reps[r] << ',' << v << '\n';
+                    }
+                }
+            }
+        }
     }
 }

@@ -2,74 +2,44 @@
 #include "utils/util.hpp"
 
 #include <vector>
-#include <cstdlib>
-#include <string>
-#include <algorithm>
-#include <cctype>
-
-static constexpr auto WARMUP_REPS = 128;
+#include <numeric>
 
 static constexpr auto MIN_REPS = 2;
 static constexpr auto MAX_REPS = 262144; // 2 ^ 18
 
 static constexpr auto ROUNDS = DEFAULT_ROUNDS;// rounds
 
-__global__ void l1ReadBandwidthKernel(uint32v4* __restrict__ dst, uint32v4* __restrict__ src, uint64_t* __restrict__ timing_result, size_t elementsPerThread, size_t reps) 
+__global__ void sharedReadBandwidthKernel(uint32v4* __restrict__ dst, uint64_t* __restrict__ timings, uint32_t elementsPerThread, size_t reps) 
 {
     const uint32_t tid = threadIdx.x;
-    const uint32v4* base = src + tid * elementsPerThread;
 
-    #ifdef __HIP_PLATFORM_AMD__
-    const uint64_t addr0 = reinterpret_cast<uint64_t>(base);
-    #endif
+    extern __shared__ uint32v4 memory[];
 
-    uint32v4 dummy {0, 0, 0, 0};
-
-    // Warm up L1
-    for (size_t rep = 0; rep < WARMUP_REPS; ++rep)
+    //intialize shared memory
+    for (size_t i = tid * elementsPerThread; i < (tid + 1) * elementsPerThread; ++i)
     {
-        for (size_t i = 0; i < elementsPerThread; ++i)
-        {
-            uint32v4 loaded;
-            #ifdef __HIP_PLATFORM_AMD__
-            asm volatile (
-                "flat_load_dwordx4 %0, %1\n\t"
-                : "=v"(loaded)
-                : "v"(addr0 + i * sizeof(uint32v4))
-                : "memory"
-            );
-            #endif
-
-            #ifdef __HIP_PLATFORM_NVIDIA__
-            asm volatile (
-                "ld.global.ca.v4.u32 {%0,%1,%2,%3}, [%4];"
-                : "=r"(loaded.x)
-                , "=r"(loaded.y)
-                , "=r"(loaded.z)
-                , "=r"(loaded.w)
-                : "l"(base + i)
-                : "memory"
-            );
-            #endif
-
-            dummy.x ^= loaded.x;
-        }
+        memory[i] = {0, 0, 0, 0};
     }
 
-    uint64_t start, end;
+    const uint32_t base = tid * elementsPerThread * 16u;
 
-    #ifdef __HIP_PLATFORM_AMD__
-    __asm__ volatile (
-        "s_waitcnt vmcnt(0)\n\t"
-        :
-        :
+    #ifdef __HIP_PLATFORM_NVIDIA__
+    uint64_t sharedBaseAddr;
+    asm volatile(
+        "cvta.to.shared.u64 %0, %1;\n\t"
+        : "=l"(sharedBaseAddr)
+        : "l"(memory)
         : "memory"
     );
     #endif
 
+    uint32v4 dummy = {0, 0, 0, 0};
+
+    uint64_t start, end;
+
     __syncthreads();
 
-    if (tid == 0)
+    if (tid == 0) 
     {
         #ifdef __HIP_PLATFORM_AMD__
         __asm__ volatile (
@@ -83,7 +53,7 @@ __global__ void l1ReadBandwidthKernel(uint32v4* __restrict__ dst, uint32v4* __re
         #endif
 
         #ifdef __HIP_PLATFORM_NVIDIA__
-        __asm__ volatile (
+        __asm__ volatile(
             "mov.u64 %0, %%clock64;\n\t"
             : "=l"(start)
             :
@@ -94,29 +64,31 @@ __global__ void l1ReadBandwidthKernel(uint32v4* __restrict__ dst, uint32v4* __re
 
     __syncthreads();
 
-    for (size_t rep = 0; rep < reps; ++rep)
+    for (size_t rep = 0; rep < reps; ++rep) 
     {
-        for (size_t i = 0; i < elementsPerThread; ++i)
+        for (uint32_t i = 0; i < elementsPerThread; ++i)
         {
             uint32v4 loaded;
+            const uint32_t offset = base + i * 16u;
 
             #ifdef __HIP_PLATFORM_AMD__
             __asm__ volatile (
-                "flat_load_dwordx4 %0, %1\n\t"
+                "ds_read_b128 %0, %1\n\t"
                 : "=v"(loaded)
-                : "v"(addr0 + i * sizeof(uint32v4))
+                : "v"(offset)
                 : "memory"
             );
             #endif
 
             #ifdef __HIP_PLATFORM_NVIDIA__
-            __asm__ volatile (
-                "ld.global.ca.v4.u32 {%0,%1,%2,%3}, [%4];"
+            const uint64_t addr = sharedBaseAddr + static_cast<uint64_t>(offset);
+            __asm__ volatile(
+                "ld.shared.v4.u32 {%0,%1,%2,%3}, [%4];\n\t"
                 : "=r"(loaded.x)
                 , "=r"(loaded.y)
                 , "=r"(loaded.z)
                 , "=r"(loaded.w)
-                : "l"(base + i)
+                : "l"(addr)
                 : "memory"
             );
             #endif
@@ -127,16 +99,16 @@ __global__ void l1ReadBandwidthKernel(uint32v4* __restrict__ dst, uint32v4* __re
 
     #ifdef __HIP_PLATFORM_AMD__
     __asm__ volatile (
-        "s_waitcnt vmcnt(0)\n\t"
+        "s_waitcnt lgkmcnt(0)\n\t" 
         :
         :
         : "memory"
     );
     #endif
-
+    
     __syncthreads();
 
-    if (tid == 0)
+    if (tid == 0) 
     {
         #ifdef __HIP_PLATFORM_AMD__
         __asm__ volatile (
@@ -147,54 +119,48 @@ __global__ void l1ReadBandwidthKernel(uint32v4* __restrict__ dst, uint32v4* __re
             :
             : "memory"
         );
-
-        *timing_result = end - start;
+        *timings = end - start;
         #endif
 
         #ifdef __HIP_PLATFORM_NVIDIA__
-        __asm__ volatile (
+        __asm__ volatile(
             "mov.u64 %0, %%clock64;\n\t"
             : "=l"(end)
             :
             : "memory"
         );
-
-        *timing_result = end - start;
+        *timings = end - start;
         #endif
     }
 
-    dst[tid] = dummy; // prevent dead code elimination
+    dst[tid] = dummy;
 }
 
-
-static std::tuple<uint64_t, double, double> l1ReadBandwidthLauncher(size_t arraySizeBytes, uint32_t numThreads, size_t reps) 
+static std::tuple<uint64_t, double, double> sharedReadBandwidthLauncher(uint32_t arraySizeBytes, uint32_t numThreads, size_t reps) 
 {
-    size_t totalElements = arraySizeBytes / sizeof(uint32v4);
-    size_t elementsPerThread = totalElements / numThreads;
-           
-    uint32v4 *d_srcArr = util::allocateGPUMemory<uint32v4>(totalElements);
-    uint32v4 *d_dstArr = util::allocateGPUMemory<uint32v4>(numThreads);
-    uint64_t *d_timingResult = util::allocateGPUMemory<uint64_t>(1);
+    uint32_t numElements = arraySizeBytes / sizeof(uint32v4);
+    uint32_t elementsPerThread = numElements / numThreads;
 
-    // Run the kernel
-    l1ReadBandwidthKernel<<<1, numThreads>>>(d_dstArr, d_srcArr, d_timingResult, elementsPerThread, reps);
+    uint32v4* d_dst = util::allocateGPUMemory<uint32v4>(numThreads);
+    uint64_t* d_timings = util::allocateGPUMemory<uint64_t>(1);
 
-    // Get the timings from the device
-    std::vector<uint64_t> timingResult = util::copyFromDevice<uint64_t>(d_timingResult, 1);
+    // dynamic memory allocation
+    sharedReadBandwidthKernel<<<1, numThreads, arraySizeBytes>>>(d_dst, d_timings, elementsPerThread, reps);
 
-    // calculate the bandwidth
-    double gpuClockHz = util::getDeviceProperties().clockRate * 1000;
-    double dataGiB = (double) arraySizeBytes * reps / (1 * GiB);
-    double timeS = (double) timingResult[0] / gpuClockHz;
-    
-    // return (cycles, time in seconds, measured bandwidth)
-    return {timingResult[0], timeS, dataGiB / timeS};
+    std::vector<uint64_t> t = util::copyFromDevice<uint64_t>(d_timings, 1);
+
+    uint64_t cycles = t[0];
+
+    double gpuClockHz = util::getDeviceProperties().clockRate * 1000.0;
+    double timeS = (double) cycles / gpuClockHz;
+    double dataGiB = (double) arraySizeBytes  * reps / (1 * GiB);
+ 
+    return {cycles, timeS, dataGiB / timeS};
 }
-
 
 namespace benchmark 
 {
-    double measureL1ReadBandwidth(size_t arraySizeBytes)
+    double measureSharedReadBandwidth(uint32_t arraySizeBytes)
     {
         std::vector<double> results(ROUNDS);
 
@@ -203,13 +169,13 @@ namespace benchmark
 
         for (uint32_t i = 0; i < ROUNDS; ++i) 
         {
-            results[i] = std::get<2>(l1ReadBandwidthLauncher(arraySizeBytes, maxNumThreads, maxReps));
+            results[i] = std::get<2>(sharedReadBandwidthLauncher(arraySizeBytes, maxNumThreads, maxReps));
         }
 
         return util::average(results);
     }
 
-    CacheBandwidthResult measureL1ReadBandwidthSweep(size_t arraySizeBytes) 
+    CacheBandwidthResult measureSharedReadBandwidthSweep(uint32_t arraySizeBytes) 
     {
         uint32_t minNumThreads = util::getDeviceProperties().warpSize;
         uint32_t maxNumThreads = util::getDeviceProperties().maxThreadsPerBlock;
@@ -238,7 +204,7 @@ namespace benchmark
                     result.repsTested.push_back(reps);
                 }
 
-                auto [cycles, timeS, bandwidth] = l1ReadBandwidthLauncher(arraySizeBytes, numThreads, reps);
+                auto [cycles, timeS, bandwidth] = sharedReadBandwidthLauncher(arraySizeBytes, numThreads, reps);
                 
                 bandwidthResults.push_back(bandwidth);
 
@@ -258,4 +224,3 @@ namespace benchmark
         return result;
     }
 }
-
