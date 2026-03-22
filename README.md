@@ -30,7 +30,7 @@ The project has been verified with CUDA 12.8 and `hipcc` 6.3.3.
 ## Build
 
 A suitable HIP environment can be obtained most easily via
-[Spack](https://spack.io):
+[Spack](https://spack.readthedocs.io/en/latest/getting_started.html):
 
 ```bash
 spack install hip           # for AMD targets
@@ -39,20 +39,30 @@ spack load hip              # sets HIP_PATH and exposes hipcc
 ```
 
 Make sure to set `HIP_PATH` and `CUDA_PATH` when compiling for NVIDIA.
-Choose the desired GPU architecture and invoke the build:
-Note that you may have to run make twice if it fails because of missing dependencies.
+Choose the desired GPU architecture and invoke the build.
+
+The following dependencies should be installed on the system:
+
+- nlohmann-json
+- cxxopts
+
+To build and install **mt4g**, run
 
 ```bash
-make -j$(nproc) GPU_TARGET_ARCH=<sm_XX|gfxXXX>
+git clone https://github.com/caps-tum/mt4g.git
+cd mt4g
+mkdir build && cd build
+cmake .. -DGPU_TARGET_ARCH=<sm_XX|gfxXXX>
+# build options:
+# -DCMAKE_BUILD_TYPE=<Release|Debug>             -- to choose between release and debug builds
+# -DCMAKE_INSTALL_PREFIX=<install_prefix>        -- to set the install destination (default on UNIX platforms: /usr/local)
+make all install -j $(nproc)
 ```
-
-External dependencies (`cxxopts`, `nlohmann/json`) are fetched automatically
-when missing.
 
 ## Usage
 
 ```bash
-./mt4g [options]
+<install_prefix>/bin/mt4g [options]
 ```
 
 Common options:
@@ -74,6 +84,7 @@ Common options:
 | `--resourceshare` | Run resource sharing benchmarks |
 | `--optimal` | Run bandwidth benchmarks with otimal configuration (number of threads and blocks) search |
 | `--static` | Run shared memory bandwidth benchmark with staticly allocated memory (32 KiB). (if not set, runs with dynamic allocation)|
+| `-v, --version` | Show version of mt4g |
 | `-h, --help` | Show full help |
 
 If no benchmark group is chosen all available groups are executed. Unsupported
@@ -95,11 +106,11 @@ generated graphs with links to raw data.
 ## Repository layout
 
 ```
-include/   - Public headers and utilities
-results/   - Available sample results
-src/       - Benchmark implementation and CLI helpers
-docs/      - Additional documentation
-Makefile   - Build configuration
+include/          - Public headers and utilities
+results/          - Available sample results
+src/              - Benchmark implementation and CLI helpers
+docs/             - Additional documentation
+CMakeLists.txt    - Build configuration
 ```
 
 See [docs/usage.md](docs/usage.md) for a comprehensive description of the

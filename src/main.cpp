@@ -14,6 +14,7 @@
 #include <optional>
 #include <type_traits>
 
+#include "version.hpp"
 #include "benchmarks/benchmark.hpp"
 #include "utils/util.hpp"
 #include "utils/silent.hpp"
@@ -54,6 +55,7 @@ int main(int argc, char* argv[]) {
     }
 
     nlohmann::json metaInfo = {
+        {"mt4gVersion", MT4G_VERSION},
         {"timestamp", util::getCurrentTimestamp()},
         {"hostCompiler", util::getHostCompilerVersion()}
     };

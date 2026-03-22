@@ -61,6 +61,7 @@ If no benchmark group is selected all available groups are executed by default. 
 | `--memory` | Run main memory benchmarks |
 | `--departuredelay` | Run departure delay benchmarks |
 | `--resourceshare` | Run resource sharing benchmarks |
+| `-v, --version` | Display the version of mt4g and exit |
 | `-h, --help` | Display a detailed help message and exit |
 
 Generating graphs requires Python 3 (python3 in PATH) with the `matplotlib`, `pandas` and `numpy` packages.
