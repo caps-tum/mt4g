@@ -275,7 +275,55 @@ int main(int argc, char* argv[]) {
         } else {
             std::cout << "Could not measure valid L1 Size or Fetch Granularity, skipping L1 Line Size, Amount and Miss Penalty benchmarks." << std::endl;
         }
-        
+
+        if (l1Size.confidence > VALIDITY_THRESHOLD) {
+            
+            if (opts.runOptimalSearch)
+            {
+                std::cout << "[L1] Read Bandwidth per CU / MultiProcessor with optimal search" << std::endl;
+                CacheBandwidthResult l1ReadBandwidth;
+                if (util::isAMD()) 
+                {
+                    l1ReadBandwidth = benchmark::amd::measureL1ReadBandwidthBlockSweep(l1Size.size / 2);
+                } else {
+                    l1ReadBandwidth = benchmark::measureL1ReadBandwidthSweep(l1Size.size / 2);
+                }
+                result["memory"]["l1"]["readBandwidthPerCU"] = l1ReadBandwidth;
+
+                std::cout << "[L1] Write Bandwidth per CU / MultiProcessor with optimal search" << std::endl;
+                CacheBandwidthResult l1WriteBandwidth;
+                if (util::isAMD())
+                {
+                    l1WriteBandwidth = benchmark::amd::measureL1WriteBandwidthBlockSweep(l1Size.size / 2);
+                } else {
+                    l1WriteBandwidth = benchmark::measureL1WriteBandwidthSweep(l1Size.size / 2);
+                }
+                result["memory"]["l1"]["writeBandwidthPerCU"] = l1WriteBandwidth;
+
+                if (opts.rawData)
+                {
+                    util::writeBandwidthGridToCSV(l1ReadBandwidth, (graphDir / (fancyFileName + "__L1_Read_BW_Grid.csv")).string());
+                    util::writeBandwidthGridToCSV(l1WriteBandwidth, (graphDir / (fancyFileName + "__L1_Write_BW_Grid.csv")).string());
+                }
+            }
+            else
+            {
+                std::cout << "[L1] Read Bandwidth per CU / MultiProcessor" << std::endl;
+                result["memory"]["l1"]["readBandwidthPerCU"] = {
+                    {"value", benchmark::measureL1ReadBandwidth(l1Size.size / 2)},
+                    {"unit", "GiB/s"}
+                };
+
+                std::cout << "[L1] Write Bandwidth per CU / MultiProcessor" << std::endl;
+                result["memory"]["l1"]["writeBandwidthPerCU"] = {
+                    {"value", benchmark::measureL1WriteBandwidth(l1Size.size / 2)},
+                    {"unit", "GiB/s"}
+                };
+            }
+        } else {
+            std::cout << "Could not measure valid L1 Size, skipping L1 Bandwidth benchmarks." << std::endl;
+        }
+
         if (opts.graphs) {
             util::exportChartMinMaxAvgRed(l1Size.timings, fancyName + " - L1 Size", {l1Size.size}, "Bytes", "Cycles", graphDir.string());
             util::exportChartsMinMaxAvg(l1FetchGranularity.timings, fancyName + " - L1 Fetch Granularity", {l1FetchGranularity.size}, "Bytes", "Cycles", graphDir.string());
@@ -344,16 +392,35 @@ int main(int argc, char* argv[]) {
             std::cout << "Could not gather valid L2 Line Size, skipping L2 Miss Penalty benchmarks." << std::endl;
         }
 
-        std::cout << "[L2] Read Bandwidth" << std::endl;
-        result["memory"]["l2"]["readBandwidth"] = {
-            {"value", benchmark::measureL2ReadBandwidth(deviceProperties.l2CacheSize)},
-            {"unit", "GiB/s"}
-        };
-        std::cout << "[L2] Write Bandwidth" << std::endl;
-        result["memory"]["l2"]["writeBandwidth"] = {
-            {"value", benchmark::measureL2WriteBandwidth(deviceProperties.l2CacheSize)},
-            {"unit", "GiB/s"}
-        };
+        if (opts.runOptimalSearch)
+        {
+            std::cout << "[L2] Read Bandwidth with optimal search" << std::endl;
+            CacheBandwidthResult l2ReadBandwidth = benchmark::measureL2ReadBandwidthSweep(deviceProperties.l2CacheSize);
+            result["memory"]["l2"]["readBandwidth"] = l2ReadBandwidth;
+
+            std::cout << "[L2] Write Bandwidth with optimal search" << std::endl;
+            CacheBandwidthResult l2WriteBandwidth = benchmark::measureL2WriteBandwidthSweep(deviceProperties.l2CacheSize);
+            result["memory"]["l2"]["writeBandwidth"] = l2WriteBandwidth;
+
+            if (opts.rawData)
+            {
+                util::writeBandwidthGridToCSV(l2ReadBandwidth, (graphDir / (fancyFileName + "__L2_Read_BW_Grid.csv")).string());
+                util::writeBandwidthGridToCSV(l2WriteBandwidth, (graphDir / (fancyFileName + "__L2_Write_BW_Grid.csv")).string());
+            }
+        }
+        else
+        {
+            std::cout << "[L2] Read Bandwidth" << std::endl;
+            result["memory"]["l2"]["readBandwidth"] = {
+                {"value", benchmark::measureL2ReadBandwidth(deviceProperties.l2CacheSize)},
+                {"unit", "GiB/s"}
+            };
+            std::cout << "[L2] Write Bandwidth" << std::endl;
+            result["memory"]["l2"]["writeBandwidth"] = {
+                {"value", benchmark::measureL2WriteBandwidth(deviceProperties.l2CacheSize)},
+                {"unit", "GiB/s"}
+            };
+        }
 
         if (opts.graphs) {
             util::exportChartsMinMaxAvg(l2FetchGranularity.timings, fancyName + " - L2 Fetch Granularity", {l2FetchGranularity.size}, "Bytes", "Cycles", graphDir.string());
@@ -376,46 +443,60 @@ int main(int argc, char* argv[]) {
                 {"unit", "bytes"}
             };
 
-            /* Not working yet
             std::cout << "[L3] Latency" << std::endl;
-            CacheLatencyResult l3Latency = benchmark::amd::measureL3Latency(32 * KiB, 128);
+            CacheLatencyResult l3Latency = benchmark::amd::measureL3Latency(deviceProperties.l2CacheSize, 128);
             result["memory"]["l3"]["latency"] = l3Latency;
 
+            /* Not working yet
             std::cout << "[L3] Fetch Granularity" << std::endl;
             CacheSizeResult l3FetchGranularity = benchmark::amd::measureL3FetchGranularity();
             result["memory"]["l3"]["fetchGranularity"] = l3FetchGranularity;
             */
             auto l3LineSize = util::getNumeric<size_t>(result, "memory", "l3", "lineSize", "value");
             if (l3LineSize.has_value()) {
-                /* Not working yet because of Latency dep.
                 std::cout << "[L3] Miss Penalty" << std::endl;
                 result["memory"]["l3"]["missPenalty"] = benchmark::amd::measureL3MissPenalty(l3Size.value(), l3LineSize.value(), l3Latency.mean);
-                */
             } else {
                 std::cout << "Could not determine L3 Line Size, L3 Line Size will not be part of the output + skipping Miss Penalty benchmarks." << std::endl;
             }
 
-            std::cout << "[L3] Read Bandwidth" << std::endl;
-            result["memory"]["l3"]["readBandwidth"] = {
-                {"value", benchmark::amd::measureL3ReadBandwidth(l3Size.value())},
-                {"unit", "GiB/s"}
-            };
+            if (opts.runOptimalSearch)
+            {
+                std::cout << "[L3] Read Bandwidth with optimal search" << std::endl;
+                CacheBandwidthResult l3ReadBandwidth = benchmark::amd::measureL3ReadBandwidthSweep(deviceProperties.l2CacheSize, l3Size.value());
+                result["memory"]["l3"]["readBandwidth"] = l3ReadBandwidth;
 
-            std::cout << "[L3] Write Bandwidth" << std::endl;
-            result["memory"]["l3"]["writeBandwidth"] = {
-                {"value", benchmark::amd::measureL3WriteBandwidth(l3Size.value())},
-                {"unit", "GiB/s"}
-            };
+                std::cout << "[L3] Write Bandwidth with optimal search" << std::endl;
+                CacheBandwidthResult l3WriteBandwidth = benchmark::amd::measureL3WriteBandwidthSweep(deviceProperties.l2CacheSize, l3Size.value());
+                result["memory"]["l3"]["writeBandwidth"] = l3WriteBandwidth;
+            }
+            else
+            {
+                std::cout << "[L3] Read Bandwidth" << std::endl;
+                result["memory"]["l3"]["readBandwidth"] = {
+                    {"value", benchmark::amd::measureL3ReadBandwidth(deviceProperties.l2CacheSize, l3Size.value())},
+                    {"unit", "GiB/s"}
+                };
+
+                std::cout << "[L3] Write Bandwidth" << std::endl;
+                result["memory"]["l3"]["writeBandwidth"] = {
+                    {"value", benchmark::amd::measureL3WriteBandwidth(deviceProperties.l2CacheSize, l3Size.value())},
+                    {"unit", "GiB/s"}
+                };
+            }
 
             /* Not working yet
             if (opts.graphs) {
             util::exportChartsMinMaxAvg(l3FetchGranularity.timings, fancyName + " - L3 Fetch Granularity", {l3FetchGranularity.size}, "Bytes", "Cycles", graphDir.string());
             }
-            if (opts.rawData) {
-                util::writeVectorToFile(l3Latency.timings, (graphDir / (fancyName + " - L3 Latency.txt")).string());
-                util::writeMapToFile(l3FetchGranularity.timings, (graphDir / (fancyName + " - L3 Fetch Granularity.txt")).string());
-            }
             */
+
+            if (opts.rawData) {
+                util::writeVectorToFile(l3Latency.timings, (graphDir / (fancyName + "__L3_Latency.txt")).string());
+                /* Not working yet
+                util::writeMapToFile(l3FetchGranularity.timings, (graphDir / (fancyName + " - L3 Fetch Granularity.txt")).string());
+                */
+            }
         } else {
             std::cout << "[L3] Could not determine L3 Cache Size, probably because this GPU does not have an L3, skipping benchmarks." << std::endl;
         }
@@ -665,13 +746,51 @@ int main(int argc, char* argv[]) {
             } else {
                 std::cout << "Could not measure valid Scalar L1 Line Size, skipping Scalar L1 Miss Penalty benchmarks." << std::endl;
             }
+            
+            if (opts.runOptimalSearch)
+            {
+                std::cout << "[Scalar L1] Read Bandwidth per CU / MultiProcessor with optimal search" << std::endl;
+                CacheBandwidthResult sL1ReadBandwidth = benchmark::amd::measureScalarL1ReadBandwidthSweep(scalarL1Size.size / 2);
+                result["memory"]["scalarL1"]["readBandwidthPerCU"] = sL1ReadBandwidth;
+
+                std::cout << "[Scalar L1] Write Bandwidth per CU / MultiProcessor with optimal search" << std::endl;
+                CacheBandwidthResult sL1WriteBandwidth = benchmark::amd::measureScalarL1WriteBandwidthSweep(scalarL1Size.size / 2);
+                result["memory"]["scalarL1"]["writeBandwidthPerCU"] = sL1WriteBandwidth;
+
+                if (opts.rawData)
+                {
+                    util::writeBandwidthGridToCSV(sL1ReadBandwidth, (graphDir / (fancyFileName + "__sL1_Read_BW_Grid.csv")).string());
+                    util::writeBandwidthGridToCSV(sL1WriteBandwidth, (graphDir / (fancyFileName + "__sL1_Write_BW_Grid.csv")).string());
+                }
+            }
+            else
+            {
+                std::cout << "[Scalar L1] Read Bandwidth per CU / MultiProcessor" << std::endl;
+                result["memory"]["scalarL1"]["readBandwidthPerCU"] = {
+                    {"value", benchmark::amd::measureScalarL1ReadBandwidth(scalarL1Size.size / 2)},
+                    {"unit", "GiB/s"}
+                };
+
+                std::cout << "[Scalar L1] Write Bandwidth per CU / MultiProcessor" << std::endl;
+                result["memory"]["scalarL1"]["writeBandwidthPerCU"] = {
+                    {"value", benchmark::amd::measureScalarL1WriteBandwidth(scalarL1Size.size / 2)},
+                    {"unit", "GiB/s"}
+                };
+            }
 
             std::cout << "[Scalar L1] CU Sharing" << std::endl;
-            auto sharedBetweenCUs = benchmark::amd::measureCuShareScalarL1(scalarL1Size.size, scalarL1FetchGranularity.size);
-            result["memory"]["scalarL1"]["sharedBetween"] = sharedBetweenCUs;
-            result["memory"]["scalarL1"]["uniqueAmount"] = sharedBetweenCUs.size();
+            if (util::isCDNA3())
+            {
+                std::cout << "CU Sharing is currently not available on CDNA 3." << std::endl;
+            }
+            else
+            {
+                auto sharedBetweenCUs = benchmark::amd::measureCuShareScalarL1(scalarL1Size.size, scalarL1FetchGranularity.size);
+                result["memory"]["scalarL1"]["sharedBetween"] = sharedBetweenCUs;
+                result["memory"]["scalarL1"]["uniqueAmount"] = sharedBetweenCUs.size();
+            }
         } else {
-            std::cout << "Could not measure valid Scalar L1 Size oder Fetch Granularity, skipping Scalar L1 Line Size, Miss Penalty and CU Sharing benchmarks." << std::endl;
+            std::cout << "Could not measure valid Scalar L1 Size or Fetch Granularity, skipping Scalar L1 Line Size, Miss Penalty, Bandwidth and CU Sharing benchmarks." << std::endl;
         }
 
         if (opts.graphs) {
@@ -695,6 +814,67 @@ int main(int argc, char* argv[]) {
         if (opts.rawData) {
             util::writeVectorToFile(sharedLatency.timings, (graphDir / (fancyFileName + "__Shared_Memory_Latency.txt")).string());
         }
+
+        if (opts.runOptimalSearch)
+        {
+            std::cout << "[Shared Memory] Read Bandwidth per CU / MultiProcessor with optimal search" << std::endl;
+            CacheBandwidthResult sharedReadBandwidth;
+            if (opts.sharedStatic)
+            {
+                sharedReadBandwidth = benchmark::measureSharedReadBandwidthStaticSweep();
+            } else {
+                sharedReadBandwidth = benchmark::measureSharedReadBandwidthSweep(deviceProperties.sharedMemPerBlock / 2);
+            }
+            result["memory"]["shared"]["readBandwidthPerCU"] = sharedReadBandwidth;
+
+            std::cout << "[Shared Memory] Write Bandwidth per CU / MultiProcessor with optimal search" << std::endl;
+            CacheBandwidthResult sharedWriteBandwidth;
+            if (opts.sharedStatic)
+            {
+                sharedWriteBandwidth = benchmark::measureSharedWriteBandwidthStaticSweep();
+            } else {
+                sharedWriteBandwidth = benchmark::measureSharedWriteBandwidthSweep(deviceProperties.sharedMemPerBlock / 2);
+            }
+            result["memory"]["shared"]["writeBandwidthPerCU"] = sharedWriteBandwidth;
+
+            if (opts.rawData)
+            {
+                util::writeBandwidthGridToCSV(sharedReadBandwidth, (graphDir / (fancyFileName + "__shared_Read_BW_Grid.csv")).string());
+                util::writeBandwidthGridToCSV(sharedWriteBandwidth, (graphDir / (fancyFileName + "__shared_Write_BW_Grid.csv")).string());
+            }
+        }
+        else
+        {
+            std::cout << "[Shared Memory] Read Bandwidth per CU / MultiProcessor" << std::endl;
+            if (opts.sharedStatic)
+            {
+                result["memory"]["shared"]["readBandwidthPerCU"] = {
+                    {"value", benchmark::measureSharedReadBandwidthStatic()},
+                    {"unit", "GiB/s"}
+                };
+            } else {
+                result["memory"]["shared"]["readBandwidthPerCU"] = {
+                    {"value", benchmark::measureSharedReadBandwidth(deviceProperties.sharedMemPerBlock / 2)},
+                    {"unit", "GiB/s"}
+                };
+            }
+
+
+            std::cout << "[Shared Memory] Write Bandwidth per CU / MultiProcessor" << std::endl;
+            if (opts.sharedStatic)
+            {
+                result["memory"]["shared"]["writeBandwidthPerCU"] = {
+                    {"value", benchmark::measureSharedWriteBandwidthStatic()},
+                    {"unit", "GiB/s"}
+                };
+            } else {
+                result["memory"]["shared"]["writeBandwidthPerCU"] = {
+                    {"value", benchmark::measureSharedWriteBandwidth(deviceProperties.sharedMemPerBlock / 2)},
+                    {"unit", "GiB/s"}
+                };
+            }
+        }
+
         std::cout << "[Shared Memory] Benchmarks finished" << std::endl;
     }
 

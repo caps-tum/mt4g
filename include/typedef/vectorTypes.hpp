@@ -10,6 +10,8 @@
 /* ---------- Clang-Pfad: echte VGPR-Vektoren ---------- */
 #if defined(__clang__) && __has_attribute(ext_vector_type)
   typedef uint32_t uint32v4 __attribute__((ext_vector_type(4)));
+  typedef uint32_t uint32v8 __attribute__((ext_vector_type(8)));
+  typedef uint32_t uint32v16 __attribute__((ext_vector_type(16)));
 
 /* ---------- NVCC-Fallback: POD-Struct + Operatoren --- */
 #else
@@ -31,6 +33,22 @@
       HD uint32v4 operator-(const uint32v4& o) const { return {x-o.x,y-o.y,z-o.z,w-o.w}; }
       HD uint32v4 operator&(const uint32v4& o) const { return {x&o.x,y&o.y,z&o.z,w&o.w}; }
       HD uint32v4 operator|(const uint32v4& o) const { return {x|o.x,y|o.y,z|o.z,w|o.w}; }
+  };
+
+  struct uint32v8 {
+      uint32_t v[8];
+
+      HD constexpr uint32v8() : v{0,0,0,0,0,0,0,0} {}
+      HD uint32_t&       operator[](int i)       { return v[i]; }
+      HD const uint32_t& operator[](int i) const { return v[i]; }
+  };
+
+  struct uint32v16 {
+      uint32_t v[16];
+
+      HD constexpr uint32v16() : v{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0} {}
+      HD uint32_t&       operator[](int i)       { return v[i]; }
+      HD const uint32_t& operator[](int i) const { return v[i]; }
   };
 #endif
 
