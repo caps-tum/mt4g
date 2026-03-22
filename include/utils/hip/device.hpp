@@ -22,6 +22,14 @@ namespace util {
         return false;
     }
 
+    inline bool isCDNA3()
+    {
+        #if defined(__gfx942__) || defined(__gfx941__) || defined(__gfx940__)
+        return true;
+        #endif
+        return false;
+    }
+
     /**
      * @brief Check whether the build targets the NVIDIA HIP backend.
      */

@@ -8,6 +8,7 @@
 #include "typedef/cacheSizeResult.hpp"
 #include "typedef/cacheLineSizeResult.hpp"
 #include "typedef/cacheLatencyResult.hpp"
+#include "typedef/cacheBandwidthResult.hpp"
 #include "typedef/vectorTypes.hpp"
 
 #include "benchmarks/shared/size/cacheSize/l1CacheSize.hpp"
@@ -30,6 +31,12 @@
 
 #include "benchmarks/shared/bandwidth/mainMemoryReadBandwidth.hpp"
 #include "benchmarks/shared/bandwidth/mainMemoryWriteBandwidth.hpp"
+#include "benchmarks/shared/bandwidth/sharedReadBandwidth.hpp"
+#include "benchmarks/shared/bandwidth/sharedWriteBandwidth.hpp"
+#include "benchmarks/shared/bandwidth/sharedReadBandwidthStatic.hpp"
+#include "benchmarks/shared/bandwidth/sharedWriteBandwidthStatic.hpp"
+#include "benchmarks/shared/bandwidth/l1ReadBandwidth.hpp"
+#include "benchmarks/shared/bandwidth/l1WriteBandwidth.hpp"
 #include "benchmarks/shared/bandwidth/l2ReadBandwidth.hpp"
 #include "benchmarks/shared/bandwidth/l2WriteBandwidth.hpp"
 
@@ -45,6 +52,10 @@
 #include "benchmarks/amd/size/cacheSize/l3CacheSize.hpp"
 #include "benchmarks/amd/size/fetchGranularity/l3FetchGranularity.hpp"
 
+#include "benchmarks/amd/bandwidth/sL1ReadBandwidth.hpp"
+#include "benchmarks/amd/bandwidth/sL1WriteBandwidth.hpp"
+#include "benchmarks/amd/bandwidth/l1ReadBandwidthBlocksweep.hpp"
+#include "benchmarks/amd/bandwidth/l1WriteBandwidthBlocksweep.hpp"
 #include "benchmarks/amd/bandwidth/l3ReadBandwidth.hpp"
 #include "benchmarks/amd/bandwidth/l3WriteBandwidth.hpp"
 
