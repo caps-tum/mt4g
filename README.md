@@ -72,6 +72,8 @@ Common options:
 | `--scalar`, `--shared`, `--memory` | Run scalar, shared and main memory tests |
 | `--constant`, `--readonly`, `--texture` | NVIDIA specific cache benchmarks |
 | `--resourceshare` | Run resource sharing benchmarks |
+| `--optimal` | Run bandwidth benchmarks with otimal configuration (number of threads and blocks) search |
+| `--static` | Run shared memory bandwidth benchmark with staticly allocated memory (32 KiB). (if not set, runs with dynamic allocation)|
 | `-h, --help` | Show full help |
 
 If no benchmark group is chosen all available groups are executed. Unsupported
