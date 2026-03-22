@@ -17,7 +17,7 @@ __global__ void sL1ReadBandwidthKernel(uint32_t* __restrict__ dst, uint32v16* __
     uint32_t lane = tid % waveSize;
     uint32_t waveid = tid / waveSize;
 
-    uint32_t scalarWaveid;
+    uint32_t scalarWaveid = waveid; // to avoid warning on NVIDIA
     #ifdef __HIP_PLATFORM_AMD__
     __asm__ volatile (
         "v_readfirstlane_b32 %0, %1" 
@@ -75,7 +75,7 @@ __global__ void sL1ReadBandwidthKernel(uint32_t* __restrict__ dst, uint32v16* __
     __syncthreads();
 
     if (tid == 0) {
-        uint64_t start;
+        uint64_t start = 0;
 
         #ifdef __HIP_PLATFORM_AMD__
         __asm__ volatile (
@@ -134,7 +134,7 @@ __global__ void sL1ReadBandwidthKernel(uint32_t* __restrict__ dst, uint32v16* __
 
     if (tid == 0) 
     {
-        uint64_t end;
+        uint64_t end = 0;
         #ifdef __HIP_PLATFORM_AMD__
         __asm__ volatile (
             "s_memtime %0\n\t"

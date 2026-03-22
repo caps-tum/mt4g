@@ -16,7 +16,7 @@ __global__ void sL1WriteBandwidthKernel(uint32v4* __restrict__ dst, uint64_t* __
     uint32_t tid = threadIdx.x;
     uint32_t waveid = tid / waveSize;
 
-    uint32_t scalarWaveid;
+    uint32_t scalarWaveid = waveid;
     #ifdef __HIP_PLATFORM_AMD__
     __asm__ volatile (
         "v_readfirstlane_b32 %0, %1" 
@@ -67,7 +67,7 @@ __global__ void sL1WriteBandwidthKernel(uint32v4* __restrict__ dst, uint64_t* __
     __syncthreads();
 
     if (tid == 0) {
-        uint64_t start;
+        uint64_t start = 0;
         
         #ifdef __HIP_PLATFORM_AMD__
         __asm__ volatile (
@@ -119,7 +119,7 @@ __global__ void sL1WriteBandwidthKernel(uint32v4* __restrict__ dst, uint64_t* __
 
     if (tid == 0) 
     {
-        uint64_t end;
+        uint64_t end = 0;
 
         #ifdef __HIP_PLATFORM_AMD__
         __asm__ volatile (
