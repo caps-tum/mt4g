@@ -1,0 +1,329 @@
+{
+    "compute": {
+        "computeUnitsPerDie": 38,
+        "concurrentKernels": true,
+        "maxBlocksPerMultiProcessor": 32,
+        "maxThreadsPerBlock": 1024,
+        "maxThreadsPerMultiProcessor": 2048,
+        "multiProcessorCount": 228,
+        "numSIMDsPerCU": 4,
+        "numXCDs": 6,
+        "numberOfCoresPerMultiProcessor": 64,
+        "regsPerBlock": 131072,
+        "regsPerMultiProcessor": 131072,
+        "supportsCooperativeLaunch": true,
+        "warpSize": 64
+    },
+    "general": {
+        "asicRevision": 1,
+        "clockRate": {
+            "unit": "kHz",
+            "value": 2100000
+        },
+        "computeCapability": {
+            "major": 9,
+            "minor": 4
+        },
+        "name": "AMD Radeon Graphics",
+        "vendor": "AMD"
+    },
+    "memory": {
+        "constant": {
+            "totalConstMem": {
+                "unit": "bytes",
+                "value": 2147483647
+            }
+        },
+        "l1": {
+            "fetchGranularity": {
+                "confidence": 0.9684006319873603,
+                "method": "p-chase",
+                "randomized": false,
+                "size": 128,
+                "unit": "bytes"
+            },
+            "globalL1CacheSupported": true,
+            "latency": {
+                "mean": 112.0,
+                "measurements": 255,
+                "method": "p-chase",
+                "p50": 112.0,
+                "p95": 112.0,
+                "sampleSize": 256,
+                "stdev": 0.0,
+                "unit": "cycles"
+            },
+            "lineSize": {
+                "confidence": 0.9718815750248039,
+                "method": "p-chase",
+                "randomized": false,
+                "size": 128,
+                "unit": "bytes"
+            },
+            "localL1CacheSupported": true,
+            "missPenalty": {
+                "unit": "cycles",
+                "value": 143.54509803921567
+            },
+            "readBandwidthPerCU": {
+                "cycles": 0,
+                "dataBytes": 16384,
+                "measuredBandwidth": 249.7675793499463,
+                "numBlocks": 4,
+                "numReps": 262144,
+                "numThreads": 256,
+                "time": 0.016014888763427736
+            },
+            "size": {
+                "confidence": 0.9984500774961252,
+                "method": "p-chase",
+                "randomized": false,
+                "size": 32768,
+                "unit": "bytes"
+            },
+            "writeBandwidthPerCU": {
+                "cycles": 0,
+                "dataBytes": 16384,
+                "measuredBandwidth": 249.71749555673202,
+                "numBlocks": 16,
+                "numReps": 131072,
+                "numThreads": 128,
+                "time": 0.008009050369262695
+            }
+        },
+        "l2": {
+            "amount": 1,
+            "fetchGranularity": {
+                "confidence": 0.9676406471870562,
+                "method": "p-chase",
+                "randomized": false,
+                "size": 128,
+                "unit": "bytes"
+            },
+            "latency": {
+                "mean": 266.0235294117647,
+                "measurements": 255,
+                "method": "p-chase",
+                "p50": 268.0,
+                "p95": 268.0,
+                "sampleSize": 256,
+                "stdev": 3.1522138349324256,
+                "unit": "cycles"
+            },
+            "lineSize": {
+                "unit": "bytes",
+                "value": 128
+            },
+            "missPenalty": {
+                "unit": "cycles",
+                "value": 217.2549019607843
+            },
+            "persistingL2CacheMaxSize": {
+                "unit": "bytes",
+                "value": 4194304
+            },
+            "readBandwidth": {
+                "cycles": 0,
+                "dataBytes": 3355443,
+                "measuredBandwidth": 14483.047151295961,
+                "numBlocks": 456,
+                "numReps": 65536,
+                "numThreads": 256,
+                "time": 0.01414066982269287
+            },
+            "size": {
+                "unit": "bytes",
+                "value": 4194304
+            },
+            "writeBandwidth": {
+                "cycles": 0,
+                "dataBytes": 3355443,
+                "measuredBandwidth": 7165.042677957504,
+                "numBlocks": 1824,
+                "numReps": 65536,
+                "numThreads": 64,
+                "time": 0.028583219528198242
+            }
+        },
+        "l3": {
+            "amount": 1,
+            "latency": {
+                "mean": 494.21176470588233,
+                "measurements": 255,
+                "method": "p-chase",
+                "p50": 492.0,
+                "p95": 616.0,
+                "sampleSize": 256,
+                "stdev": 74.40812558037842,
+                "unit": "cycles"
+            },
+            "lineSize": {
+                "unit": "bytes",
+                "value": 64
+            },
+            "missPenalty": 32.031372549019636,
+            "readBandwidth": {
+                "cycles": 0,
+                "dataBytes": 67108864,
+                "measuredBandwidth": 17141.66055974561,
+                "numBlocks": 7296,
+                "numReps": 1024,
+                "numThreads": 256,
+                "time": 0.003733593940734863
+            },
+            "size": {
+                "unit": "bytes",
+                "value": 268435456
+            },
+            "writeBandwidth": {
+                "cycles": 0,
+                "dataBytes": 67108864,
+                "measuredBandwidth": 6956.881738265052,
+                "numBlocks": 7296,
+                "numReps": 256,
+                "numThreads": 256,
+                "time": 0.0022998809814453124
+            }
+        },
+        "main": {
+            "latency": {
+                "mean": 865.971665852467,
+                "measurements": 2047,
+                "method": "p-chase",
+                "p50": 844.0,
+                "p95": 1004.0,
+                "sampleSize": 2048,
+                "stdev": 144.95031399477745,
+                "unit": "cycles"
+            },
+            "memoryBusWidth": {
+                "unit": "bit",
+                "value": 8192
+            },
+            "memoryClockRate": {
+                "unit": "kHz",
+                "value": 1300000
+            },
+            "readBandwidth": {
+                "unit": "GiB/s",
+                "value": 3023.3620072718786
+            },
+            "totalGlobalMem": {
+                "unit": "bytes",
+                "value": 118111600640
+            },
+            "writeBandwidth": {
+                "unit": "GiB/s",
+                "value": 3284.584764490457
+            }
+        },
+        "scalarL1": {
+            "fetchGranularity": {
+                "confidence": 0.999980000399992,
+                "method": "p-chase",
+                "randomized": false,
+                "size": 64,
+                "unit": "bytes"
+            },
+            "latency": {
+                "mean": 48.0,
+                "measurements": 255,
+                "method": "p-chase",
+                "p50": 48.0,
+                "p95": 48.0,
+                "sampleSize": 256,
+                "stdev": 0.0,
+                "unit": "cycles"
+            },
+            "lineSize": {
+                "confidence": 0.9986568667977737,
+                "method": "p-chase",
+                "randomized": false,
+                "size": 64,
+                "unit": "bytes"
+            },
+            "missPenalty": {
+                "unit": "cycles",
+                "value": 127.43529411764706
+            },
+            "readBandwidthPerCU": {
+                "cycles": 9364,
+                "dataBytes": 8576,
+                "measuredBandwidth": 28.659114976155355,
+                "numBlocks": 1,
+                "numReps": 16,
+                "numThreads": 1024,
+                "time": 4.459047619047619e-06
+            },
+            "sharedBetween": [],
+            "size": {
+                "confidence": 0.5083498330033399,
+                "method": "p-chase",
+                "randomized": false,
+                "size": 17152,
+                "unit": "bytes"
+            },
+            "uniqueAmount": 0,
+            "writeBandwidthPerCU": {
+                "cycles": 398007396,
+                "dataBytes": 8576,
+                "measuredBandwidth": 11.047219333582435,
+                "numBlocks": 1,
+                "numReps": 262144,
+                "numThreads": 1024,
+                "time": 0.18952733142857142
+            }
+        },
+        "shared": {
+            "latency": {
+                "mean": 47.529411764705884,
+                "measurements": 255,
+                "method": "p-chase",
+                "p50": 48.0,
+                "p95": 48.0,
+                "sampleSize": 256,
+                "stdev": 1.8860547204475488,
+                "unit": "cycles"
+            },
+            "readBandwidthPerCU": {
+                "cycles": 67109760,
+                "dataBytes": 32768,
+                "measuredBandwidth": 250.3361657082368,
+                "numBlocks": 1,
+                "numReps": 262144,
+                "numThreads": 512,
+                "time": 0.03195702857142857
+            },
+            "reservedSharedMemPerBlock": {
+                "unit": "bytes",
+                "value": 0
+            },
+            "sharedMemPerBlock": {
+                "unit": "bytes",
+                "value": 65536
+            },
+            "sharedMemPerMultiProcessor": {
+                "unit": "bytes",
+                "value": 14942208
+            },
+            "writeBandwidthPerCU": {
+                "cycles": 116742432,
+                "dataBytes": 32768,
+                "measuredBandwidth": 143.9065446229525,
+                "numBlocks": 1,
+                "numReps": 262144,
+                "numThreads": 512,
+                "time": 0.055591634285714286
+            }
+        }
+    },
+    "meta": {
+        "driver": 70125424,
+        "gpuCompiler": "hipcc 7.1.25424",
+        "hostCompiler": "clang 20.0.0",
+        "hostCpu": "AMD Instinct MI300A Accelerator",
+        "os": "Linux 5.14.0-427.94.1.el9_4.x86_64",
+        "runtime": 70125424,
+        "timestamp": "2026-03-28T11:32:20Z"
+    }
+}
