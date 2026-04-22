@@ -6,16 +6,21 @@
 #include <numeric>
 #include <optional>
 
+static constexpr auto WARMUP_REPS = 512;
+
+static constexpr auto MIN_REPS = 2;
+static constexpr auto MAX_REPS = 262144; // 2 ^ 18
+
 static constexpr auto MS_PER_SECOND = 1000.0; // ms
 static constexpr auto ROUNDS = DEFAULT_ROUNDS; // rounds
 
-__global__ void l3ReadBandwidthKernel(uint32v4* __restrict__ dst, uint32v4* __restrict__ src, size_t n) {
+__global__ void l3ReadBandwidthKernel(uint32v4* __restrict__ dst, uint32v4* __restrict__ src, size_t n, size_t reps) {
     size_t tid;
     size_t stride = gridDim.x * blockDim.x;
 
     uint32v4 dummy = {0, 0, 0, 0};
 
-    for (size_t j = 0; j < blockDim.x; ++j) {
+    for (size_t j = 0; j < reps; ++j) {
         tid = (((blockIdx.x + j) * blockDim.x) + threadIdx.x) % stride;
 
         for (size_t i = tid; i < n; i += stride) {
@@ -32,44 +37,127 @@ __global__ void l3ReadBandwidthKernel(uint32v4* __restrict__ dst, uint32v4* __re
         }
     }
 
-    tid = blockIdx.x * blockDim.x + threadIdx.x;
-    dst[tid % blockDim.x] = dummy; // prevent dead code elimination
+    dst[threadIdx.x] = dummy; // prevent dead code elimination
 }
 
-double l3ReadBandwidthLauncher(size_t arraySizeBytes) {
-    util::hipDeviceReset();
-
-    uint32_t maxThreadsPerBlock = util::min(util::getMaxThreadsPerBlock(), util::getWarpSize() * util::getSIMDsPerCU()); 
-    uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getDeviceProperties().maxBlocksPerMultiProcessor;
-
+static std::tuple<double, double> l3ReadBandwidthLauncher(size_t arraySizeBytes, uint32_t numBlocks, uint32_t numThreads, size_t reps) 
+{
     uint32v4* d_srcArr = util::allocateGPUMemory<uint32v4>(arraySizeBytes / sizeof(uint32v4));
-    uint32v4* d_dstArr = util::allocateGPUMemory<uint32v4>(maxThreadsPerBlock);
+    uint32v4* d_dstArr = util::allocateGPUMemory<uint32v4>(numThreads);
 
-    l3ReadBandwidthKernel<<<maxBlocks, maxThreadsPerBlock>>>(d_dstArr, d_srcArr, arraySizeBytes / sizeof(uint32v4));
+    // warm up
+    l3ReadBandwidthKernel<<<numBlocks, numThreads>>>(d_dstArr, d_srcArr, arraySizeBytes / sizeof(uint32v4), WARMUP_REPS);
 
     auto start = util::createHipEvent();
     auto end = util::createHipEvent();
 
     util::hipCheck(hipDeviceSynchronize());
     util::hipCheck(hipEventRecord(start));
-    l3ReadBandwidthKernel<<<maxBlocks, maxThreadsPerBlock>>>(d_dstArr, d_srcArr, arraySizeBytes / sizeof(uint32v4));
+    l3ReadBandwidthKernel<<<numBlocks, numThreads>>>(d_dstArr, d_srcArr, arraySizeBytes / sizeof(uint32v4), reps);
     util::hipCheck(hipEventRecord(end));
     util::hipCheck(hipDeviceSynchronize());
 
-    return util::getElapsedTimeMs(start, end) / maxThreadsPerBlock;
+    const double elapsedMs = util::getElapsedTimeMs(start, end);
+
+    util::hipCheck(hipEventDestroy(start));
+    util::hipCheck(hipEventDestroy(end));
+
+    util::hipCheck(hipFree(d_srcArr));
+    util::hipCheck(hipFree(d_dstArr));
+
+    double dataGiB = (double) arraySizeBytes * reps / (1 * GiB); // Convert to GiB
+    double timeS = elapsedMs / MS_PER_SECOND;
+    
+    return {timeS, dataGiB / timeS};
 }
 
 namespace benchmark {
     namespace amd {
-        double measureL3ReadBandwidth(size_t l3SizeBytes) {
-            double testSizeGiB = static_cast<double>(l3SizeBytes) / (1 * GiB);
+        double measureL3ReadBandwidth(size_t l2SizeBytes, size_t l3SizeBytes)
+        {
+            util::hipDeviceReset();
+
+            const size_t arraySizeBytes = util::max(l2SizeBytes * (util::getNumXCDs() + 2), l3SizeBytes / 4);
+            uint32_t maxThreads = util::getDeviceProperties().maxThreadsPerBlock;
+            uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getDeviceProperties().maxBlocksPerMultiProcessor;
+            size_t maxReps = MAX_REPS / 4;
 
             std::vector<double> results(ROUNDS);
-            for (uint32_t i = 0; i < ROUNDS; ++i) {
-                results[i] = l3ReadBandwidthLauncher(l3SizeBytes) / MS_PER_SECOND;
+            for (uint32_t i = 0; i < ROUNDS; ++i) 
+            {
+                results[i] = std::get<1>(l3ReadBandwidthLauncher(arraySizeBytes, maxBlocks, maxThreads, maxReps));
             }
 
-            return testSizeGiB / util::average(results);
+            return util::average(results);
+        }
+
+        CacheBandwidthResult measureL3ReadBandwidthSweep(size_t l2SizeBytes, size_t l3SizeBytes) 
+        {
+            util::hipDeviceReset();
+
+            size_t arraySizeBytes = util::max(l2SizeBytes * (util::getNumXCDs() + 2), l3SizeBytes / 4);
+
+            uint32_t minThreads = util::getDeviceProperties().warpSize;
+            uint32_t maxThreads = util::getDeviceProperties().maxThreadsPerBlock;
+
+            uint32_t minBlocks = util::getNumberOfComputeUnits();
+            uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getDeviceProperties().maxBlocksPerMultiProcessor;
+
+            size_t minReps = MIN_REPS;
+            size_t maxReps = MAX_REPS;
+
+            CacheBandwidthResult result{};
+            result.measuredBandwidth = 0.0;
+            result.dataBytes = arraySizeBytes;
+            result.cycles = 0;
+            result.time = 0.0;
+            result.numThreads = 0;
+            result.numBlocks = 0;
+            result.numReps = 0;
+
+            for (uint32_t numBlocks = minBlocks; numBlocks <= maxBlocks; numBlocks *= 2)
+            {
+                std::vector<std::vector<double>> threadsResults;
+
+                result.blocksTested.push_back(numBlocks);
+
+                for (uint32_t numThreads = minThreads; numThreads <= maxThreads; numThreads *= 2)
+                {
+                    std::vector<double> repsResults;
+
+                    if (numBlocks == minBlocks)
+                    {
+                        result.threadsTested.push_back(numThreads);
+                    }
+
+                    for (size_t reps = minReps; reps <= maxReps; reps *= 2)
+                    {
+                        if (numBlocks == minBlocks && numThreads == minThreads)
+                        {
+                            result.repsTested.push_back(reps);
+                        }
+                        
+                        auto [timeS, bandwidth] = l3ReadBandwidthLauncher(arraySizeBytes, numBlocks, numThreads, reps);
+                        
+                        repsResults.push_back(bandwidth);
+
+                        if (bandwidth > result.measuredBandwidth)
+                        {
+                            result.measuredBandwidth = bandwidth;
+                            result.time = timeS;
+                            result.numThreads = numThreads;
+                            result.numBlocks = numBlocks;
+                            result.numReps = reps;
+                        }
+                    }
+
+                    threadsResults.push_back(repsResults);
+                }
+
+                result.bandwidth3D.push_back(threadsResults);
+            }
+            
+            return result;
         }
     }
 }
