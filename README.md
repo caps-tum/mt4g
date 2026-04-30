@@ -9,7 +9,7 @@ critical support for GPU performance modeling and analysis within one unified
 interface.
 
 A detailed description of the concept, implementation and benchmarks can be
-found in this [research paper](https://doi.org/10.1145/3731599.3767518).
+found in [this](https://doi.org/10.1145/3731599.3767518) research paper.
 
 ## Overview
 
@@ -60,7 +60,9 @@ include:
 ### Memory Resource Information
 
 ✅ = Available
+
 ❌ = Not Available
+
 ➖ = Not Applicable
 
 #### AMD
@@ -215,7 +217,8 @@ mt4g
 Pre-measured results for selected GPUs live in the
 [sample_results](sample_results/) directory. If your hardware is not yet listed,
 we would greatly appreciate additional reports: Run the tool with
-`--raw --graphs --report` and open a pull request to share your measurements.
+`--graphs --report` (optionally also with `--raw`) and open a pull request to
+share your measurements.
 
 ### Adding a new Benchmark
 
