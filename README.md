@@ -1,6 +1,6 @@
-# mt4g - Memory Topology 4 GPUs
+# MT4G - Memory Topology 4 GPUs
 
-**mt4g** is a vendor-agnostic collection of microbenchmarks and APIs that
+**MT4G** is a vendor-agnostic collection of microbenchmarks and APIs that
 explores the compute and memory topologies of both AMD and NVIDIA GPUs based on
 the HIP toolchain. By capturing system properties such as the number of SMs/CUs,
 warp size, memory and cache sizes, cache line sizes and load latencies as well
@@ -8,18 +8,84 @@ as exposing deep cache subsystems and their physical layouts, it provides
 critical support for GPU performance modeling and analysis within one unified
 interface.
 
+A detailed description of the concept, implementation and benchmarks can be
+found in this [research paper](https://doi.org/10.1145/3731599.3767518).
+
 ## Overview
 
-The **mt4g** CLI tool enables a unified and cross-platform introspection of the
-hardware topology of GPUs and thus provides crucial information that is either
-scattered throughout vendor-specific APIs and data sheets or otherwise
-programmatically unavailable. Key features include:
+The **MT4G** CLI tool enables a unified and cross-platform introspection of the
+hardware topology of GPUs and thus provides crucial information that is
+otherwise scattered throughout vendor-specific APIs, data sheets and incomplete
+one-off studies, or not available at all. Key features include:
 
 - Compilation of existing APIs and over 50 microbenchmarks for statistical
   topology attribute measurement
 - Unified build system for AMD and NVIDIA targets
 - Comprehensive report of collected benchmark results as structured JSON with
-  optional plot generation for visualization
+  optional plot generation for effortless manual inspection of the raw results
+
+**MT4G** works reliably on all AMD CDNA GPUs and all recent NVIDIA
+microarchitectures from Pascal onwards. Currently, we do not support AMD RDNA
+GPUs given our primary focus on HPC/AI systems. Tested microarchitectures
+include:
+
+| GPU Name | Vendor | Microarch. |
+| -------- | ------ | ---------- |
+| MI100 | AMD | CDNA |
+| MI210 | AMD | CDNA2 |
+| MI300X | AMD | CDNA3 |
+| P6000 | NVIDIA | Pascal |
+| V100 | NVIDIA | Volta |
+| T1000 | NVIDIA | Turing |
+| RTX2080 | NVIDIA | Turing |
+| A100 | NVIDIA | Ampere |
+| H100-80 | NVIDIA | Hopper |
+| H100-96 | NVIDIA | Hopper |
+
+## Topological metrics
+
+### General & Compute Resource Information
+
+- GPU vendor and model
+- GPU clock rate
+- Compute capability
+- Number of SMs/CUs
+- Max. number of blocks per SM/CU
+- Max. number of threads per block and SM/CU
+- Number of cores and warps/SIMD per SM/CU
+- Warp size
+- Number of registers per block and SM/CU
+- Mapping of logical to physical CU IDs (AMD only)
+
+### Memory Resource Information
+
+✅ = Available
+❌ = Not Available
+➖ = Not Applicable
+
+#### AMD
+
+| _Memory Element_ | Size | Load Latency | Read & Write Bandwidth | Cache Line Size | Fetch Granularity | Amount per SM/CU or GPU | Physically Shared With |
+| ---------------- | ---- | ------------ | ---------------------- | --------------- | ----------------- | ----------------------- | ---------------------- |
+| **vL1 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ➖ |
+| **sL1d cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ➖ | ✅ |
+| **L2 cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ➖ |
+| **L3 cache** | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ | ➖ |
+| **LDS** | ✅ | ✅ | ❌ | ➖ | ➖ | ➖ | ➖ |
+| **Device Memory** | ✅ | ✅ | ✅ | ➖ | ➖ | ➖ | ➖ |
+
+#### NVIDIA
+
+| _Memory Element_ | Size | Load Latency | Read & Write Bandwidth | Cache Line Size | Fetch Granularity | Amount per SM/CU or GPU | Physically Shared With |
+| ---------------- | ---- | ------------ | ---------------------- | --------------- | ----------------- | ----------------------- | ---------------------- |
+| **L1 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| **L2 cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ➖ |
+| **Texture cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| **Readonly cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| **Constant L1 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| **Constant L1.5 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ | ➖ |
+| **Shared Memory** | ✅ | ✅ | ❌ | ➖ | ➖ | ➖ | ➖ |
+| **Device Memory** | ✅ | ✅ | ✅ | ➖ | ➖ | ➖ | ➖ |
 
 ## Installation
 
@@ -53,7 +119,7 @@ export HIP_PATH=<path_to_spack>/opt/spack/<system_architecture>/hip-<version>-<h
 Additionally for NVIDIA targets, the `CUDA_PATH` environment variable needs to
 be set to the CUDA installation directory.
 
-**mt4g** has been tested successfully with `hip@6.3.3` and `cuda@12.8`.
+**MT4G** has been tested successfully with `hip@6.3.3` and `cuda@12.8`.
 
 ### Build
 
@@ -62,7 +128,7 @@ AMD (e.g. `gfx90a`) and NVIDIA (e.g. `sm_90`) respectively. Some of the
 identifiers of the LLVM targets for AMD can be found
 [here](https://rocm.docs.amd.com/projects/install-on-linux/en/latest/reference/system-requirements.html#supported-gpus),
 while the compute capabilites for NVIDIA can be found [here](https://developer.nvidia.com/cuda/gpus).
-To build and install **mt4g**, run
+To build and install **MT4G**, run
 
 ```bash
 git clone https://github.com/caps-tum/mt4g.git
@@ -105,7 +171,7 @@ make all install -j $(nproc)
 | `--memory` | Run main memory benchmarks |
 | `--departuredelay` | Run departure delay benchmarks |
 | `--resourceshare` | Run resource sharing benchmarks |
-| `-v, --version` | Display the version of mt4g and exit |
+| `-v, --version` | Display the version of MT4G and exit |
 | `-h, --help` | Display a detailed help message and exit |
 
 If no benchmark group is chosen, all available groups are executed. Unsupported
@@ -114,53 +180,13 @@ access is recommended for more reliable measurement results.
 
 ### Output
 
-Usually, benchmark results are written as structured JSON into the file
+By default, benchmark results are written as structured JSON into the file
 `<GPU_NAME>.json` of the current working directory. However, the name and path
 of the output file and directory may be changed through the flags `-f`/`--file`
 and `-l`/`--location` respectively. With `-s`/`--stdout`, the final JSON output
 file may be dumped into `stdout` instead. When `--graphs`, `--raw` or `--report`
 is enabled, additional files are written to `results/<GPU_NAME>`. The `--report`
 flag generates a `README.md` that embeds all graphs and links to the raw data.
-
-If you would like to contribute results for hardware not yet covered, please
-run the tool with `--raw --graphs --report` and send us the generated directory
-via pull request.
-
-## Supported Architectures
-
-**mt4g** works reliably on all AMD CDNA GPUs and all recent NVIDIA
-microarchitectures from Pascal onwards. However, the Ada Lovelace and Blackwell
-architectures have not yet been tested due to missing access. Furthermore, we
-do not consider AMD's RDNA GPUs since we focus on HPC/AI workloads. Support for
-UDNA GPUs is planned in the future.
-
-## Topological metrics
-
-The information on the attributes provided by **mt4g** is depicted below
-
-### AMD
-
-| _Memory Element_ | Size | Load Latency | Read & Write Bandwidth | Cache Line Size | Fetch Granularity | Amount per SM/CU or GPU | Physically Shared With |
-| ---------------- | ---- | ------------ | ---------------------- | --------------- | ----------------- | ----------------------- | ---------------------- |
-| **vL1 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ❌ |
-| **sL1d cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ |
-| **L2 cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
-| **L3 cache** | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ | ❌ |
-| **LDS** | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| **Device Memory** | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
-
-### NVIDIA
-
-| _Memory Element_ | Size | Load Latency | Read & Write Bandwidth | Cache Line Size | Fetch Granularity | Amount per SM/CU or GPU | Physically Shared With |
-| ---------------- | ---- | ------------ | ---------------------- | --------------- | ----------------- | ----------------------- | ---------------------- |
-| **L1 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
-| **L2 cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
-| **Texture cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
-| **Readonly cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
-| **Constant L1 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
-| **Constant L1.5 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ | ❌ |
-| **Shared Memory** | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| **Device Memory** | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 
 ## Known Issues and Limitations
 
@@ -169,6 +195,7 @@ The information on the attributes provided by **mt4g** is depicted below
 - Bandwidths are not optimal because we currently do not use a (dynamically found) optimal number of blocks.
 - Cache Line Size detection uses a heuristical approach and is therefore not guaranteed to be correct.
 - Constant L1 shared with L1 is not too reliable. Hence, as a hotfix we repeat the measurements 10 times and on one unsuccessful run return not shared. We are working on a cleaner solution.
+- Incomplete support for CDNA3.
 - Runs only on Linux.
 
 ## Repository Layout & Contribution Guidelines
@@ -192,7 +219,7 @@ we would greatly appreciate additional reports: Run the tool with
 
 ### Adding a new Benchmark
 
-To add a new benchmark to the **mt4g**, follow the subsequent instructions:
+To add a new benchmark to the **MT4G**, follow the subsequent instructions:
 
 1. Implement the benchmark in `src/benchmarks/` and expose a suitable interface
    in `include/`.
