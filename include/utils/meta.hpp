@@ -96,4 +96,12 @@ namespace util {
         }();
         return osInfo;
     }
+    /**
+    * @brief Retrieve the hostname of the machine running the benchmark.
+    */
+    inline std::optional<std::string> getHostname() {
+        struct utsname buf{};
+        if (uname(&buf) != 0) return std::nullopt;
+        return std::string(buf.nodename);
+    }
 } // namespace util

@@ -64,6 +64,7 @@ int main(int argc, char* argv[]) {
     if (auto os = util::getOsDescription()) metaInfo["os"] = *os;
     if (auto driver = util::getDriverVersion()) metaInfo["driver"] = *driver;
     if (auto runtimeVersion = util::getRuntimeVersion()) metaInfo["runtime"] = *runtimeVersion;
+    if (auto hostname = util::getHostname()) metaInfo["hostname"] = *hostname;
 
     nlohmann::json result = {
         {"meta", metaInfo},

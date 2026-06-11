@@ -96,6 +96,8 @@ include:
 - ROCm or CUDA backend including drivers, compilers and libraries for AMD or
   NVIDIA targets respectively
 - HIP SDK with the `hipcc` compiler
+- CMake ≥ 3.20
+- A C++ compiler with C++20 support (e.g. GCC 10+)
 - `nlohmann-json` for JSON output
 - `cxxopts` for CLI parsing
 - Python 3 including the `matplotlib`, `pandas` and `numpy` packages for
@@ -107,8 +109,11 @@ A suitable HIP environment can for instance be obtained via
 ```bash
 spack install hip           # includes ROCm backend for AMD targets
 spack install hip+cuda      # includes CUDA backend for NVIDIA targets
+spack install nlohmann-json
+spack install cxxopts
 
-spack load hip              # exports binaries and libraries
+spack load hip              # (or hip+cuda for NVIDIA targets)
+spack load nlohmann-json cxxopts
 ```
 
 The `HIP_PATH` environment variable should be set to the HIP installation

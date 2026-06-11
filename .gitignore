@@ -10,3 +10,4 @@ dbg/*
 .vscode
 !results/**
 include/version.hpp
+build-*
