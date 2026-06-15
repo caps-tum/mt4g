@@ -109,8 +109,7 @@ A suitable HIP environment can for instance be obtained via
 ```bash
 spack install hip           # includes ROCm backend for AMD targets
 spack install hip+cuda      # includes CUDA backend for NVIDIA targets
-spack install nlohmann-json
-spack install cxxopts
+spack install nlohmann-json cxxopts
 
 spack load hip              # (or hip+cuda for NVIDIA targets)
 spack load nlohmann-json cxxopts
