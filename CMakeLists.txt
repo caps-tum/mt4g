@@ -1,19 +1,14 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.21)
 
-set(CMAKE_CXX_COMPILER hipcc)
-
-project(mt4g VERSION 1.2.0 LANGUAGES CXX)
+# CMake 3.21+ supports HIP as a first-class language, which handles compiler
+# and HIP path discovery automatically. If CMake cannot find HIP, set HIP_PATH
+# and call find_package(hip REQUIRED CONFIG) manually as a fallback.
+project(mt4g VERSION 1.2.0 LANGUAGES CXX HIP)
 
 set(GPU_TARGET_ARCH "" CACHE STRING "The target GPU architecture")
 if(GPU_TARGET_ARCH STREQUAL "")
     message(FATAL_ERROR "Please set GPU_TARGET_ARCH, e.g. -DGPU_TARGET_ARCH=sm_70 or -DGPU_TARGET_ARCH=gfx90a")
 endif()
-
-if(NOT DEFINED ENV{HIP_PATH})
-    message(FATAL_ERROR "HIP_PATH is not set in environment")
-endif()
-list(APPEND CMAKE_PREFIX_PATH $ENV{HIP_PATH})
-find_package(hip REQUIRED CONFIG)
 
 find_package(nlohmann_json 3.11.2 REQUIRED)
 find_package(cxxopts 3.2.0 REQUIRED)
@@ -30,21 +25,19 @@ if(GIT_FOUND AND EXISTS ${CMAKE_SOURCE_DIR}/.git)
     if(NOT GIT_DESCRIBE STREQUAL "")
         string(REGEX REPLACE "^v" "" MT4G_VERSION ${GIT_DESCRIBE})
     else()
-        set(MT4G_VERSION ${CMAKE_PROJECT_VERSION})
+        set(MT4G_VERSION "${CMAKE_PROJECT_VERSION}-cmake")
     endif()
 else()
-    set(MT4G_VERSION ${CMAKE_PROJECT_VERSION})
+    set(MT4G_VERSION "${CMAKE_PROJECT_VERSION}-cmake")
 endif()
 configure_file(${CMAKE_SOURCE_DIR}/src/version.hpp.in ${CMAKE_SOURCE_DIR}/src/version.hpp)
 
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(GPU_TARGET_ARCH MATCHES "^sm_")
-    if(NOT DEFINED ENV{CUDA_PATH})
-        message(FATAL_ERROR "CUDA_PATH is not set in environment")
-    endif()
     set(ENV{HIP_PLATFORM} nvidia)
     add_compile_options(--gpu-architecture=${GPU_TARGET_ARCH} -x cu -Wno-deprecated-gpu-targets)
+    find_package(CUDAToolkit REQUIRED)
 elseif(GPU_TARGET_ARCH MATCHES "^gfx")
     set(ENV{HIP_PLATFORM} amd)
     add_compile_options(--offload-arch=${GPU_TARGET_ARCH} -x hip -Wall -Wextra -Wpedantic -Wnull-dereference)
@@ -65,9 +58,7 @@ target_link_libraries(mt4g PRIVATE
 )
 
 if(GPU_TARGET_ARCH MATCHES "^sm_")
-    target_include_directories(mt4g SYSTEM PRIVATE $ENV{CUDA_PATH}/include)
-    target_link_directories(mt4g PRIVATE $ENV{CUDA_PATH}/lib64)
-    target_link_libraries(mt4g PRIVATE cudart)
+    target_link_libraries(mt4g PRIVATE CUDA::cudart)
 elseif(GPU_TARGET_ARCH MATCHES "^gfx")
     target_link_directories(mt4g PRIVATE /opt/rocm/lib)
     target_link_libraries(mt4g PRIVATE rocm_smi64 hsa-runtime64 pthread)

@@ -96,7 +96,7 @@ include:
 - ROCm or CUDA backend including drivers, compilers and libraries for AMD or
   NVIDIA targets respectively
 - HIP SDK with the `hipcc` compiler
-- CMake ≥ 3.20
+- CMake ≥ 3.21
 - A C++ compiler with C++20 support (e.g. GCC 10+)
 - `nlohmann-json` for JSON output
 - `cxxopts` for CLI parsing
