@@ -96,6 +96,8 @@ include:
 - ROCm or CUDA backend including drivers, compilers and libraries for AMD or
   NVIDIA targets respectively
 - HIP SDK with the `hipcc` compiler
+- CMake ≥ 3.21
+- A C++ compiler with C++20 support (e.g. GCC 10+)
 - `nlohmann-json` for JSON output
 - `cxxopts` for CLI parsing
 - Python 3 including the `matplotlib`, `pandas` and `numpy` packages for
@@ -107,8 +109,10 @@ A suitable HIP environment can for instance be obtained via
 ```bash
 spack install hip           # includes ROCm backend for AMD targets
 spack install hip+cuda      # includes CUDA backend for NVIDIA targets
+spack install nlohmann-json cxxopts
 
-spack load hip              # exports binaries and libraries
+spack load hip              # (or hip+cuda for NVIDIA targets)
+spack load nlohmann-json cxxopts
 ```
 
 The `HIP_PATH` environment variable should be set to the HIP installation
@@ -205,11 +209,17 @@ flag generates a `README.md` that embeds all graphs and links to the raw data.
 ```
 mt4g
 ├── CMakeLists.txt        -- Build configuration
-├── include               -- Header files
 ├── LICENSE               -- Project license
 ├── README.md             -- Project description
 ├── sample_results        -- Exemplary output files from selected hardware
-└── src                   -- Benchmark implementation and CLI helpers
+└── src                   -- Headers, benchmark implementations and CLI helpers
+    ├── benchmarks        -- Benchmark kernels, grouped by category
+    │   ├── <category>/               -- Shared benchmarks (no prefix)
+    │   ├── <category>/nvidia_*       -- NVIDIA-specific benchmarks
+    │   └── <category>/amd_*          -- AMD-specific benchmarks
+    ├── const             -- Compile-time constant arrays
+    ├── typedef           -- Type definitions and result structs
+    └── utils             -- Utility helpers (HIP wrappers, statistics, I/O)
 ```
 
 ### Adding new Measurements
@@ -224,12 +234,13 @@ share your measurements.
 
 To add a new benchmark to the **MT4G**, follow the subsequent instructions:
 
-1. Implement the benchmark in `src/benchmarks/` and expose a suitable interface
-   in `include/`.
+1. Implement the benchmark in `src/benchmarks/<category>/` — place the header
+   and source in the same directory, using a `nvidia_` or `amd_` prefix for
+   vendor-specific files.
 2. Try to follow the pattern of `measureXXX()`, `XXXLauncher()` and `XXXKernel()` to keep the structure modular and readable.
    Every benchmark should get its own file to keep code flow as easy as possible to follow -- this is not about software engineering!
-4. Update `CMakeLists.txt` if necessary.
-5. Document the new benchmark and its command line switch in the `README.md` if suitable.
+3. Update `CMakeLists.txt` if necessary.
+4. Document the new benchmark and its command line switch in the `README.md` if suitable.
 
 ### Coding Style
 
