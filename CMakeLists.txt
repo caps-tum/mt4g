@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-# CMake 3.21+ supports HIP as a first-class language, which handles compiler
-# and HIP path discovery automatically. If CMake cannot find HIP, set HIP_PATH
-# and call find_package(hip REQUIRED CONFIG) manually as a fallback.
+# CMake 3.21+ supports HIP as a first-class language.
 project(mt4g VERSION 1.2.0 LANGUAGES CXX HIP)
 
 set(GPU_TARGET_ARCH "" CACHE STRING "The target GPU architecture")
@@ -10,6 +8,7 @@ if(GPU_TARGET_ARCH STREQUAL "")
     message(FATAL_ERROR "Please set GPU_TARGET_ARCH, e.g. -DGPU_TARGET_ARCH=sm_70 or -DGPU_TARGET_ARCH=gfx90a")
 endif()
 
+find_package(hip REQUIRED CONFIG)
 find_package(nlohmann_json 3.11.2 REQUIRED)
 find_package(cxxopts 3.2.0 REQUIRED)
 
@@ -41,15 +40,29 @@ if(GPU_TARGET_ARCH MATCHES "^sm_")
 elseif(GPU_TARGET_ARCH MATCHES "^gfx")
     set(ENV{HIP_PLATFORM} amd)
     add_compile_options(--offload-arch=${GPU_TARGET_ARCH} -x hip -Wall -Wextra -Wpedantic -Wnull-dereference)
+    find_package(hsa-runtime64 REQUIRED CONFIG)
+    get_filename_component(_hip_bin "${CMAKE_HIP_COMPILER}" DIRECTORY)
+    get_filename_component(_rocm_root "${_hip_bin}/../../.." ABSOLUTE)
+    find_library(ROCM_SMI_LIB NAMES rocm_smi64 REQUIRED HINTS "${_rocm_root}/lib")
+
+    # ROCm >= 7.x: rocm_smi.h transitively includes <libdrm/drm.h> via kfd_ioctl.h.
+    # Requires libdrm-devel (dnf/apt) or libdrm loaded via spack.
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(LIBDRM QUIET libdrm)
+    endif()
 else()
     message(FATAL_ERROR "Invalid GPU_TARGET_ARCH '${GPU_TARGET_ARCH}'. Must start with sm_ or gfx")
 endif()
 
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/src/*.cpp")
+# Force all .cpp sources through the HIP compiler (clang++) instead of the
+# default CXX compiler (GCC), which does not understand --offload-arch / -x hip.
+set_source_files_properties(${SOURCES} PROPERTIES LANGUAGE HIP)
 
 add_executable(mt4g ${SOURCES})
 
-target_include_directories(mt4g PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(mt4g PRIVATE ${CMAKE_SOURCE_DIR}/src ${LIBDRM_INCLUDE_DIRS})
 target_compile_features(mt4g PUBLIC cxx_std_20)
 target_link_libraries(mt4g PRIVATE
     nlohmann_json::nlohmann_json
@@ -60,8 +73,7 @@ target_link_libraries(mt4g PRIVATE
 if(GPU_TARGET_ARCH MATCHES "^sm_")
     target_link_libraries(mt4g PRIVATE CUDA::cudart)
 elseif(GPU_TARGET_ARCH MATCHES "^gfx")
-    target_link_directories(mt4g PRIVATE /opt/rocm/lib)
-    target_link_libraries(mt4g PRIVATE rocm_smi64 hsa-runtime64 pthread)
+    target_link_libraries(mt4g PRIVATE hsa-runtime64::hsa-runtime64 ${ROCM_SMI_LIB} pthread)
 endif()
 
 install(TARGETS mt4g DESTINATION bin)

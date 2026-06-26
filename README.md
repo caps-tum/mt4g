@@ -100,6 +100,8 @@ include:
 - A C++ compiler with C++20 support (e.g. GCC 10+)
 - `nlohmann-json` for JSON output
 - `cxxopts` for CLI parsing
+- `libdrm-devel` / `libdrm-dev` (AMD targets with ROCm ≥ 7.x only —
+  `rocm_smi.h` transitively requires it via `kfd_ioctl.h`)
 - Python 3 including the `matplotlib`, `pandas` and `numpy` packages for
   graphical plots
 
@@ -110,22 +112,19 @@ A suitable HIP environment can for instance be obtained via
 spack install hip           # includes ROCm backend for AMD targets
 spack install hip+cuda      # includes CUDA backend for NVIDIA targets
 spack install nlohmann-json cxxopts
+spack install libdrm        # AMD targets with ROCm >= 7.x only
 
 spack load hip              # (or hip+cuda for NVIDIA targets)
-spack load nlohmann-json cxxopts
+spack load nlohmann-json cxxopts libdrm
 ```
 
-The `HIP_PATH` environment variable should be set to the HIP installation
-directory. Please export manually if not automatically set by `spack`, e.g.
-
-```bash
-export HIP_PATH=<path_to_spack>/opt/spack/<system_architecture>/hip-<version>-<hash>
-```
+On distro-managed systems, install `libdrm-devel` (RHEL/Fedora) or
+`libdrm-dev` (Debian/Ubuntu) instead.
 
 Additionally for NVIDIA targets, the `CUDA_PATH` environment variable needs to
 be set to the CUDA installation directory.
 
-**MT4G** has been tested successfully with `hip@6.3.3` and `cuda@12.8`.
+**MT4G** has been tested successfully with `hip@6.3.3`, `hip@7.2.1` and `cuda@12.8`.
 
 ### Build
 
