@@ -1,0 +1,142 @@
+{
+    "compute": {
+        "concurrentKernels": true,
+        "maxBlocksPerMultiProcessor": 32,
+        "maxThreadsPerBlock": 1024,
+        "maxThreadsPerMultiProcessor": 2048,
+        "multiProcessorCount": 132,
+        "numberOfCoresPerMultiProcessor": 128,
+        "regsPerBlock": 65536,
+        "regsPerMultiProcessor": 65536,
+        "supportsCooperativeLaunch": true,
+        "warpSize": 32
+    },
+    "general": {
+        "asicRevision": 0,
+        "clockRate": {
+            "unit": "kHz",
+            "value": 1785000
+        },
+        "computeCapability": {
+            "major": 9,
+            "minor": 0
+        },
+        "name": "NVIDIA H100 NVL",
+        "vendor": "NVIDIA"
+    },
+    "memory": {
+        "constant": {
+            "totalConstMem": {
+                "unit": "bytes",
+                "value": 65536
+            }
+        },
+        "l1": {
+            "amountPerMultiprocessor": 1,
+            "fetchGranularity": {
+                "confidence": 0.999980000399992,
+                "method": "p-chase",
+                "randomized": false,
+                "size": 32,
+                "unit": "bytes"
+            },
+            "globalL1CacheSupported": true,
+            "latency": {
+                "mean": 38.0,
+                "measurements": 255,
+                "method": "p-chase",
+                "p50": 38.0,
+                "p95": 38.0,
+                "sampleSize": 256,
+                "stdev": 0.0,
+                "unit": "cycles"
+            },
+            "lineSize": {
+                "confidence": 0.9970167012643558,
+                "method": "p-chase",
+                "randomized": false,
+                "size": 128,
+                "unit": "bytes"
+            },
+            "localL1CacheSupported": true,
+            "missPenalty": {
+                "unit": "cycles",
+                "value": 173.28235294117647
+            },
+            "readBandwidthPerCU": {
+                "cycles": 411042583,
+                "dataBytes": 128640,
+                "measuredBandwidth": 136.38527629143474,
+                "numBlocks": 1,
+                "numReps": 262144,
+                "numThreads": 1024,
+                "time": 0.2302759568627451
+            },
+            "size": {
+                "confidence": 0.9709514524273787,
+                "method": "p-chase",
+                "randomized": false,
+                "size": 257280,
+                "unit": "bytes"
+            },
+            "writeBandwidthPerCU": {
+                "cycles": 429960,
+                "dataBytes": 128640,
+                "measuredBandwidth": 15.916087059810978,
+                "numBlocks": 1,
+                "numReps": 32,
+                "numThreads": 1024,
+                "time": 0.00024087394957983193
+            }
+        },
+        "l2": {
+            "persistingL2CacheMaxSize": {
+                "unit": "bytes",
+                "value": 39321600
+            },
+            "size": {
+                "unit": "bytes",
+                "value": 62914560
+            }
+        },
+        "main": {
+            "memoryBusWidth": {
+                "unit": "bit",
+                "value": 6016
+            },
+            "memoryClockRate": {
+                "unit": "kHz",
+                "value": 2619000
+            },
+            "totalGlobalMem": {
+                "unit": "bytes",
+                "value": 99951706112
+            }
+        },
+        "shared": {
+            "reservedSharedMemPerBlock": {
+                "unit": "bytes",
+                "value": 1024
+            },
+            "sharedMemPerBlock": {
+                "unit": "bytes",
+                "value": 49152
+            },
+            "sharedMemPerMultiProcessor": {
+                "unit": "bytes",
+                "value": 233472
+            }
+        }
+    },
+    "meta": {
+        "driver": 13020,
+        "gpuCompiler": "nvcc 12.8.93",
+        "hostCompiler": "gcc 13.3.0",
+        "hostCpu": "AMD EPYC 9374F 32-Core Processor",
+        "hostname": "i10se23",
+        "mt4gVersion": "1.2.0-22-g44b6207-dirty",
+        "os": "Linux 6.8.0-124-generic",
+        "runtime": 12080,
+        "timestamp": "2026-06-25T20:40:32Z"
+    }
+}

@@ -7,12 +7,15 @@
 #include <fstream>
 #include <vector>
 #include <set>
+#include <string>
+#include <cstdlib>
 #include <unistd.h>
 #include <nlohmann/json.hpp>
 
 #include "utils/util.hpp"
 #include "typedef/cacheBandwidthResult.hpp"
 #include "const/chartScript.hpp"
+#include "const/bandwidthChartScript.hpp"
 
 template <typename T> struct is_vector : std::false_type {};
 
@@ -516,5 +519,64 @@ namespace util {
                 }
             }
         }
+    }
+
+    /**
+     * @brief Build the file stem for a bandwidth grid CSV.
+     *
+     * The grid file name carries the metadata the plotting script needs to pick
+     * the right figure and legend:
+     *   - @p benchmark : display token (e.g. "vL1d", "sL1d", "L2", "L3", "LDS")
+     *   - @p direction : "Read" or "Write"
+     *   - @p suffix    : optional extra tag for LDS (e.g. "16KiB_dyn")
+     *
+     * Example: ``MI300A__LDS_Read_16KiB_dyn_BW_Grid.csv``.
+     */
+    inline std::string bandwidthGridFileName(const std::string& fileBase,
+                                             const std::string& benchmark,
+                                             const std::string& direction,
+                                             const std::string& suffix = "") {
+        std::string name = fileBase + "__" + benchmark + "_" + direction + "_";
+        if (!suffix.empty()) name += suffix + "_";
+        name += "BW_Grid.csv";
+        return name;
+    }
+
+    /**
+     * @brief Generate all bandwidth figures from grid CSVs.
+     *
+     * Writes the embedded plotting script (scripts/plot_bandwidth.py) to a
+     * temporary file and runs it in "auto" mode over @p gridDir, which is
+     * expected to already contain the ``*_BW_Grid.csv`` files emitted by
+     * @ref writeBandwidthGridToCSV. The script classifies each grid (block-sweep
+     * vs. single-config LDS, read vs. write) and produces a PNG + PDF per figure
+     * into @p gridDir, overwriting any existing files. Requires python3 with
+     * matplotlib; failures are reported but never abort the benchmark run.
+     */
+    inline void generateBandwidthCharts(const std::string& gridDir, int dpi = 150) {
+        std::filesystem::path scriptTmp = std::filesystem::temp_directory_path() / "mt4gBandwidthXXXXXX.py";
+        std::string tmpName = scriptTmp.string();
+        int fd = mkstemps(tmpName.data(), 3);
+        if (fd == -1) {
+            std::fprintf(stderr, "Failed to create temporary bandwidth plotting script.\n");
+            return;
+        }
+        close(fd);
+        {
+            std::ofstream ofs(tmpName);
+            ofs << bandwidthChartScript;
+        }
+
+        std::string cmd = "python3 " + tmpName +
+                          " auto --indir \"" + gridDir + "\"" +
+                          " --outdir \"" + gridDir + "\"" +
+                          " --dpi " + std::to_string(dpi);
+
+        int status = std::system(cmd.c_str());
+        if (status != 0) {
+            std::fprintf(stderr,
+                         "Bandwidth chart generation failed. Ensure python3 with matplotlib is available.\n");
+        }
+        std::filesystem::remove(tmpName);
     }
 }
