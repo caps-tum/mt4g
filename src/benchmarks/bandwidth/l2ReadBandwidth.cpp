@@ -126,8 +126,8 @@ namespace benchmark {
         uint32_t minBlocks = util::getNumberOfComputeUnits();
         uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getDeviceProperties().maxBlocksPerMultiProcessor;
 
-        size_t minReps = MIN_REPS;
-        size_t maxReps = MAX_REPS;
+        size_t minReps = BANDWIDTH_FIXED_REPS; // hardcoded single rep count; was MIN_REPS
+        size_t maxReps = BANDWIDTH_FIXED_REPS; // hardcoded single rep count; was MAX_REPS
 
         CacheBandwidthResult result{};
         result.measuredBandwidth = 0.0;

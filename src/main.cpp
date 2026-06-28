@@ -15,6 +15,7 @@
 #include <type_traits>
 
 #include "version.hpp"
+#include "config.hpp"
 #include "benchmarks/benchmark.hpp"
 #include "utils/util.hpp"
 #include "utils/silent.hpp"
@@ -45,12 +46,23 @@ int main(int argc, char* argv[]) {
         fancyFileName = opts.fileName;
     }
 
-    std::filesystem::path graphDir = opts.location / ("results/" + fancyFileName);
-    if (opts.graphs || opts.rawData || opts.fullReport) {
+// Results layout:
+//   <base>/<device name>/        CSVs, plots, raw data (graphDir)
+//   <base>/<device name>.json    JSON report
+// Device folders use full device names (including spaces) to match
+// sample_results/<device name>/ layout (no underscore variant).
+// See config.hpp for OUTPUT_BASE_DIR.
+    std::filesystem::path outputBaseDir = opts.location / OUTPUT_BASE_DIR;
+    std::filesystem::path graphDir = outputBaseDir / fancyName;
+    {
+        // Create the device folder when extra files are produced, otherwise just
+        // the base directory so the JSON report below has somewhere to go.
+        bool needGraphDir = opts.graphs || opts.rawData || opts.fullReport;
         std::error_code ec;
-        std::filesystem::create_directories(graphDir, ec);
+        std::filesystem::create_directories(needGraphDir ? graphDir : outputBaseDir, ec);
         if (ec) {
-            std::cerr << "Could not create graph directory '" << graphDir.string() << "': " << ec.message() << std::endl;
+            std::cerr << "Could not create output directory '"
+                      << (needGraphDir ? graphDir : outputBaseDir).string() << "': " << ec.message() << std::endl;
         }
     }
 
@@ -965,9 +977,12 @@ int main(int argc, char* argv[]) {
     if (opts.useStdout) {
         std::cout << result.dump(4) << std::endl;
     } else {
-        std::ofstream jsonFile(opts.location / (fancyFileName + ".json"));
+        // JSON report sits beside the device folder, matching the existing
+        // sample_results/<device name>.json layout.
+        std::filesystem::path jsonPath = outputBaseDir / (fancyName + ".json");
+        std::ofstream jsonFile(jsonPath);
         if (!jsonFile) {
-            std::cerr << "Could not write JSON file '" << fancyFileName << ".json'" << std::endl;
+            std::cerr << "Could not write JSON file '" << jsonPath.string() << "'" << std::endl;
             return EXIT_FAILURE;
         }
 

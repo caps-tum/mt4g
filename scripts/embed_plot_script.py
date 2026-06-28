@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """Embed scripts/plot_bandwidth.py into src/const/bandwidthChartScript.hpp.
 
-The C++ binary ships the bandwidth plotting script as an embedded string (the
-same idiom as src/const/chartScript.hpp) so that `mt4g -g` can run it from a
-temporary file without depending on an external script path at runtime.
+This embeds the bandwidth plotting script as a raw string inside a C++ header
+so the binary can execute it at runtime without relying on external file paths.
 
-scripts/plot_bandwidth.py is the single source of truth; run this script after
-editing it to refresh the generated header:
+scripts/plot_bandwidth.py is the source of truth. After modifying it, regenerate
+the header:
 
     python3 scripts/embed_plot_script.py
 """
