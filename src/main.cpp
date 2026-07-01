@@ -15,7 +15,6 @@
 #include <type_traits>
 
 #include "version.hpp"
-#include "config.hpp"
 #include "benchmarks/benchmark.hpp"
 #include "utils/util.hpp"
 #include "utils/silent.hpp"
@@ -46,23 +45,12 @@ int main(int argc, char* argv[]) {
         fancyFileName = opts.fileName;
     }
 
-// Results layout:
-//   <base>/<device name>/        CSVs, plots, raw data (graphDir)
-//   <base>/<device name>.json    JSON report
-// Device folders use full device names (including spaces) to match
-// sample_results/<device name>/ layout (no underscore variant).
-// See config.hpp for OUTPUT_BASE_DIR.
-    std::filesystem::path outputBaseDir = opts.location / OUTPUT_BASE_DIR;
-    std::filesystem::path graphDir = outputBaseDir / fancyName;
-    {
-        // Create the device folder when extra files are produced, otherwise just
-        // the base directory so the JSON report below has somewhere to go.
-        bool needGraphDir = opts.graphs || opts.rawData || opts.fullReport;
+    std::filesystem::path graphDir = opts.location / ("results/" + fancyFileName);
+    if (opts.graphs || opts.rawData || opts.fullReport) {
         std::error_code ec;
-        std::filesystem::create_directories(needGraphDir ? graphDir : outputBaseDir, ec);
+        std::filesystem::create_directories(graphDir, ec);
         if (ec) {
-            std::cerr << "Could not create output directory '"
-                      << (needGraphDir ? graphDir : outputBaseDir).string() << "': " << ec.message() << std::endl;
+            std::cerr << "Could not create graph directory '" << graphDir.string() << "': " << ec.message() << std::endl;
         }
     }
 
@@ -918,17 +906,36 @@ int main(int argc, char* argv[]) {
             util::writeVectorToFile(mainMemLatency.timings, (graphDir / (fancyFileName + "__Main_Memory_Latency.txt")).string());
         }
 
-        std::cout << "[Main Memory] Read Bandwidth" << std::endl;
-        result["memory"]["main"]["readBandwidth"] = {
-            {"value", benchmark::measureMainMemoryReadBandwidth(deviceProperties.totalGlobalMem)},
-            {"unit", "GiB/s"}
-        };
+        if (opts.runOptimalSearch)
+        {
+            std::cout << "[Main Memory] Read Bandwidth with optimal search" << std::endl;
+            CacheBandwidthResult mainMemReadBandwidth = benchmark::measureMainMemoryReadBandwidthSweep(deviceProperties.totalGlobalMem);
+            result["memory"]["main"]["readBandwidth"] = mainMemReadBandwidth;
 
-        std::cout << "[Main Memory] Write Bandwidth" << std::endl;
-        result["memory"]["main"]["writeBandwidth"] = {
-            {"value", benchmark::measureMainMemoryWriteBandwidth(deviceProperties.totalGlobalMem)},
-            {"unit", "GiB/s"}
-        };
+            std::cout << "[Main Memory] Write Bandwidth with optimal search" << std::endl;
+            CacheBandwidthResult mainMemWriteBandwidth = benchmark::measureMainMemoryWriteBandwidthSweep(deviceProperties.totalGlobalMem);
+            result["memory"]["main"]["writeBandwidth"] = mainMemWriteBandwidth;
+
+            if (opts.rawData || opts.graphs)
+            {
+                util::writeBandwidthGridToCSV(mainMemReadBandwidth, (graphDir / util::bandwidthGridFileName(fancyFileName, "MainMemory", "Read")).string());
+                util::writeBandwidthGridToCSV(mainMemWriteBandwidth, (graphDir / util::bandwidthGridFileName(fancyFileName, "MainMemory", "Write")).string());
+            }
+        }
+        else
+        {
+            std::cout << "[Main Memory] Read Bandwidth" << std::endl;
+            result["memory"]["main"]["readBandwidth"] = {
+                {"value", benchmark::measureMainMemoryReadBandwidth(deviceProperties.totalGlobalMem)},
+                {"unit", "GiB/s"}
+            };
+
+            std::cout << "[Main Memory] Write Bandwidth" << std::endl;
+            result["memory"]["main"]["writeBandwidth"] = {
+                {"value", benchmark::measureMainMemoryWriteBandwidth(deviceProperties.totalGlobalMem)},
+                {"unit", "GiB/s"}
+            };
+        }
 
         std::cout << "[Main Memory] Benchmarks finished" << std::endl;
     }
@@ -977,12 +984,9 @@ int main(int argc, char* argv[]) {
     if (opts.useStdout) {
         std::cout << result.dump(4) << std::endl;
     } else {
-        // JSON report sits beside the device folder, matching the existing
-        // sample_results/<device name>.json layout.
-        std::filesystem::path jsonPath = outputBaseDir / (fancyName + ".json");
-        std::ofstream jsonFile(jsonPath);
+        std::ofstream jsonFile(opts.location / (fancyFileName + ".json"));
         if (!jsonFile) {
-            std::cerr << "Could not write JSON file '" << jsonPath.string() << "'" << std::endl;
+            std::cerr << "Could not write JSON file '" << fancyFileName << ".json'" << std::endl;
             return EXIT_FAILURE;
         }
 

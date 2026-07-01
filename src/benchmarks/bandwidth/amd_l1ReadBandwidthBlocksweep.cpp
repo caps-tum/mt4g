@@ -9,8 +9,6 @@
 
 static constexpr auto WARMUP_REPS = 128;
 
-static constexpr auto MIN_REPS = 2;
-static constexpr auto MAX_REPS = 262144; // 2 ^ 18
 
 static constexpr auto MS_PER_SECOND = 1000.0; // ms
 
@@ -95,8 +93,8 @@ namespace benchmark
             uint32_t minBlocks = 1;
             uint32_t maxBlocks = util::getDeviceProperties().maxBlocksPerMultiProcessor;
             
-            size_t minReps = BANDWIDTH_FIXED_REPS; // hardcoded single rep count; was MIN_REPS
-            size_t maxReps = BANDWIDTH_FIXED_REPS; // hardcoded single rep count; was MAX_REPS
+            size_t minReps = MIN_REPS;
+            size_t maxReps = MAX_REPS;
 
             CacheBandwidthResult result{};
             result.measuredBandwidth = 0.0;

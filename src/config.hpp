@@ -9,8 +9,9 @@ inline constexpr size_t CACHE_SIZE_BENCH_RESOLUTION = 256; // Bytes
 inline constexpr double CACHE_MISS_REGION_RELATIVE_DIFFERENCE = 0.02; // Relative difference
 inline constexpr size_t CACHE_LINE_SIZE_RESOLUTION_DIVISOR = 2; // Divisor DO NOT CHANGE, Line Size Detection assumes it to be 2. TODO
 inline constexpr size_t DEFAULT_ROUNDS = 10; // Bandwidth rounds
-// Fixed repetition count for bandwidth benchmarks; overrides sweep logic.
-inline constexpr size_t BANDWIDTH_FIXED_REPS = 2048; // 2^11
+// Repetition range for bandwidth benchmarks. MIN_REPS == MAX_REPS runs a single iteration;
+// increase MAX_REPS to restore the full sweep.
+inline constexpr size_t MIN_REPS = 2048; // 2^11
+inline constexpr size_t MAX_REPS = 2048; // 2^11
 inline constexpr size_t DEFAULT_SIZE_DOWN_FACTOR = 4; // Bandwidth benchmark test size reduction factor
-inline constexpr const char* OUTPUT_BASE_DIR = "sample_results";
 inline constexpr double SHARED_THRESHOLD = 2.5; // Threshold divisor to determine wether a measure cache latency counts as evicted or not

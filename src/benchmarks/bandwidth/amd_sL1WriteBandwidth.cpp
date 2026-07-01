@@ -6,8 +6,6 @@
 
 static constexpr auto WARMUP_REPS = 128;
 
-static constexpr auto MIN_REPS = 2;
-static constexpr auto MAX_REPS = 262144; // 2 ^ 18
 
 static constexpr auto ROUNDS = DEFAULT_ROUNDS;// rounds
 
@@ -178,8 +176,8 @@ namespace benchmark {
         {            
             uint32_t minNumThreads = util::getDeviceProperties().warpSize;
             uint32_t maxNumThreads = util::getDeviceProperties().maxThreadsPerBlock;
-            size_t minReps = BANDWIDTH_FIXED_REPS; // hardcoded single rep count; was MIN_REPS
-            size_t maxReps = BANDWIDTH_FIXED_REPS; // hardcoded single rep count; was MAX_REPS
+            size_t minReps = MIN_REPS;
+            size_t maxReps = MAX_REPS;
 
             CacheBandwidthResult result{};
             result.measuredBandwidth = 0.0;

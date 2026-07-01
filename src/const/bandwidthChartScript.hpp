@@ -13,7 +13,7 @@ inline const char* bandwidthChartScript = R"PY(
 
 Single source of truth for bandwidth visualization.
 
-All benchmarks now use a fixed repetition count (BANDWIDTH_FIXED_REPS),
+All benchmarks now use a fixed repetition count (MIN_REPS == MAX_REPS),
 so plots show bandwidth vs thread count only.
 
 Supported plot types:
@@ -333,6 +333,7 @@ def _save(fig, outdir: Path, outbase: str, dpi: int) -> None:
 _PRETTY = {
     "vl1d": "vL1d",
     "sl1d": "sL1d",
+    "mainmemory": "Main Memory",
     "l1": "L1",
     "l2": "L2",
     "l3": "L3",
@@ -348,8 +349,9 @@ def _benchmark_token(name: str) -> str:
     return "Bandwidth"
 
 
-# Block-sweep benchmarks (3D grids). vL1d/sL1d are AMD; L2/L3 are both vendors.
-_BLOCK_SWEEP_TOKENS = {"vL1d", "sL1d", "L2", "L3"}
+# Block-sweep benchmarks (3D grids). vL1d/sL1d are AMD; L2/L3/Main Memory work
+# on both vendors.
+_BLOCK_SWEEP_TOKENS = {"vL1d", "sL1d", "L2", "L3", "Main Memory"}
 
 
 def _benchmark_category(name: str) -> tuple[str, str]:
