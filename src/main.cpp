@@ -64,6 +64,7 @@ int main(int argc, char* argv[]) {
     if (auto os = util::getOsDescription()) metaInfo["os"] = *os;
     if (auto driver = util::getDriverVersion()) metaInfo["driver"] = *driver;
     if (auto runtimeVersion = util::getRuntimeVersion()) metaInfo["runtime"] = *runtimeVersion;
+    if (auto hostname = util::getHostname()) metaInfo["hostname"] = *hostname;
 
     nlohmann::json result = {
         {"meta", metaInfo},
@@ -300,10 +301,14 @@ int main(int argc, char* argv[]) {
                 }
                 result["memory"]["l1"]["writeBandwidthPerCU"] = l1WriteBandwidth;
 
-                if (opts.rawData)
+                if (opts.rawData || opts.graphs)
                 {
-                    util::writeBandwidthGridToCSV(l1ReadBandwidth, (graphDir / (fancyFileName + "__L1_Read_BW_Grid.csv")).string());
-                    util::writeBandwidthGridToCSV(l1WriteBandwidth, (graphDir / (fancyFileName + "__L1_Write_BW_Grid.csv")).string());
+                    // vL1d on AMD (vector L1d); plain L1 on NVIDIA. The grid CSV
+                    // backs the block-sweep figure: blocks->subplot, threads->line,
+                    // reps->x, bandwidth->y.
+                    const std::string l1Label = util::isAMD() ? "vL1d" : "L1";
+                    util::writeBandwidthGridToCSV(l1ReadBandwidth, (graphDir / util::bandwidthGridFileName(fancyFileName, l1Label, "Read")).string());
+                    util::writeBandwidthGridToCSV(l1WriteBandwidth, (graphDir / util::bandwidthGridFileName(fancyFileName, l1Label, "Write")).string());
                 }
             }
             else
@@ -402,10 +407,10 @@ int main(int argc, char* argv[]) {
             CacheBandwidthResult l2WriteBandwidth = benchmark::measureL2WriteBandwidthSweep(deviceProperties.l2CacheSize);
             result["memory"]["l2"]["writeBandwidth"] = l2WriteBandwidth;
 
-            if (opts.rawData)
+            if (opts.rawData || opts.graphs)
             {
-                util::writeBandwidthGridToCSV(l2ReadBandwidth, (graphDir / (fancyFileName + "__L2_Read_BW_Grid.csv")).string());
-                util::writeBandwidthGridToCSV(l2WriteBandwidth, (graphDir / (fancyFileName + "__L2_Write_BW_Grid.csv")).string());
+                util::writeBandwidthGridToCSV(l2ReadBandwidth, (graphDir / util::bandwidthGridFileName(fancyFileName, "L2", "Read")).string());
+                util::writeBandwidthGridToCSV(l2WriteBandwidth, (graphDir / util::bandwidthGridFileName(fancyFileName, "L2", "Write")).string());
             }
         }
         else
@@ -469,6 +474,12 @@ int main(int argc, char* argv[]) {
                 std::cout << "[L3] Write Bandwidth with optimal search" << std::endl;
                 CacheBandwidthResult l3WriteBandwidth = benchmark::amd::measureL3WriteBandwidthSweep(deviceProperties.l2CacheSize, l3Size.value());
                 result["memory"]["l3"]["writeBandwidth"] = l3WriteBandwidth;
+
+                if (opts.rawData || opts.graphs)
+                {
+                    util::writeBandwidthGridToCSV(l3ReadBandwidth, (graphDir / util::bandwidthGridFileName(fancyFileName, "L3", "Read")).string());
+                    util::writeBandwidthGridToCSV(l3WriteBandwidth, (graphDir / util::bandwidthGridFileName(fancyFileName, "L3", "Write")).string());
+                }
             }
             else
             {
@@ -757,10 +768,10 @@ int main(int argc, char* argv[]) {
                 CacheBandwidthResult sL1WriteBandwidth = benchmark::amd::measureScalarL1WriteBandwidthSweep(scalarL1Size.size / 2);
                 result["memory"]["scalarL1"]["writeBandwidthPerCU"] = sL1WriteBandwidth;
 
-                if (opts.rawData)
+                if (opts.rawData || opts.graphs)
                 {
-                    util::writeBandwidthGridToCSV(sL1ReadBandwidth, (graphDir / (fancyFileName + "__sL1_Read_BW_Grid.csv")).string());
-                    util::writeBandwidthGridToCSV(sL1WriteBandwidth, (graphDir / (fancyFileName + "__sL1_Write_BW_Grid.csv")).string());
+                    util::writeBandwidthGridToCSV(sL1ReadBandwidth, (graphDir / util::bandwidthGridFileName(fancyFileName, "sL1d", "Read")).string());
+                    util::writeBandwidthGridToCSV(sL1WriteBandwidth, (graphDir / util::bandwidthGridFileName(fancyFileName, "sL1d", "Write")).string());
                 }
             }
             else
@@ -837,10 +848,17 @@ int main(int argc, char* argv[]) {
             }
             result["memory"]["shared"]["writeBandwidthPerCU"] = sharedWriteBandwidth;
 
-            if (opts.rawData)
+            if (opts.rawData || opts.graphs)
             {
-                util::writeBandwidthGridToCSV(sharedReadBandwidth, (graphDir / (fancyFileName + "__shared_Read_BW_Grid.csv")).string());
-                util::writeBandwidthGridToCSV(sharedWriteBandwidth, (graphDir / (fancyFileName + "__shared_Write_BW_Grid.csv")).string());
+                // Encode array size (KiB) and allocation type so the LDS
+                // best-per-configuration figure can label each line, e.g.
+                // "32_stat (T=512)". Combine several runs (sizes / dyn|stat) into
+                // one figure via: plot_bandwidth.py auto --indir <results dir>.
+                const std::string alloc = opts.sharedStatic ? "stat" : "dyn";
+                const std::string readSuffix = std::to_string(sharedReadBandwidth.dataBytes / 1024) + "KiB_" + alloc;
+                const std::string writeSuffix = std::to_string(sharedWriteBandwidth.dataBytes / 1024) + "KiB_" + alloc;
+                util::writeBandwidthGridToCSV(sharedReadBandwidth, (graphDir / util::bandwidthGridFileName(fancyFileName, "LDS", "Read", readSuffix)).string());
+                util::writeBandwidthGridToCSV(sharedWriteBandwidth, (graphDir / util::bandwidthGridFileName(fancyFileName, "LDS", "Write", writeSuffix)).string());
             }
         }
         else
@@ -888,17 +906,36 @@ int main(int argc, char* argv[]) {
             util::writeVectorToFile(mainMemLatency.timings, (graphDir / (fancyFileName + "__Main_Memory_Latency.txt")).string());
         }
 
-        std::cout << "[Main Memory] Read Bandwidth" << std::endl;
-        result["memory"]["main"]["readBandwidth"] = {
-            {"value", benchmark::measureMainMemoryReadBandwidth(deviceProperties.totalGlobalMem)},
-            {"unit", "GiB/s"}
-        };
+        if (opts.runOptimalSearch)
+        {
+            std::cout << "[Main Memory] Read Bandwidth with optimal search" << std::endl;
+            CacheBandwidthResult mainMemReadBandwidth = benchmark::measureMainMemoryReadBandwidthSweep(deviceProperties.totalGlobalMem);
+            result["memory"]["main"]["readBandwidth"] = mainMemReadBandwidth;
 
-        std::cout << "[Main Memory] Write Bandwidth" << std::endl;
-        result["memory"]["main"]["writeBandwidth"] = {
-            {"value", benchmark::measureMainMemoryWriteBandwidth(deviceProperties.totalGlobalMem)},
-            {"unit", "GiB/s"}
-        };
+            std::cout << "[Main Memory] Write Bandwidth with optimal search" << std::endl;
+            CacheBandwidthResult mainMemWriteBandwidth = benchmark::measureMainMemoryWriteBandwidthSweep(deviceProperties.totalGlobalMem);
+            result["memory"]["main"]["writeBandwidth"] = mainMemWriteBandwidth;
+
+            if (opts.rawData || opts.graphs)
+            {
+                util::writeBandwidthGridToCSV(mainMemReadBandwidth, (graphDir / util::bandwidthGridFileName(fancyFileName, "MainMemory", "Read")).string());
+                util::writeBandwidthGridToCSV(mainMemWriteBandwidth, (graphDir / util::bandwidthGridFileName(fancyFileName, "MainMemory", "Write")).string());
+            }
+        }
+        else
+        {
+            std::cout << "[Main Memory] Read Bandwidth" << std::endl;
+            result["memory"]["main"]["readBandwidth"] = {
+                {"value", benchmark::measureMainMemoryReadBandwidth(deviceProperties.totalGlobalMem)},
+                {"unit", "GiB/s"}
+            };
+
+            std::cout << "[Main Memory] Write Bandwidth" << std::endl;
+            result["memory"]["main"]["writeBandwidth"] = {
+                {"value", benchmark::measureMainMemoryWriteBandwidth(deviceProperties.totalGlobalMem)},
+                {"unit", "GiB/s"}
+            };
+        }
 
         std::cout << "[Main Memory] Benchmarks finished" << std::endl;
     }
@@ -929,6 +966,16 @@ int main(int argc, char* argv[]) {
         std::cout << "[Resource Sharing] Benchmarks finished" << std::endl;
     }
     if (silencer) silencer.reset();
+
+    // Generate bandwidth figures (block-sweep grids + LDS
+    // best-per-configuration) from the grid CSVs written above. Done once here so
+    // a single generic call covers every bandwidth benchmark, and so the figures
+    // exist before the Markdown report embeds them. Only meaningful when an
+    // optimal search produced sweep grids.
+    if (opts.graphs && opts.runOptimalSearch) {
+        std::cout << "[Graphs] Generating bandwidth plots" << std::endl;
+        util::generateBandwidthCharts(graphDir.string());
+    }
 
     if (opts.fullReport) {
         util::writeMarkdownReport(graphDir, fancyName, result);
