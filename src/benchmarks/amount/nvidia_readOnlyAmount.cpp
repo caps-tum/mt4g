@@ -8,7 +8,6 @@
 
 static constexpr auto MEASURE_SIZE = DEFAULT_SAMPLE_SIZE;// Loads
 static constexpr auto GRACE = DEFAULT_GRACE_FACTOR;// Factor
-static constexpr auto TESTING_THREADS = 2;
 
 __global__ void readOnlyAmountKernel(const uint32_t* __restrict__ pChaseArrayBase, const uint32_t* __restrict__ pChaseArrayTest, uint32_t *timingResultsBaseCore, uint32_t *timingResultsTestCore, size_t steps, uint32_t baseCore, uint32_t testCore) {
     if (__getSIMDId() == testCore / warpSize && threadIdx.x % warpSize == testCore % warpSize) {
@@ -17,7 +16,8 @@ __global__ void readOnlyAmountKernel(const uint32_t* __restrict__ pChaseArrayBas
     } else if (__getSIMDId() == baseCore / warpSize && threadIdx.x % warpSize == baseCore % warpSize) {
         // printf("baseCore: %d __getSIMDId: %d, threadIdx.x: %d\n", baseCore, __getSIMDId(), threadIdx.x);
         baseCore = threadIdx.x;
-    } else return;
+    }
+    // No early return: all threads must reach every __syncthreads() below.
 
     __shared__ uint64_t s_timingResultsBaseCore[MEASURE_SIZE];
     __shared__ uint64_t s_timingResultsTestCore[MEASURE_SIZE];
@@ -40,7 +40,7 @@ __global__ void readOnlyAmountKernel(const uint32_t* __restrict__ pChaseArrayBas
         index = 0;
     }
 
-    __localBarrier(TESTING_THREADS);
+    __syncthreads();
     // If the threads share the same cache physically 
     if (threadIdx.x == testCore) {
         for (uint32_t k = 0; k < steps; k++) {
@@ -50,7 +50,7 @@ __global__ void readOnlyAmountKernel(const uint32_t* __restrict__ pChaseArrayBas
         timingResultsTestCore[0] = index;
     }
 
-    __localBarrier(TESTING_THREADS);
+    __syncthreads();
 
     if (threadIdx.x == baseCore) {
         //second round
@@ -65,7 +65,7 @@ __global__ void readOnlyAmountKernel(const uint32_t* __restrict__ pChaseArrayBas
         timingResultsBaseCore[0] += index;
     }
 
-    __localBarrier(TESTING_THREADS);
+    __syncthreads();
 
     if (threadIdx.x == testCore) {
         for (uint32_t k = 0; k < measureLength; k++) {
@@ -79,7 +79,7 @@ __global__ void readOnlyAmountKernel(const uint32_t* __restrict__ pChaseArrayBas
         timingResultsTestCore[0] += index;
     }
 
-    __localBarrier(TESTING_THREADS);
+    __syncthreads();
 
     if (core != __getPhysicalCUId() || warp != __getSIMDId()) {
         return; // Not on the same SM anymore
@@ -128,7 +128,7 @@ namespace benchmark {
         std::optional<uint32_t> measureReadOnlyAmount(size_t readOnlySizeBytes, size_t readOnlyFetchGranularityBytes, double readOnlyMissPenalty) {
             std::map<uint32_t, std::tuple<std::vector<uint32_t>, std::vector<uint32_t>>> testCoreToTimingResults;
 
-            for (uint32_t i = 1; i <= util::getNumberOfCoresPerSM(); i *= 2) { 
+            for (uint32_t i = 1; i < util::getNumberOfCoresPerSM(); i *= 2) {
                 auto [baseTimings, testTimings] = testCoreToTimingResults[i] = readOnlyAmountLauncher(readOnlySizeBytes, readOnlyFetchGranularityBytes, 0, i);
                 if ( i<util::getNumberOfCoresPerSM() && (baseTimings[0] == 0 || testTimings[0] == 0)) {
                     std::cout << "Error: Base or Test Core timings are zero, indicating an error in the measurement." << std::endl;

@@ -9,7 +9,6 @@
 
 static constexpr auto MEASURE_SIZE = DEFAULT_SAMPLE_SIZE;// Loads
 static constexpr auto GRACE = DEFAULT_GRACE_FACTOR;// Factor
-static constexpr auto TESTING_THREADS = 2;
 
 __global__ void constantL1AmountKernel(uint32_t *timingResultsBaseCore, uint32_t *timingResultsTestCore, size_t steps, size_t stride, uint32_t baseCore, uint32_t testCore) {
     if (__getSIMDId() == testCore / warpSize && threadIdx.x % warpSize == testCore % warpSize) {
@@ -18,7 +17,8 @@ __global__ void constantL1AmountKernel(uint32_t *timingResultsBaseCore, uint32_t
     } else if (__getSIMDId() == baseCore / warpSize && threadIdx.x % warpSize == baseCore % warpSize) {
         // printf("baseCore: %d __getSIMDId: %d, threadIdx.x: %d\n", baseCore, __getSIMDId(), threadIdx.x);
         baseCore = threadIdx.x;
-    } else return;
+    }
+    // No early return: all threads must reach every __syncthreads() below.
 
     uint32_t start, end;
     uint32_t index = 0;
@@ -43,7 +43,7 @@ __global__ void constantL1AmountKernel(uint32_t *timingResultsBaseCore, uint32_t
         index = CONST_ARRAY_SIZE - steps * stride;
     }
 
-    __localBarrier(TESTING_THREADS);
+    __syncthreads();
     // If the threads share the same cache physically this will evict all values loaded before
     if (threadIdx.x == testCore) {
         for (uint32_t k = 0; k < steps; k++) {
@@ -53,7 +53,7 @@ __global__ void constantL1AmountKernel(uint32_t *timingResultsBaseCore, uint32_t
         index = CONST_ARRAY_SIZE - steps * stride;
     }
 
-    __localBarrier(TESTING_THREADS);
+    __syncthreads();
 
     if (threadIdx.x == baseCore) {
         //second round
@@ -67,7 +67,7 @@ __global__ void constantL1AmountKernel(uint32_t *timingResultsBaseCore, uint32_t
         timingResultsBaseCore[0] += index >> util::min(steps, 32);
     }
 
-    __localBarrier(TESTING_THREADS);
+    __syncthreads();
 
     if (threadIdx.x == testCore) {
         for (uint32_t k = 0; k < measureLength; k++) {
@@ -80,7 +80,7 @@ __global__ void constantL1AmountKernel(uint32_t *timingResultsBaseCore, uint32_t
         timingResultsTestCore[0] += index >> util::min(steps, 32);
     }
 
-    __localBarrier(TESTING_THREADS);
+    __syncthreads();
 
     if (threadIdx.x == baseCore) {
         for (uint32_t k = 1; k < measureLength; k++) {
@@ -127,7 +127,7 @@ namespace benchmark {
             }
 
             // Differences are not too great because of CL1.5
-            for (uint32_t i = 1; i <= util::getNumberOfCoresPerSM(); i *= 2) {
+            for (uint32_t i = 1; i < util::getNumberOfCoresPerSM(); i *= 2) {
                 auto [baseTimings, testTimings] = testCoreToTimingResults[i] = constantL1AmountLauncher(constantL1SizeBytes, constantL1FetchGranularityBytes, 0, i);
                 if ( i<util::getNumberOfCoresPerSM() && (baseTimings[0] == 0 || testTimings[0] == 0)) {
                     std::cout << "Error: Base or Test Core timings are zero, indicating an error in the measurement." << std::endl;

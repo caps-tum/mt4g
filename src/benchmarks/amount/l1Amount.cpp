@@ -9,7 +9,6 @@
 
 static constexpr auto MEASURE_SIZE = DEFAULT_SAMPLE_SIZE;// Loads
 static constexpr auto GRACE = DEFAULT_GRACE_FACTOR;// Factor
-static constexpr auto TESTING_THREADS = 2;
 
 __global__ void l1AmountKernel(uint32_t* pChaseArrayBaseCore, uint32_t *pChaseArrayTestCore, uint32_t *timingResultsBaseCore, uint32_t *timingResultsTestCore, size_t steps, uint32_t baseCore, uint32_t testCore) {
 
@@ -19,7 +18,7 @@ __global__ void l1AmountKernel(uint32_t* pChaseArrayBaseCore, uint32_t *pChaseAr
     } else if (__getSIMDId() == baseCore / warpSize && threadIdx.x % warpSize == baseCore % warpSize) {
         // printf("baseCore: %d __getSIMDId: %d, threadIdx.x: %d\n", baseCore, __getSIMDId(), threadIdx.x);
         baseCore = threadIdx.x;
-    } else return;
+    }// else return;
     
     __shared__ uint64_t s_timingResultsBaseCore[MEASURE_SIZE];
     __shared__ uint64_t s_timingResultsTestCore[MEASURE_SIZE];
@@ -40,7 +39,7 @@ __global__ void l1AmountKernel(uint32_t* pChaseArrayBaseCore, uint32_t *pChaseAr
         timingResultsBaseCore[0] = index;
     }
 
-    __localBarrier(TESTING_THREADS);
+    __syncthreads();
     // If the threads share the same cache physically this will evict all values loaded before
     if (threadIdx.x == testCore) {
         for (uint32_t k = 0; k < steps; k++) {
@@ -50,7 +49,7 @@ __global__ void l1AmountKernel(uint32_t* pChaseArrayBaseCore, uint32_t *pChaseAr
         timingResultsTestCore[0] = index;
     }
 
-    __localBarrier(TESTING_THREADS);
+    __syncthreads();
 
     if (threadIdx.x == baseCore) {
         //second round
@@ -65,7 +64,7 @@ __global__ void l1AmountKernel(uint32_t* pChaseArrayBaseCore, uint32_t *pChaseAr
         timingResultsBaseCore[0] += index;
     }
 
-    __localBarrier(TESTING_THREADS);
+    __syncthreads();
 
     if (threadIdx.x == testCore) {
         for (uint32_t k = 0; k < measureLength; k++) {
@@ -79,7 +78,7 @@ __global__ void l1AmountKernel(uint32_t* pChaseArrayBaseCore, uint32_t *pChaseAr
         timingResultsTestCore[0] += index;
     }
 
-    __localBarrier(TESTING_THREADS);
+    __syncthreads();
 
     if (core != __getPhysicalCUId() || warp != __getSIMDId()) {
         return; // Not on the same SM anymore
@@ -130,7 +129,7 @@ namespace benchmark {
     std::optional<uint32_t> measureL1Amount(size_t l1SizeBytes, size_t l1FetchGranularityBytes, double l1MissPenalty) {
         std::map<uint32_t, std::tuple<std::vector<uint32_t>, std::vector<uint32_t>>> testCoreToTimingResults;
 
-        for (uint32_t i = 1; i <= util::getNumberOfCoresPerSM(); i *= 2) { 
+        for (uint32_t i = 1; i < util::getNumberOfCoresPerSM(); i *= 2) {
             auto [baseTimings, testTimings] = testCoreToTimingResults[i] = l1AmountLauncher(l1SizeBytes, l1FetchGranularityBytes, 0, i);
             if ( i<util::getNumberOfCoresPerSM() && (baseTimings[0] == 0 || testTimings[0] == 0)) {
                 std::cout << "Error: Base or Test Core timings are zero, indicating an error in the measurement." << std::endl;
