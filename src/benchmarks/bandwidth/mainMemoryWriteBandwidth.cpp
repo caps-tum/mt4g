@@ -30,13 +30,16 @@ __global__ void mainMemoryWriteBandwidthKernel(uint32v4* __restrict__ dst, size_
         #endif
 
         #ifdef __HIP_PLATFORM_AMD__
-        asm volatile(
-            "flat_store_dwordx4 %0, %1\n"
-            :
-            : "s"(dst + i) // uint32v4*
-            , "v"(dummy) // uint32v4
-            : "memory"
-        );
+        {
+            uint64_t __addr = reinterpret_cast<uint64_t>(dst + i);
+            asm volatile(
+                "global_store_dwordx4 %0, %1, off " GLC_SLC "\n"
+                :
+                : "v"(__addr)
+                , "v"(dummy)
+                : "memory"
+            );
+        }
         #endif
     }
 }
@@ -48,7 +51,7 @@ double mainMemoryWriteBandwidthLauncher(size_t arraySizeBytes) {
     uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getDeviceProperties().maxBlocksPerMultiProcessor;
 
     uint32v4 *d_dstArr = util::allocateGPUMemory<uint32v4>(arraySizeBytes / sizeof(uint32v4));
-    
+
     // Use events to measure timings
     auto start = util::createHipEvent();
     auto end = util::createHipEvent();
@@ -64,7 +67,14 @@ double mainMemoryWriteBandwidthLauncher(size_t arraySizeBytes) {
 
 namespace benchmark {
     double measureMainMemoryWriteBandwidth(size_t mainMemorySizeBytes) {
-        size_t testSizeBytes = mainMemorySizeBytes / SIZE_DOWN; // Divide by SIZE_DOWN to avoid too large memory allocations
+        // Cap at 4 GiB to avoid page-fault crashes on APUs with large unified memory.
+        // Floor at 4× the largest known cache level to guarantee main-memory access.
+        size_t testSizeBytes = std::min(mainMemorySizeBytes / SIZE_DOWN, static_cast<size_t>(4 * GiB));
+        size_t largestCacheBytes = util::getL3SizeBytes().value_or(
+                                    util::getL2SizeBytes().value_or(
+                                     util::getL1SizeBytes().value_or(0)));
+        if (largestCacheBytes > 0)
+            testSizeBytes = std::max(testSizeBytes, largestCacheBytes * 4);
         double testSizeGiB = (double)testSizeBytes / (double)(1 * GiB); // Convert to GiB
 
         std::vector<double> results(ROUNDS);

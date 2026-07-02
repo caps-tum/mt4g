@@ -34,13 +34,16 @@ __global__ void l2WriteBandwidthKernel(uint32v4* __restrict__ dst, size_t n) {
             #endif
 
             #ifdef __HIP_PLATFORM_AMD__
-            asm volatile(
-                "flat_store_dwordx4 %0, %1\n"
-                :
-                : "v"(dst + i) // uint32v4*
-                , "v"(dummy) // uint32v4
-                : "memory"
-            );
+            {
+                uint64_t __addr = reinterpret_cast<uint64_t>(dst + i);
+                asm volatile(
+                    "global_store_dwordx4 %0, %1, off\n"
+                    :
+                    : "v"(__addr)
+                    , "v"(dummy)
+                    : "memory"
+                );
+            }
             #endif
 
         }

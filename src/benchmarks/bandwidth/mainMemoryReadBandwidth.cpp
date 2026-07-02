@@ -14,11 +14,11 @@ __global__ void mainMemoryReadBandwidthKernel(uint32v4* __restrict__ dst, uint32
     size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
     size_t stride = gridDim.x * blockDim.x;
 
-    uint32v4 dummy = {0, 0, 0, 0}; 
+    uint32v4 dummy = {0, 0, 0, 0};
 
     for (size_t i = tid; i < n; i += stride) {
-        uint32v4 loaded; 
-        
+        uint32v4 loaded;
+
         #ifdef __HIP_PLATFORM_NVIDIA__
         asm volatile(
             "ld.global.v4.u32 {%0,%1,%2,%3}, [%4];"
@@ -31,40 +31,41 @@ __global__ void mainMemoryReadBandwidthKernel(uint32v4* __restrict__ dst, uint32
         #endif
 
         #ifdef __HIP_PLATFORM_AMD__
-        asm volatile(
-            "flat_load_dwordx4 %0, %1\n" 
-            : "=v"(loaded) // uint32v4
-            : "s"(src + i) // uint32v4*
-            :
-        );
+        {
+            uint64_t __addr = reinterpret_cast<uint64_t>(src + i);
+            asm volatile(
+                "global_load_dwordx4 %0, %1, off " GLC_SLC "\n\t"
+                "s_waitcnt vmcnt(0)\n\t"
+                : "=v"(loaded)
+                : "v"(__addr)
+                : "memory"
+            );
+        }
         #endif
 
         // XOR is efficient
         dummy.x ^= loaded.x;
     }
 
-    dst[tid % blockDim.x] = dummy; // prevent dead code elimination
+    dst[threadIdx.x] = dummy; // prevent dead code elimination
 }
 
-double mainMemoryReadBandwidthLauncher(size_t arraySizeBytes) { 
-    util::hipDeviceReset(); 
+double mainMemoryReadBandwidthLauncher(size_t arraySizeBytes) {
+    util::hipDeviceReset();
 
-    uint32_t maxThreadsPerBlock = util::min(util::getMaxThreadsPerBlock(), util::getWarpSize() * util::getSIMDsPerCU()); 
+    uint32_t maxThreadsPerBlock = util::min(util::getMaxThreadsPerBlock(), util::getWarpSize() * util::getSIMDsPerCU());
     uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getDeviceProperties().maxBlocksPerMultiProcessor;
 
-    // Initialize device Arrays
-    // sizeof(uint32v4) = 16 bytes -> allows us to load 4 integers with one instruction -> probability 
-    // of the bandwidth being limited by the memory bandwidth rather than compute is considerably higher
     uint32v4 *d_srcArr = util::allocateGPUMemory<uint32v4>(arraySizeBytes / sizeof(uint32v4));
-    uint32v4 *d_dstArr = util::allocateGPUMemory<uint32v4>(maxThreadsPerBlock); // total threads
-    
-    // Use events to measure timings
+    uint32v4 *d_dstArr = util::allocateGPUMemory<uint32v4>(maxThreadsPerBlock);
+
+    size_t n = arraySizeBytes / sizeof(uint32v4);
+
     auto start = util::createHipEvent();
     auto end = util::createHipEvent();
 
-    util::hipCheck(hipDeviceSynchronize());
     util::hipCheck(hipEventRecord(start));
-    mainMemoryReadBandwidthKernel<<<maxBlocks, maxThreadsPerBlock>>>(d_dstArr, d_srcArr, arraySizeBytes / sizeof(uint32v4));
+    mainMemoryReadBandwidthKernel<<<maxBlocks, maxThreadsPerBlock>>>(d_dstArr, d_srcArr, n);
     util::hipCheck(hipEventRecord(end));
     util::hipCheck(hipDeviceSynchronize());
 
@@ -73,14 +74,20 @@ double mainMemoryReadBandwidthLauncher(size_t arraySizeBytes) {
 
 namespace benchmark {
     double measureMainMemoryReadBandwidth(size_t mainMemorySizeBytes) {
-        size_t testSizeBytes = mainMemorySizeBytes / SIZE_DOWN; // Divide by SIZE_DOWN to avoid too large memory allocations
+
+        size_t testSizeBytes = std::min(mainMemorySizeBytes / SIZE_DOWN, static_cast<size_t>(16 * GiB));
+        size_t largestCacheBytes = util::getL3SizeBytes().value_or(
+                                    util::getL2SizeBytes().value_or(
+                                     util::getL1SizeBytes().value_or(0)));
+        if (largestCacheBytes > 0)
+            testSizeBytes = std::max(testSizeBytes, largestCacheBytes * 4);
         double testSizeGiB = (double)testSizeBytes / (double)(1 * GiB); // Convert to GiB
 
         std::vector<double> results(ROUNDS);
         for (uint32_t i = 0; i < ROUNDS; ++i) {
             results[i] = mainMemoryReadBandwidthLauncher(testSizeBytes) / MS_PER_SECOND;
         }
-        
-        return testSizeGiB / util::average(results); 
+
+        return testSizeGiB / util::average(results);
     }
 }

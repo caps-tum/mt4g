@@ -21,12 +21,16 @@ __global__ void l3ReadBandwidthKernel(uint32v4* __restrict__ dst, uint32v4* __re
         for (size_t i = tid; i < n; i += stride) {
             uint32v4 loaded;
             #ifdef __HIP_PLATFORM_AMD__
-            asm volatile(
-                "flat_load_dwordx4 %0, %1\n"
-                : "=v"(loaded)
-                : "v"(src + i)
-                : "memory"
-            );
+            {
+                uint64_t __addr = reinterpret_cast<uint64_t>(src + i);
+                asm volatile(
+                    "global_load_dwordx4 %0, %1, off\n\t"
+                    "s_waitcnt vmcnt(0)\n\t"
+                    : "=v"(loaded)
+                    : "v"(__addr)
+                    : "memory"
+                );
+            }
             #endif
             dummy.x ^= loaded.x;
         }
