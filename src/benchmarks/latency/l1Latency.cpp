@@ -35,15 +35,15 @@ __global__ void l1LatencyKernel(uint32_t *pChaseArray, uint32_t *timingResults) 
             "s_waitcnt lgkmcnt(0)\n\t"
             "s_waitcnt vmcnt(0)\n\t"
             "s_memtime %0\n\t"
-            "flat_load_dword %1, %3\n\t"
+            "global_load_dword %1, %3, off\n\t"
             "s_waitcnt lgkmcnt(0)\n\t"
             "s_waitcnt vmcnt(0)\n\t"
             "s_memtime %2\n\t"
             "s_waitcnt lgkmcnt(0)\n\t"
             "s_waitcnt vmcnt(0)\n\t"
-            : "+s"(start)
+            : "=s"(start)
             , "+v"(index)
-            , "+s"(end)
+            , "=s"(end)
             , "+v"(addr)
             :
             : "memory"

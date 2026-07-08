@@ -38,7 +38,7 @@ __global__ void l1FetchGranularityKernel(uint32_t *pChaseArray, uint32_t *timing
             "s_waitcnt vmcnt(0)\n\t"
             "s_memtime %0\n\t" // start = clock();
 
-            "flat_load_dword %1, %3\n\t" // index = *addr;
+            "global_load_dword %1, %3, off\n\t" // index = *addr;
 
             "s_waitcnt lgkmcnt(0)\n\t"
             "s_waitcnt vmcnt(0)\n\t"
@@ -48,9 +48,9 @@ __global__ void l1FetchGranularityKernel(uint32_t *pChaseArray, uint32_t *timing
             "s_waitcnt lgkmcnt(0)\n\t"
             "s_waitcnt vmcnt(0)\n\t"
 
-            : "+s"(start) //uint64_t
+            : "=s"(start) //uint64_t
             , "+v"(index) //uint32_t
-            , "+s"(end) //uint64_t
+            , "=s"(end) //uint64_t
             , "+v"(addr) //uint32_t*
             :
             : "memory"

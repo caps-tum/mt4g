@@ -212,8 +212,8 @@ __device__ __forceinline__ uint32_t __forceBypassAllCacheReads(uint32_t *baseAdd
 
     #ifdef __HIP_PLATFORM_AMD__
     __asm__ volatile(
-        // Flat-Load with GLC=1 and SLC=1: Bypasses L1 and L2
-        "flat_load_dword %0, %1 " GLC_SLC 
+        // Global-Load with GLC=1 and SLC=1: Bypasses L1 and L2
+        "global_load_dword %0, %1, off " GLC_SLC
         #if defined(__gfx942__) || defined(__gfx941__) || defined(__gfx940__)
         " nt" // Only on CDNA3(+)
         #endif
@@ -252,8 +252,8 @@ __device__ __forceinline__ uint32_t __forceL1MissRead(uint32_t *baseAddress, uin
 
     #ifdef __HIP_PLATFORM_AMD__
     __asm__ volatile(
-        // Flat loading with GLC=1 forces L1 miss, therefore reading from L2
-        "flat_load_dword %0, %1 " GLC "\n\t"
+        // Global load with GLC=1 forces L1 miss, therefore reading from L2
+        "global_load_dword %0, %1, off " GLC "\n\t"
         // Wait untill VMEM is finished
         "s_waitcnt vmcnt(0)\n\t"
         : "=v"(result)              // Output in VGPR
@@ -289,8 +289,8 @@ __device__ __forceinline__ uint32_t __allowL1Read(uint32_t *baseAddress, uint32_
 
     #ifdef __HIP_PLATFORM_AMD__
     __asm__ volatile(
-        // Flat loading with GLC=0, allows reading from L1 (if the value is present there, of course)
-        "flat_load_dword %0, %1\n\t"
+        // Global load with GLC=0, allows reading from L1 (if the value is present there, of course)
+        "global_load_dword %0, %1, off\n\t"
         "s_waitcnt vmcnt(0)\n\t"
         : "=v"(result)
         : "v"(addr)
@@ -326,7 +326,7 @@ __device__ __forceinline__ uint32_t __l3Read(uint32_t *baseAddress, uint32_t ind
 
     #ifdef __HIP_PLATFORM_AMD__
     __asm__ volatile(
-        "flat_load_dword %0, %1 " GLC_SLC "\n\t"
+        "global_load_dword %0, %1, off " GLC_SLC "\n\t"
         "s_waitcnt vmcnt(0)\n\t"
         : "=v"(result)
         : "v"(addr)
