@@ -37,7 +37,7 @@ __global__ void l2ReadBandwidthKernel(uint32v4* __restrict__ dst, uint32v4* __re
             {
                 uint64_t __addr = reinterpret_cast<uint64_t>(src + i);
                 asm volatile(
-                    "global_load_dwordx4 %0, %1, off\n\t"
+                    "global_load_dwordx4 %0, %1, off " GLC "\n\t"
                     "s_waitcnt vmcnt(0)\n\t"
                     : "=v"(loaded)
                     : "v"(__addr)
@@ -88,7 +88,10 @@ double l2ReadBandwidthLauncher(size_t arraySizeBytes) {
 
 namespace benchmark {
     double measureL2ReadBandwidth(size_t l2SizeBytes) {
-        size_t arraySizeBytes = l2SizeBytes * 0.9;
+        auto xcdOpt = util::getNumXCDs();
+        if (!xcdOpt) xcdOpt = util::getNumXCCs();
+        const size_t numXCDs = static_cast<size_t>(xcdOpt.value_or(1));
+        size_t arraySizeBytes = l2SizeBytes * numXCDs * 0.9;
         double testSizeGiB = (double)arraySizeBytes / (double)(1 * GiB); // Convert to GiB
 
         std::vector<double> results(ROUNDS);

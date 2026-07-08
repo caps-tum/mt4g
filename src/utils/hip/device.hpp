@@ -204,30 +204,70 @@ namespace util {
     }
 
     /**
-     * @brief Query how many XCDs (dies) the GPU comprises.
+     * @brief Query how many XCDs (physical dies) the GPU comprises.
+     *
+     * Uses RSMI, which reports the true physical die count on discrete GPUs
+     * regardless of compute partition mode.  Returns nullopt when RSMI is
+     * unavailable or returns unexpected data (e.g. MI300A APU nodes).
      */
-    inline uint32_t getNumXCDs() {
-        static uint32_t xcdCount = [](){
+    inline std::optional<uint32_t> getNumXCDs() {
+        static std::optional<uint32_t> xcdCount = []() -> std::optional<uint32_t> {
             #ifdef __HIP_PLATFORM_NVIDIA__
-            return 1;
+            return std::nullopt;
             #endif
             #ifdef __HIP_PLATFORM_AMD__
-            util::rocmCheck(rsmi_init(0));
             int device;
             util::hipCheck(hipGetDevice(&device));
-            uint16_t xcdCounter;
-            util::rocmCheck(rsmi_dev_metrics_xcd_counter_get(device, &xcdCounter));
-            return static_cast<uint32_t>(xcdCounter);
+            if (rsmi_init(0) == RSMI_STATUS_SUCCESS) {
+                uint16_t xcdCounter = 0;
+                if (rsmi_dev_metrics_xcd_counter_get(static_cast<uint32_t>(device), &xcdCounter) == RSMI_STATUS_SUCCESS
+                    && xcdCounter > 0) {
+                    return static_cast<uint32_t>(xcdCounter);
+                }
+            }
+            return std::nullopt;
             #endif
         }();
         return xcdCount;
     }
 
     /**
-     * @brief Compute the number of compute units per die.
+     * @brief Query how many XCCs (logical compute clusters) the GPU exposes.
+     *
+     * Uses hipDeviceAttributeNumberOfXccs, available from ROCm 7.0+.
+     * Returns std::nullopt when the HIP attribute is not present (older ROCm).
+     * XCC count reflects software-visible partitions and may differ from the
+     * physical XCD (die) count depending on the compute partition mode.
      */
-    inline uint32_t getComputeUnitsPerDie() {
-        static uint32_t cusPerDie = []() {
+    inline std::optional<uint32_t> getNumXCCs() {
+        static std::optional<uint32_t> xccCount = []() -> std::optional<uint32_t> {
+            #ifdef __HIP_PLATFORM_NVIDIA__
+            return std::nullopt;
+            #endif
+            #if defined(__HIP_PLATFORM_AMD__) && defined(hipDeviceAttributeNumberOfXccs)
+            int device;
+            util::hipCheck(hipGetDevice(&device));
+            int32_t xccAttr = 0;
+            hipError_t e = hipDeviceGetAttribute(&xccAttr, hipDeviceAttributeNumberOfXccs, device);
+            if (e != hipSuccess) return std::nullopt;
+            return static_cast<uint32_t>(xccAttr);
+            #else
+            return std::nullopt;
+            #endif
+        }();
+        return xccCount;
+    }
+
+    /**
+     * @brief Compute the number of compute units per die.
+     *
+     * Divides total CU count by XCD count (physical dies via RSMI) when
+     * available, then by XCC count (logical clusters via HIP, equals XCD
+     * count in SPX partition mode) as fallback.  Returns nullopt when
+     * neither die count is known.
+     */
+    inline std::optional<uint32_t> getComputeUnitsPerDie() {
+        static std::optional<uint32_t> cusPerDie = []() -> std::optional<uint32_t> {
             int device;
             util::hipCheck(hipGetDevice(&device));
             int32_t cuCount;
@@ -235,7 +275,9 @@ namespace util {
                 &cuCount,
                 hipDeviceAttributeMultiprocessorCount,
                 device));
-            return static_cast<uint32_t>(cuCount) / getNumXCDs();
+            if (auto xcd = getNumXCDs()) return static_cast<uint32_t>(cuCount) / *xcd;
+            if (auto xcc = getNumXCCs()) return static_cast<uint32_t>(cuCount) / *xcc;
+            return std::nullopt;
         }();
         return cusPerDie;
     }

@@ -41,7 +41,12 @@ namespace util {
      */
     inline void rocmCheck(rsmi_status_t e) {
         if (e != RSMI_STATUS_SUCCESS) {
-            throw std::runtime_error("RSMI-Fehler");
+            const char* errStr = nullptr;
+            rsmi_status_string(e, &errStr);
+            throw std::runtime_error(
+                std::string("RSMI error (") + std::to_string(static_cast<int>(e)) + "): "
+                + (errStr ? errStr : "unknown")
+            );
         }
     }
     #endif

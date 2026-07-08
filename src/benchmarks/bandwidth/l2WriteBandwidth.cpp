@@ -79,11 +79,15 @@ double l2WriteBandwidthLauncher(size_t arraySizeBytes) {
 
 namespace benchmark {
     double measureL2WriteBandwidth(size_t l2SizeBytes) {
-        double testSizeGiB = (double)l2SizeBytes / (double)(1 * GiB); // Convert to GiB
+        auto xcdOpt = util::getNumXCDs();
+        if (!xcdOpt) xcdOpt = util::getNumXCCs();
+        const size_t numXCDs = static_cast<size_t>(xcdOpt.value_or(1));
+        size_t arraySizeBytes = l2SizeBytes * numXCDs;
+        double testSizeGiB = (double)arraySizeBytes / (double)(1 * GiB); // Convert to GiB
 
         std::vector<double> results(ROUNDS);
         for (uint32_t i = 0; i < ROUNDS; ++i) {
-            results[i] = l2WriteBandwidthLauncher(l2SizeBytes) / MS_PER_SECOND;
+            results[i] = l2WriteBandwidthLauncher(arraySizeBytes) / MS_PER_SECOND;
         }
 
         return testSizeGiB / util::average(results);
