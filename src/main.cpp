@@ -351,6 +351,7 @@ int main(int argc, char* argv[]) {
             {"value", benchmark::measureL2ReadBandwidth(deviceProperties.l2CacheSize)},
             {"unit", "GiB/s"}
         };
+        benchmark::exploreL2ReadBandwidth(deviceProperties.l2CacheSize);
         std::cout << "[L2] Write Bandwidth" << std::endl;
         result["memory"]["l2"]["writeBandwidth"] = {
             {"value", benchmark::measureL2WriteBandwidth(deviceProperties.l2CacheSize)},

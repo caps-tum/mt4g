@@ -31,6 +31,7 @@
 #include "benchmarks/bandwidth/mainMemoryReadBandwidth.hpp"
 #include "benchmarks/bandwidth/mainMemoryWriteBandwidth.hpp"
 #include "benchmarks/bandwidth/l2ReadBandwidth.hpp"
+#include "benchmarks/bandwidth/l2ReadBandwidthVariants.hpp"
 #include "benchmarks/bandwidth/l2WriteBandwidth.hpp"
 
 #include "benchmarks/departureDelay/departureDelay.hpp"
