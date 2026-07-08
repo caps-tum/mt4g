@@ -48,13 +48,21 @@ __global__ void cuShareScalarL1Kernel(uint32_t *pChaseArrayBaseCU, uint32_t *pCh
     if (currentCUId == baseCU) {
         for (uint32_t k = 0; k < steps; k++) {
             #ifdef __HIP_PLATFORM_AMD__
-            uint32_t *addr = pChaseArrayBaseCU + index;
-
+            // pChaseArrayBaseCU + index may be VGPR (flat-store code moved it there).
+            // Pass the lo/hi 32-bit halves of the element address as "v" (VGPR) inputs.
+            // v_readfirstlane_b32 inside the asm writes to "=&s" outputs (guaranteed
+            // SGPR), then s_mov_b32 copies into hardcoded s[16:17] (aligned even pair)
+            // so s_load_dword can use them as SBASE.
+            uint32_t s_lo_scratch, s_hi_scratch;
             asm volatile(
+                "v_readfirstlane_b32 %1, %3\n\t"        // s_lo = lo32(elem_addr)
+                "v_readfirstlane_b32 %2, %4\n\t"        // s_hi = hi32(elem_addr)
+                "s_mov_b32 s16, %1\n\t"                  // s16 = s_lo (SGPR→SGPR)
+                "s_mov_b32 s17, %2\n\t"                  // s17 = s_hi
                 "s_waitcnt lgkmcnt(0)\n\t"
                 "s_waitcnt vmcnt(0)\n\t"
 
-                "s_load_dword %0, %1, 0\n\t" // index = *addr;
+                "s_load_dword %0, s[16:17], 0\n\t"      // index = *elem_addr
 
                 "s_waitcnt lgkmcnt(0)\n\t"
                 "s_waitcnt vmcnt(0)\n\t"
@@ -63,10 +71,12 @@ __global__ void cuShareScalarL1Kernel(uint32_t *pChaseArrayBaseCU, uint32_t *pCh
                 "s_waitcnt lgkmcnt(0)\n\t"
                 "s_waitcnt vmcnt(0)\n\t"
 
-                : "+s"(index) //uint32_t
-                , "+s"(addr) // uint32_t*
-                :
-                : "memory"
+                : "=s"(index)                             // %0 uint32_t
+                , "=&s"(s_lo_scratch)                     // %1 scratch (early-clobber)
+                , "=&s"(s_hi_scratch)                     // %2 scratch (early-clobber)
+                : "v"((uint32_t)(uintptr_t)(pChaseArrayBaseCU + index))          // %3 VGPR
+                , "v"((uint32_t)((uintptr_t)(pChaseArrayBaseCU + index) >> 32))  // %4 VGPR
+                : "s16", "s17", "memory"
             );
             #endif
         }
@@ -81,13 +91,16 @@ __global__ void cuShareScalarL1Kernel(uint32_t *pChaseArrayBaseCU, uint32_t *pCh
     if (currentCUId == testCU) {
         for (uint32_t k = 0; k < steps; k++) {
             #ifdef __HIP_PLATFORM_AMD__
-            uint32_t *addr = pChaseArrayTestCU + index;
-
+            uint32_t s_lo_scratch, s_hi_scratch;
             asm volatile(
+                "v_readfirstlane_b32 %1, %3\n\t"
+                "v_readfirstlane_b32 %2, %4\n\t"
+                "s_mov_b32 s16, %1\n\t"
+                "s_mov_b32 s17, %2\n\t"
                 "s_waitcnt lgkmcnt(0)\n\t"
                 "s_waitcnt vmcnt(0)\n\t"
 
-                "s_load_dword %0, %1, 0\n\t" // index = *addr;
+                "s_load_dword %0, s[16:17], 0\n\t"
 
                 "s_waitcnt lgkmcnt(0)\n\t"
                 "s_waitcnt vmcnt(0)\n\t"
@@ -96,10 +109,12 @@ __global__ void cuShareScalarL1Kernel(uint32_t *pChaseArrayBaseCU, uint32_t *pCh
                 "s_waitcnt lgkmcnt(0)\n\t"
                 "s_waitcnt vmcnt(0)\n\t"
 
-                : "+s"(index) //uint32_t
-                , "+s"(addr) // uint32_t*
-                :
-                : "memory"
+                : "=s"(index)
+                , "=&s"(s_lo_scratch)
+                , "=&s"(s_hi_scratch)
+                : "v"((uint32_t)(uintptr_t)(pChaseArrayTestCU + index))
+                , "v"((uint32_t)((uintptr_t)(pChaseArrayTestCU + index) >> 32))
+                : "s16", "s17", "memory"
             );
             #endif
         }
@@ -115,35 +130,43 @@ __global__ void cuShareScalarL1Kernel(uint32_t *pChaseArrayBaseCU, uint32_t *pCh
         for (uint32_t k = 0; k < measureLength; ++k) {
             #ifdef __HIP_PLATFORM_AMD__
             uint64_t start, end;
-            uint32_t *addr = pChaseArrayBaseCU + index;
-
+            // pChaseArrayBaseCU + index is VGPR. Pass both 32-bit halves as "v" inputs;
+            // v_readfirstlane_b32 inside the asm writes into "=&s" scratches (guaranteed
+            // SGPR), then s_mov_b32 copies into hardcoded s[16:17] for s_load_dword.
+            uint32_t s_lo_scratch, s_hi_scratch;
             asm volatile(
+                "v_readfirstlane_b32 %3, %5\n\t"        // s_lo = lo32(elem_addr)
+                "v_readfirstlane_b32 %4, %6\n\t"        // s_hi = hi32(elem_addr)
+                "s_mov_b32 s16, %3\n\t"                  // s16 = s_lo (SGPR→SGPR)
+                "s_mov_b32 s17, %4\n\t"                  // s17 = s_hi
                 "s_waitcnt lgkmcnt(0)\n\t"
                 "s_waitcnt vmcnt(0)\n\t"
-                "s_memtime %0\n\t" // start = clock();
+                "s_memtime %0\n\t"                        // start = clock();
 
-                "s_load_dword %2, %3, 0\n\t" // index = *addr;
+                "s_load_dword %2, s[16:17], 0\n\t"      // index = *elem_addr
 
                 "s_waitcnt lgkmcnt(0)\n\t"
                 "s_waitcnt vmcnt(0)\n\t"
-                "s_memtime %1\n\t" // end = clock();
+                "s_memtime %1\n\t"                        // end = clock();
 
                 // Last syncs
                 "s_waitcnt lgkmcnt(0)\n\t"
                 "s_waitcnt vmcnt(0)\n\t"
 
-                : "+s"(start) // uint64_t
-                , "+s"(end) // uint64_t
-                , "+s"(index) //uint32_t
-                , "+s"(addr) // uint32_t*
-                :
-                : "memory"
+                : "=s"(start)                             // %0 uint64_t
+                , "=s"(end)                               // %1 uint64_t
+                , "=s"(index)                             // %2 uint32_t
+                , "=&s"(s_lo_scratch)                     // %3 scratch (early-clobber)
+                , "=&s"(s_hi_scratch)                     // %4 scratch (early-clobber)
+                : "v"((uint32_t)(uintptr_t)(pChaseArrayBaseCU + index))          // %5 VGPR
+                , "v"((uint32_t)((uintptr_t)(pChaseArrayBaseCU + index) >> 32))  // %6 VGPR
+                : "s16", "s17", "memory"
             );
 
             s_timingResultsBaseCU[k] = end - start;
             #endif
         }
-        
+
         timingResultsBaseCU[0] += index >> util::min(steps, 32);
     }
 
@@ -154,29 +177,34 @@ __global__ void cuShareScalarL1Kernel(uint32_t *pChaseArrayBaseCU, uint32_t *pCh
         for (uint32_t k = 0; k < measureLength; ++k) {
             #ifdef __HIP_PLATFORM_AMD__
             uint64_t start, end;
-            uint32_t *addr = pChaseArrayTestCU + index;
-
+            uint32_t s_lo_scratch, s_hi_scratch;
             asm volatile(
+                "v_readfirstlane_b32 %3, %5\n\t"        // s_lo = lo32(elem_addr)
+                "v_readfirstlane_b32 %4, %6\n\t"        // s_hi = hi32(elem_addr)
+                "s_mov_b32 s16, %3\n\t"                  // s16 = s_lo (SGPR→SGPR)
+                "s_mov_b32 s17, %4\n\t"                  // s17 = s_hi
                 "s_waitcnt lgkmcnt(0)\n\t"
                 "s_waitcnt vmcnt(0)\n\t"
-                "s_memtime %0\n\t" // start = clock();
+                "s_memtime %0\n\t"                        // start = clock();
 
-                "s_load_dword %2, %3, 0\n\t" // index = *addr;
+                "s_load_dword %2, s[16:17], 0\n\t"      // index = *elem_addr
 
                 "s_waitcnt lgkmcnt(0)\n\t"
                 "s_waitcnt vmcnt(0)\n\t"
-                "s_memtime %1\n\t" // end = clock();
+                "s_memtime %1\n\t"                        // end = clock();
 
                 // Last syncs
                 "s_waitcnt lgkmcnt(0)\n\t"
                 "s_waitcnt vmcnt(0)\n\t"
 
-                : "+s"(start) // uint64_t
-                , "+s"(end) // uint64_t
-                , "+s"(index) //uint32_t
-                , "+s"(addr) // uint32_t*
-                :
-                : "memory"
+                : "=s"(start)                             // %0 uint64_t
+                , "=s"(end)                               // %1 uint64_t
+                , "=s"(index)                             // %2 uint32_t
+                , "=&s"(s_lo_scratch)                     // %3 scratch (early-clobber)
+                , "=&s"(s_hi_scratch)                     // %4 scratch (early-clobber)
+                : "v"((uint32_t)(uintptr_t)(pChaseArrayTestCU + index))          // %5 VGPR
+                , "v"((uint32_t)((uintptr_t)(pChaseArrayTestCU + index) >> 32))  // %6 VGPR
+                : "s16", "s17", "memory"
             );
 
             s_timingResultsTestCU[k] = end - start;
