@@ -80,20 +80,14 @@ include:
 
 | _Memory Element_ | Size | Load Latency | Read & Write Bandwidth | Cache Line Size | Fetch Granularity | Amount per SM/CU or GPU | Physically Shared With |
 | ---------------- | ---- | ------------ | ---------------------- | --------------- | ----------------- | ----------------------- | ---------------------- |
-| **L1 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| **L1 cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **L2 cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ➖ |
-| **Texture cache** | ✅ | ✅ | ✅¹ | ✅ | ✅ | ✅ | ✅ |
-| **Readonly cache** | ✅ | ✅ | ✅¹ | ✅ | ✅ | ✅ | ✅ |
+| **Texture cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Readonly cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Constant L1 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
 | **Constant L1.5 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ | ➖ |
-| **Shared Memory** | ✅ | ✅ | ❌ | ➖ | ➖ | ➖ | ➖ |
+| **Shared Memory** | ✅ | ✅ | ✅ | ➖ | ➖ | ➖ | ➖ |
 | **Device Memory** | ✅ | ✅ | ✅ | ➖ | ➖ | ➖ | ➖ |
-
-¹ Texture and read-only are read-only memory spaces, so only a per-multiprocessor
-*read* bandwidth is measured (no write path exists). Both paths reach the unified
-L1 SRAM on Maxwell and later, so the read-only value tracks the L1 read bandwidth,
-while the texture value may be lower due to texture-unit throughput limits. These
-run as part of the `--texture`/`--readonly` groups and honour `--optimal`.
 
 ## Installation
 
