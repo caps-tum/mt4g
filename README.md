@@ -82,12 +82,18 @@ include:
 | ---------------- | ---- | ------------ | ---------------------- | --------------- | ----------------- | ----------------------- | ---------------------- |
 | **L1 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
 | **L2 cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ➖ |
-| **Texture cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
-| **Readonly cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| **Texture cache** | ✅ | ✅ | ✅¹ | ✅ | ✅ | ✅ | ✅ |
+| **Readonly cache** | ✅ | ✅ | ✅¹ | ✅ | ✅ | ✅ | ✅ |
 | **Constant L1 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
 | **Constant L1.5 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ | ➖ |
 | **Shared Memory** | ✅ | ✅ | ❌ | ➖ | ➖ | ➖ | ➖ |
 | **Device Memory** | ✅ | ✅ | ✅ | ➖ | ➖ | ➖ | ➖ |
+
+¹ Texture and read-only are read-only memory spaces, so only a per-multiprocessor
+*read* bandwidth is measured (no write path exists). Both paths reach the unified
+L1 SRAM on Maxwell and later, so the read-only value tracks the L1 read bandwidth,
+while the texture value may be lower due to texture-unit throughput limits. These
+run as part of the `--texture`/`--readonly` groups and honour `--optimal`.
 
 ## Installation
 

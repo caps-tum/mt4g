@@ -650,6 +650,26 @@ int main(int argc, char* argv[]) {
             std::cout << "Could not measure valid Read Only Size or Fetch Granularity, skipping Read Only Amount, Line Size and Miss Penalty benchmarks." << std::endl;
         }
 
+        if (readOnlySize.confidence > VALIDITY_THRESHOLD) {
+            if (opts.runOptimalSearch) {
+                std::cout << "[Read Only] Read Bandwidth per CU / MultiProcessor with optimal search" << std::endl;
+                CacheBandwidthResult readOnlyReadBandwidth = benchmark::nvidia::measureReadOnlyReadBandwidthSweep(readOnlySize.size / 2);
+                result["memory"]["readOnly"]["readBandwidthPerCU"] = readOnlyReadBandwidth;
+
+                if (opts.rawData || opts.graphs) {
+                    util::writeBandwidthGridToCSV(readOnlyReadBandwidth, (graphDir / util::bandwidthGridFileName(fancyFileName, "ReadOnly", "Read")).string());
+                }
+            } else {
+                std::cout << "[Read Only] Read Bandwidth per CU / MultiProcessor" << std::endl;
+                result["memory"]["readOnly"]["readBandwidthPerCU"] = {
+                    {"value", benchmark::nvidia::measureReadOnlyReadBandwidth(readOnlySize.size / 2)},
+                    {"unit", "GiB/s"}
+                };
+            }
+        } else {
+            std::cout << "Could not measure valid Read Only Size, skipping Read Only Bandwidth benchmarks." << std::endl;
+        }
+
         if (opts.graphs) {
             util::exportChartMinMaxAvgRed(readOnlySize.timings, fancyName + " - Read Only Size", {readOnlySize.size}, "Bytes", "Cycles", graphDir.string());
             util::exportChartsMinMaxAvg(readOnlyFetchGranularity.timings, fancyName + " - Read Only Fetch Granularity", {readOnlyFetchGranularity.size}, "Bytes", "Cycles", graphDir.string());
@@ -707,6 +727,26 @@ int main(int argc, char* argv[]) {
             }
         } else {
             std::cout << "Could not measure valid Texture Size or Fetch Granularity, skipping Texture Amount, Line Size and Miss Penalty benchmarks." << std::endl;
+        }
+
+        if (textureSize.confidence > VALIDITY_THRESHOLD) {
+            if (opts.runOptimalSearch) {
+                std::cout << "[Texture] Read Bandwidth per CU / MultiProcessor with optimal search" << std::endl;
+                CacheBandwidthResult textureReadBandwidth = benchmark::nvidia::measureTextureReadBandwidthSweep(textureSize.size / 2);
+                result["memory"]["texture"]["readBandwidthPerCU"] = textureReadBandwidth;
+
+                if (opts.rawData || opts.graphs) {
+                    util::writeBandwidthGridToCSV(textureReadBandwidth, (graphDir / util::bandwidthGridFileName(fancyFileName, "Texture", "Read")).string());
+                }
+            } else {
+                std::cout << "[Texture] Read Bandwidth per CU / MultiProcessor" << std::endl;
+                result["memory"]["texture"]["readBandwidthPerCU"] = {
+                    {"value", benchmark::nvidia::measureTextureReadBandwidth(textureSize.size / 2)},
+                    {"unit", "GiB/s"}
+                };
+            }
+        } else {
+            std::cout << "Could not measure valid Texture Size, skipping Texture Bandwidth benchmarks." << std::endl;
         }
 
         if (opts.graphs) {

@@ -334,6 +334,8 @@ _PRETTY = {
     "vl1d": "vL1d",
     "sl1d": "sL1d",
     "mainmemory": "Main Memory",
+    "readonly": "Read-Only",
+    "texture": "Texture",
     "l1": "L1",
     "l2": "L2",
     "l3": "L3",
@@ -353,21 +355,26 @@ def _benchmark_token(name: str) -> str:
 # on both vendors.
 _BLOCK_SWEEP_TOKENS = {"vL1d", "sL1d", "L2", "L3", "Main Memory"}
 
+# Single-block (per-SM) sweeps rendered as one line per thread count. NVIDIA L1
+# plus the NVIDIA read-only and texture cache read-bandwidth benchmarks, which
+# reuse the same 2D (threads x reps) grid layout.
+_SINGLE_LINE_TOKENS = {"L1", "Read-Only", "Texture"}
+
 
 def _benchmark_category(name: str) -> tuple[str, str]:
     """Classify a grid file by *benchmark type* (filename token).
 
     Returns ``(category, pretty_token)`` where category is one of:
-        "block_sweep" -> L2 / L3 / vL1d / sL1d  (block lines, x=threads)
-        "l1"          -> NVIDIA L1               (single line, x=threads)
-        "lds"         -> LDS / shared memory     (allocation lines, x=threads)
+        "block_sweep" -> L2 / L3 / vL1d / sL1d          (block lines, x=threads)
+        "single_line" -> NVIDIA L1 / Read-Only / Texture (single line, x=threads)
+        "lds"         -> LDS / shared memory             (allocation lines, x=threads)
         "unknown"     -> fall back to grid dimensionality
     """
     token = _benchmark_token(name)
     if token in _BLOCK_SWEEP_TOKENS:
         return "block_sweep", token
-    if token == "L1":
-        return "l1", token
+    if token in _SINGLE_LINE_TOKENS:
+        return "single_line", token
     if token == "LDS":
         return "lds", token
     return "unknown", token
@@ -398,10 +405,10 @@ def run_auto(indir: Path, outdir: Path, dpi: int) -> int:
             title = f"{gpu}: {token} {direction} bandwidth"
             plot_block_lines(grid, title, outdir, _slug(f"{gpu} - {token} {direction} bandwidth"), dpi)
             n_figs += 1
-        elif category == "l1":
+        elif category == "single_line":
             grid = load_config_grid(csv)
-            title = f"{gpu}: L1 {direction} bandwidth"
-            plot_single_line(grid, title, outdir, _slug(f"{gpu} - L1 {direction} bandwidth"), dpi)
+            title = f"{gpu}: {token} {direction} bandwidth"
+            plot_single_line(grid, title, outdir, _slug(f"{gpu} - {token} {direction} bandwidth"), dpi)
             n_figs += 1
         else:  # "lds" or unrecognised 2D grid -> group by allocation per direction
             cfg = load_config_grid(csv)
