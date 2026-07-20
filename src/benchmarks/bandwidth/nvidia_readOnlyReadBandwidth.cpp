@@ -5,7 +5,7 @@
 #include <cstdlib>
 #include <string>
 
-static constexpr auto WARMUP_REPS = 128;
+static constexpr auto WARMUP_REPS = 8;
 
 
 static constexpr auto ROUNDS = DEFAULT_ROUNDS;// rounds
