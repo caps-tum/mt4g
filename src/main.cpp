@@ -13,6 +13,8 @@
 #include <string>
 #include <optional>
 #include <type_traits>
+#include <chrono>
+#include <utility>
 
 #include "version.hpp"
 #include "benchmarks/benchmark.hpp"
@@ -21,6 +23,29 @@
 
 static constexpr auto MIN_EXPECTED_LINE_SIZE = 4;// Bytes
 static constexpr auto VALIDITY_THRESHOLD = 0.5;// Factor
+
+namespace {
+    // RAII wall-clock timer for a benchmark scope. Records elapsed time on scope
+    // exit; when disabled, it is a no-op.
+    struct BenchTimer {
+        std::vector<std::pair<std::string, double>>& sink;
+        std::string name;
+        bool enabled;
+        std::chrono::steady_clock::time_point start;
+
+        BenchTimer(std::vector<std::pair<std::string, double>>& sink, std::string name, bool enabled)
+            : sink(sink), name(std::move(name)), enabled(enabled),
+              start(std::chrono::steady_clock::now()) {}
+
+        ~BenchTimer() {
+            if (!enabled) return;
+            double seconds = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - start).count();
+            sink.emplace_back(name, seconds);
+            std::cout << "[Timing] " << name << " took " << seconds << " s" << std::endl;
+        }
+    };
+}
 
 int main(int argc, char* argv[]) {
     CLIOptions opts = util::parseCommandLine(argc, argv);
@@ -230,7 +255,13 @@ int main(int argc, char* argv[]) {
     }
     #endif
 
+    // Timing instrumentation (-t/--timing). Times the full benchmark run here;
+    // individual benchmark groups are timed with BenchTimer.
+    std::vector<std::pair<std::string, double>> benchTimings;
+    auto totalStart = std::chrono::steady_clock::now();
+
     if (opts.runL1) {
+        BenchTimer _timer(benchTimings, "L1", opts.timing);
         std::cout << "[L1] Starting Benchmarks" << std::endl;
         std::cout << "[L1] Latency" << std::endl;
         CacheLatencyResult l1Latency = benchmark::measureL1Latency();
@@ -343,6 +374,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (opts.runL2) {
+        BenchTimer _timer(benchTimings, "L2", opts.timing);
         std::cout << "[L2] Starting Benchmarks" << std::endl;
         std::cout << "[L2] Latency" << std::endl;
         CacheLatencyResult l2Latency = benchmark::measureL2Latency();
@@ -439,6 +471,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (opts.runL3) {
+        BenchTimer _timer(benchTimings, "L3", opts.timing);
         std::cout << "[L3] Starting Benchmarks" << std::endl;
         auto l3Size = util::getL3SizeBytes();
 
@@ -515,6 +548,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (opts.runConstant) {
+        BenchTimer _timer(benchTimings, "Constant", opts.timing);
         std::cout << "[Constant] Starting Benchmarks" << std::endl;
         std::cout << "[Constant] L1 Latency" << std::endl;
         CacheLatencyResult constantL1Latency = benchmark::nvidia::measureConstantL1Latency();
@@ -604,6 +638,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (opts.runReadOnly) {
+        BenchTimer _timer(benchTimings, "Read Only", opts.timing);
         std::cout << "[Read Only] Starting Benchmarks" << std::endl;
         std::cout << "[Read Only] Latency" << std::endl;
         CacheLatencyResult readOnlyLatency = benchmark::nvidia::measureReadOnlyLatency();
@@ -683,6 +718,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (opts.runTexture) {
+        BenchTimer _timer(benchTimings, "Texture", opts.timing);
         std::cout << "[Texture] Starting Benchmarks" << std::endl;
         std::cout << "[Texture] Latency" << std::endl;
         CacheLatencyResult textureLatency = benchmark::nvidia::measureTextureLatency();
@@ -762,6 +798,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (opts.runScalar) {
+        BenchTimer _timer(benchTimings, "Scalar L1", opts.timing);
         std::cout << "[Scalar L1] Starting Benchmarks" << std::endl;
         std::cout << "[Scalar L1] Latency" << std::endl;
         CacheLatencyResult scalarL1Latency = benchmark::amd::measureScalarL1Latency();
@@ -858,6 +895,7 @@ int main(int argc, char* argv[]) {
     }
     
     if (opts.runSharedMemory) {
+        BenchTimer _timer(benchTimings, "Shared Memory", opts.timing);
         std::cout << "[Shared Memory] Starting Benchmarks" << std::endl;
         std::cout << "[Shared Memory] Latency" << std::endl;
         CacheLatencyResult sharedLatency = benchmark::measureSharedMemoryLatency();
@@ -937,6 +975,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (opts.runMainMemory) {
+        BenchTimer _timer(benchTimings, "Main Memory", opts.timing);
         std::cout << "[Main Memory] Starting Benchmarks" << std::endl;
 
         std::cout << "[Main Memory] Latency" << std::endl;
@@ -980,6 +1019,7 @@ int main(int argc, char* argv[]) {
         std::cout << "[Main Memory] Benchmarks finished" << std::endl;
     }
     if (opts.runResourceSharing) {
+        BenchTimer _timer(benchTimings, "Resource Sharing", opts.timing);
         std::cout << "[Resource Sharing] Starting Benchmarks" << std::endl;
 
         if (opts.runConstant && opts.runL1) {
@@ -1005,7 +1045,25 @@ int main(int argc, char* argv[]) {
 
         std::cout << "[Resource Sharing] Benchmarks finished" << std::endl;
     }
+
+    // Stop the total benchmark timer before post-processing.
+    double totalSeconds = std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - totalStart).count();
+
     if (silencer) silencer.reset();
+
+    // Print the timing summary after restoring stdout so it is visible even with --quiet.
+    if (opts.timing) {
+        double sumSeconds = 0.0;
+        std::cout << "\n===== Timing Summary =====" << std::endl;
+        for (const auto& [name, seconds] : benchTimings) {
+            std::cout << "  " << name << ": " << seconds << " s" << std::endl;
+            sumSeconds += seconds;
+        }
+        std::cout << "  Sum of benchmark groups: " << sumSeconds << " s" << std::endl;
+        std::cout << "  Total execution time: " << totalSeconds << " s"
+                  << " (" << totalSeconds / 60.0 << " min)" << std::endl;
+    }
 
     // Generate bandwidth figures (block-sweep grids + LDS
     // best-per-configuration) from the grid CSVs written above. Done once here so

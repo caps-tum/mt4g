@@ -6,6 +6,8 @@
 #include <numeric>
 #include <optional>
 #include <iostream>
+#include <algorithm>
+#include <limits>
 
 static constexpr auto WARMUP_REPS = 512;
 
@@ -136,31 +138,47 @@ namespace benchmark {
         result.numBlocks = 0;
         result.numReps = 0;
 
+        // Precompute the full thread/rep axes for CSV alignment. Every block indexes
+        // into these axes, even if early stopping skips some thread counts.
+        for (uint32_t numThreads = minThreads; numThreads <= maxThreads; numThreads *= 2)
+        {
+            result.threadsTested.push_back(numThreads);
+        }
+        for (size_t reps = minReps; reps <= maxReps; reps *= 2)
+        {
+            result.repsTested.push_back(reps);
+        }
+
+        const size_t numThreadSteps = result.threadsTested.size();
+        const size_t numRepSteps = result.repsTested.size();
+        // NaN marks configurations skipped by early stopping, distinguishing them from
+        // genuine 0 GiB/s measurements.
+        const double UNMEASURED = std::numeric_limits<double>::quiet_NaN();
+
         for (uint32_t numBlocks = minBlocks; numBlocks <= maxBlocks; numBlocks *= 2)
         {
-            std::vector<std::vector<double>> threadsResults;
-
             result.blocksTested.push_back(numBlocks);
 
-            for (uint32_t numThreads = minThreads; numThreads <= maxThreads; numThreads *= 2)
+            std::vector<std::vector<double>> threadsResults(
+                numThreadSteps, std::vector<double>(numRepSteps, UNMEASURED));
+
+            // Early-stopping thread search: Search thread counts from highest to lowest.
+            // Once the best bandwidth for a thread count drops below the previous (higher) one,
+            // stop: lower thread counts are assumed to be past the peak and are not measured.
+            double prevBandwidth = -1.0;
+            for (size_t ti = numThreadSteps; ti-- > 0; )
             {
-                std::vector<double> repsResults;
+                const uint32_t numThreads = result.threadsTested[ti];
+                double bestThisThread = 0.0;
 
-                if (numBlocks == minBlocks)
+                for (size_t ri = 0; ri < numRepSteps; ++ri)
                 {
-                    result.threadsTested.push_back(numThreads);
-                }
+                    const size_t reps = result.repsTested[ri];
 
-                for (size_t reps = minReps; reps <= maxReps; reps *= 2)
-                {
-                    if (numBlocks == minBlocks && numThreads == minThreads)
-                    {
-                        result.repsTested.push_back(reps);
-                    }
-                    
                     auto [timeS, bandwidth] = l2ReadBandwidthLauncher(arraySizeBytes, numBlocks, numThreads, reps);
-                    
-                    repsResults.push_back(bandwidth);
+
+                    threadsResults[ti][ri] = bandwidth;
+                    bestThisThread = std::max(bestThisThread, bandwidth);
 
                     if (bandwidth > result.measuredBandwidth)
                     {
@@ -172,7 +190,11 @@ namespace benchmark {
                     }
                 }
 
-                threadsResults.push_back(repsResults);
+                if (prevBandwidth >= 0.0 && bestThisThread < prevBandwidth)
+                {
+                    break; // bandwidth dropped -> previous thread count was the peak
+                }
+                prevBandwidth = bestThisThread;
             }
 
             result.bandwidth3D.push_back(threadsResults);

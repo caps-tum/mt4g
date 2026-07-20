@@ -17,7 +17,10 @@ All benchmarks now use a fixed repetition count (MIN_REPS == MAX_REPS),
 so plots show bandwidth vs thread count only.
 
 Supported plot types:
-  1. Block-sweep benchmarks (L2 / L3 / vL1d / sL1d)
+  1. Block-sweep benchmarks (L2 / L3 / vL1d / sL1d) -- peak bandwidth per block
+     size, with every measured (thread-count) point scattered and annotated.
+     The thread sweep stops early once bandwidth drops, so the dataset is
+     truncated per block and only the peak is comparable across blocks.
   2. Single-line benchmarks (L1)
   3. LDS/shared memory (allocation-based grouping)
 
@@ -280,14 +283,102 @@ def plot_bw_vs_threads(
 # --------------------------------------------------------------------------- #
 # Builders that turn parsed grids into series for plot_bw_vs_threads           #
 # --------------------------------------------------------------------------- #
-def plot_block_lines(grid: BlockSweepGrid, title: str, outdir: Path, outbase: str, dpi: int) -> None:
-    """Block-sweep benchmark: one line per block count (single line if only one)."""
-    collapsed = grid.collapse()  # collapsed[b][t]
-    if len(grid.blocks) == 1:
-        series = [(None, grid.threads, collapsed[0])]
-    else:
-        series = [(str(b), grid.threads, collapsed[bi]) for bi, b in enumerate(grid.blocks)]
-    plot_bw_vs_threads(series, title, outdir, outbase, dpi, legend_title="Blocks")
+# Colours for the peak figure: a muted blue for the raw measurements and a
+# strong red for the headline peak markers/line.
+_MEASURED_COLOR = "#4C72B0"
+_PEAK_COLOR = "#C44E52"
+
+
+def plot_block_peak(grid: BlockSweepGrid, title: str, outdir: Path, outbase: str, dpi: int) -> None:
+    """Peak-bandwidth-per-block figure for (possibly truncated) block sweeps.
+
+    The bandwidth search stops descending in thread count once a block's
+    bandwidth drops, so each block is measured at a *different* set of thread
+    counts and the classic "one line per block, x=threads" curves are truncated
+    at different points -- no longer comparable.  Instead this figure shows, for
+    every block size:
+
+      * the peak (max) measured bandwidth -- the primary result, block sizes
+        connected by a line to reveal the trend;
+      * every individual measurement that was actually performed, as scatter
+        points;
+      * the launch thread count of each measurement, annotated next to its point
+        (bold/red on the peak point, muted on the others).
+
+    Block sizes sit on evenly spaced categorical x-positions: their raw values
+    are geometric (e.g. 132, 264, 528, ...) and would crowd a linear axis.
+    """
+    collapsed = grid.collapse()  # collapsed[b][t], NaN where never measured
+    blocks = grid.blocks
+    threads = grid.threads
+    xpos = list(range(len(blocks)))
+
+    fig, ax = plt.subplots(figsize=(9.5, 5.5))
+
+    peak_vals: list[float] = []
+    scatter_labelled = False
+    for x, bi in enumerate(range(len(blocks))):
+        measured = [
+            (threads[ti], collapsed[bi][ti])
+            for ti in range(len(threads))
+            if not math.isnan(collapsed[bi][ti])
+        ]
+        if not measured:
+            peak_vals.append(float("nan"))
+            continue
+
+        peak = max(v for _, v in measured)
+        peak_vals.append(peak)
+
+        for t, v in measured:
+            ax.scatter(
+                [x], [v], s=30, color=_MEASURED_COLOR, zorder=3,
+                edgecolors="white", linewidths=0.5,
+                label=None if scatter_labelled else "Measured",
+            )
+            scatter_labelled = True
+            if v == peak:
+                # The peak is always the block's topmost point: lift its label
+                # above the marker so it clears the diamond, the trend line and
+                # the other (lower) measurement labels for this block.
+                ax.annotate(
+                    str(t), (x, v),
+                    textcoords="offset points", xytext=(0, 9),
+                    ha="center", va="bottom", fontsize=8,
+                    color=_PEAK_COLOR, fontweight="bold",
+                )
+            else:
+                ax.annotate(
+                    str(t), (x, v),
+                    textcoords="offset points", xytext=(6, 0),
+                    ha="left", va="center", fontsize=8, color="0.35",
+                )
+
+    # Headline: peak bandwidth per block, connected to show the trend.
+    ax.plot(
+        xpos, peak_vals,
+        color=_PEAK_COLOR, linewidth=1.8, marker="D", markersize=8,
+        markerfacecolor=_PEAK_COLOR, markeredgecolor="white", markeredgewidth=0.8,
+        zorder=4, label="Peak bandwidth",
+    )
+
+    ax.set_xticks(xpos)
+    ax.set_xticklabels([str(b) for b in blocks])
+    ax.set_xlabel("Blocks")
+    ax.set_ylabel("Bandwidth (GiB/s)")
+    ax.set_title(title)
+
+    finite_peaks = [v for v in peak_vals if not math.isnan(v)]
+    ymax = max(finite_peaks) if finite_peaks else 1.0
+    ax.set_ylim(0, ymax * 1.15)
+    # Padding so the thread-count labels near the frame stay readable.
+    ax.set_xlim(-0.5, len(blocks) - 0.5 + 0.4)
+
+    # The number beside every point is its launch thread count (block dim); make
+    # that explicit via the legend title so the annotations are unambiguous.
+    ax.legend(loc="best", framealpha=0.9, title="Number by each point = threads/block")
+    fig.tight_layout()
+    _save(fig, outdir, outbase, dpi)
 
 
 def plot_single_line(grid: ConfigGrid, title: str, outdir: Path, outbase: str, dpi: int) -> None:
@@ -402,8 +493,8 @@ def run_auto(indir: Path, outdir: Path, dpi: int) -> int:
 
         if category == "block_sweep" or (category == "unknown" and _is_block_sweep(header)):
             grid = load_block_sweep(csv)
-            title = f"{gpu}: {token} {direction} bandwidth"
-            plot_block_lines(grid, title, outdir, _slug(f"{gpu} - {token} {direction} bandwidth"), dpi)
+            title = f"{gpu}: {token} {direction} peak bandwidth per block"
+            plot_block_peak(grid, title, outdir, _slug(f"{gpu} - {token} {direction} bandwidth"), dpi)
             n_figs += 1
         elif category == "single_line":
             grid = load_config_grid(csv)
@@ -433,7 +524,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="mode", required=True)
 
-    bs = sub.add_parser("blocksweep", help="block-lines figure (x=threads) from a 3D grid CSV")
+    bs = sub.add_parser("blocksweep", help="peak-bandwidth-per-block figure (x=blocks) from a 3D grid CSV")
     bs.add_argument("--input", required=True, help="blocks,threads,reps,bandwidth CSV")
     bs.add_argument("--title", default="Bandwidth")
     bs.add_argument("--outdir", default=".")
@@ -469,7 +560,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args.mode == "blocksweep":
         grid = load_block_sweep(Path(args.input))
         outbase = args.outfile or _slug(args.title)
-        plot_block_lines(grid, args.title, Path(args.outdir), outbase, args.dpi)
+        plot_block_peak(grid, args.title, Path(args.outdir), outbase, args.dpi)
         return 0
 
     if args.mode == "lds":
