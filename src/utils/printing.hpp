@@ -9,6 +9,7 @@
 #include <set>
 #include <string>
 #include <cstdlib>
+#include <cmath>
 #include <unistd.h>
 #include <nlohmann/json.hpp>
 
@@ -508,10 +509,18 @@ namespace util {
                 {
                     for (size_t r = 0; r < reps.size(); ++r)
                     {
-                        double v = 0.0;
-                        if (b < grid3D.size() && t < grid3D[b].size() && r < grid3D[b][t].size())
+                        if (!(b < grid3D.size() && t < grid3D[b].size() && r < grid3D[b][t].size()))
                         {
-                            v = grid3D[b][t][r];
+                            continue;
+                        }
+
+                        double v = grid3D[b][t][r];
+                        // Skip configurations early stopping never measured (NaN):
+                        // omitting the row lets the plot treat them as absent
+                        // rather than a real 0 GiB/s data point.
+                        if (std::isnan(v))
+                        {
+                            continue;
                         }
 
                         ofs << blocks[b] << ',' << threads[t] << ',' << reps[r] << ',' << v << '\n';

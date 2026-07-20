@@ -77,6 +77,9 @@
 #include "benchmarks/latency/nvidia_readOnlyLatency.hpp"
 #include "benchmarks/latency/nvidia_textureLatency.hpp"
 
+#include "benchmarks/bandwidth/nvidia_readOnlyReadBandwidth.hpp"
+#include "benchmarks/bandwidth/nvidia_textureReadBandwidth.hpp"
+
 #include "benchmarks/share/nvidia_constantL1SharedWithL1.hpp"
 #include "benchmarks/share/nvidia_readOnlySharedWithL1.hpp"
 #include "benchmarks/share/nvidia_textureSharedWithReadOnly.hpp"

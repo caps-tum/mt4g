@@ -28,6 +28,7 @@ namespace util {
         opts.runSilently = false;
         opts.runOptimalSearch = false;
         opts.sharedStatic = false;
+        opts.timing = false;
 
         opts.runL3 = false;
         opts.runL2 = false;
@@ -69,6 +70,8 @@ namespace util {
             ("optimal", "Runs linear search of optimal number of threads, blocks and repetitions for bandwidth benchmarks",
                 cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
             ("static", "Runs shared memory bandwidth benchmarks with static allocated memory",
+                cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
+            ("t,timing", "Measure and print wall-clock time of the whole run and each benchmark group",
                 cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
 
             // ------- Benchmark group toggles -------
@@ -136,6 +139,7 @@ namespace util {
         opts.runSilently= result["quiet"].as<bool>();
         opts.runOptimalSearch = result["optimal"].as<bool>();
         opts.sharedStatic = result["static"].as<bool>();
+        opts.timing     = result["timing"].as<bool>();
 
         // ------- Cache preference parsing -------
         // Convert to lowercase for robust matching.

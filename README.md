@@ -80,13 +80,13 @@ include:
 
 | _Memory Element_ | Size | Load Latency | Read & Write Bandwidth | Cache Line Size | Fetch Granularity | Amount per SM/CU or GPU | Physically Shared With |
 | ---------------- | ---- | ------------ | ---------------------- | --------------- | ----------------- | ----------------------- | ---------------------- |
-| **L1 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| **L1 cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **L2 cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ➖ |
-| **Texture cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
-| **Readonly cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| **Texture cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Readonly cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Constant L1 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
 | **Constant L1.5 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ | ➖ |
-| **Shared Memory** | ✅ | ✅ | ❌ | ➖ | ➖ | ➖ | ➖ |
+| **Shared Memory** | ✅ | ✅ | ✅ | ➖ | ➖ | ➖ | ➖ |
 | **Device Memory** | ✅ | ✅ | ✅ | ➖ | ➖ | ➖ | ➖ |
 
 ## Installation
@@ -166,6 +166,7 @@ make all install -j $(nproc)
 | `-r, --random` | Randomize P-Chase arrays |
 | `-s, --stdout` | Dump final JSON result into stdout |
 | `-q, --quiet` | Only write the final JSON to stdout |
+| `-t, --timing` | Print wall-clock time of each benchmark and the total run |
 | `--l1` | Run L1 cache benchmarks |
 | `--l2` | Run L2 cache benchmarks |
 | `--l3` | Run L3 cache benchmarks (AMD only) |
