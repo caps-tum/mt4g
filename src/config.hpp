@@ -13,5 +13,8 @@ inline constexpr size_t DEFAULT_ROUNDS = 10; // Bandwidth rounds
 // increase MAX_REPS to restore the full sweep.
 inline constexpr size_t MIN_REPS = 2048; // 2^11
 inline constexpr size_t MAX_REPS = 2048; // 2^11
+// Early termination threshold for block/thread bandwidth sweeps.
+// A drop of >=25% from the reference bandwidth ends that sweep.
+inline constexpr double BANDWIDTH_EARLY_TERMINATION_FACTOR = 0.75; // Fraction
 inline constexpr size_t DEFAULT_SIZE_DOWN_FACTOR = 4; // Bandwidth benchmark test size reduction factor
 inline constexpr double SHARED_THRESHOLD = 2.5; // Threshold divisor to determine wether a measure cache latency counts as evicted or not

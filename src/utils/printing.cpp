@@ -71,7 +71,7 @@ namespace util {
                 cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
             ("static", "Runs shared memory bandwidth benchmarks with static allocated memory",
                 cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
-            ("t,timing", "Measure and print wall-clock time of the whole run and each benchmark group",
+            ("t,timing", "Measure and print wall-clock time of the whole run and each individual benchmark",
                 cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
 
             // ------- Benchmark group toggles -------

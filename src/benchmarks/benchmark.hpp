@@ -79,6 +79,8 @@
 
 #include "benchmarks/bandwidth/nvidia_readOnlyReadBandwidth.hpp"
 #include "benchmarks/bandwidth/nvidia_textureReadBandwidth.hpp"
+#include "benchmarks/bandwidth/nvidia_constantL1ReadBandwidth.hpp"
+#include "benchmarks/bandwidth/nvidia_constantL15ReadBandwidth.hpp"
 
 #include "benchmarks/share/nvidia_constantL1SharedWithL1.hpp"
 #include "benchmarks/share/nvidia_readOnlySharedWithL1.hpp"
