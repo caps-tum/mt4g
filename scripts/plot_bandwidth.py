@@ -401,6 +401,9 @@ _PRETTY = {
     "mainmemory": "Main Memory",
     "readonly": "Read-Only",
     "texture": "Texture",
+    # Listed before the plain "l1" entry so a constant grid never matches it.
+    "constantl1.5": "Constant L1.5",
+    "constantl1": "Constant L1",
     "l1": "L1",
     "l2": "L2",
     "l3": "L3",
@@ -420,10 +423,9 @@ def _benchmark_token(name: str) -> str:
 # on both vendors.
 _BLOCK_SWEEP_TOKENS = {"vL1d", "sL1d", "L2", "L3", "Main Memory"}
 
-# Single-block (per-SM) sweeps rendered as one line per thread count. NVIDIA L1
-# plus the NVIDIA read-only and texture cache read-bandwidth benchmarks, which
-# reuse the same 2D (threads x reps) grid layout.
-_SINGLE_LINE_TOKENS = {"L1", "Read-Only", "Texture"}
+# Single-block (per-SM) sweeps: one line per thread count, using the shared
+# 2D (threads x reps) grid for NVIDIA cache read-bandwidth benchmarks.
+_SINGLE_LINE_TOKENS = {"L1", "Read-Only", "Texture", "Constant L1", "Constant L1.5"}
 
 
 def _benchmark_category(name: str) -> tuple[str, str]:

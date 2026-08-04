@@ -6,6 +6,7 @@
 #include <string>
 #include <algorithm>
 #include <cctype>
+#include <limits>
 
 static constexpr auto WARMUP_REPS = 128;
 
@@ -97,31 +98,58 @@ namespace benchmark {
             result.numBlocks = 0;
             result.numReps = 0;
 
+            // Precompute full block/thread/rep axes for CSV alignment.
+            // Sweep runs descending; axes remain ascending for unchanged grid layout.
             for (uint32_t numBlocks = minBlocks; numBlocks <= maxBlocks; numBlocks *= 2)
             {
-                std::vector<std::vector<double>> threadsResults;
-
                 result.blocksTested.push_back(numBlocks);
+            }
+            for (uint32_t numThreads = minThreads; numThreads <= maxThreads; numThreads *= 2)
+            {
+                result.threadsTested.push_back(numThreads);
+            }
+            for (size_t reps = minReps; reps <= maxReps; reps *= 2)
+            {
+                result.repsTested.push_back(reps);
+            }
 
-                for (uint32_t numThreads = minThreads; numThreads <= maxThreads; numThreads *= 2)
+            const size_t numBlockSteps = result.blocksTested.size();
+            const size_t numThreadSteps = result.threadsTested.size();
+            const size_t numRepSteps = result.repsTested.size();
+            // NaN marks configurations skipped by early termination, distinguishing them
+            // from genuine 0 GiB/s measurements.
+            const double UNMEASURED = std::numeric_limits<double>::quiet_NaN();
+
+            result.bandwidth3D.assign(numBlockSteps, std::vector<std::vector<double>>(
+                numThreadSteps, std::vector<double>(numRepSteps, UNMEASURED)));
+
+            // Lowest thread count worth measuring; used as an index into threadsTested.
+            // Once a thread sweep terminates, this and lower counts are skipped for lower blocks.
+            size_t lowestThreadIndex = 0;
+
+            // Search block counts and thread counts from highest to lowest.
+            for (size_t bi = numBlockSteps; bi-- > 0; )
+            {
+                const uint32_t numBlocks = result.blocksTested[bi];
+                double maxBandwidthThisBlock = 0.0;
+
+                for (size_t ti = numThreadSteps; ti-- > lowestThreadIndex; )
                 {
-                    std::vector<double> repsResults;
+                    const uint32_t numThreads = result.threadsTested[ti];
+                    double bestThisThread = 0.0;
 
-                    if (numBlocks == minBlocks)
+                    for (size_t ri = 0; ri < numRepSteps; ++ri)
                     {
-                        result.threadsTested.push_back(numThreads);
-                    }
-
-                    for (size_t reps = minReps; reps <= maxReps; reps *= 2)
-                    {
-                        if (numBlocks == minBlocks && numThreads == minThreads)
-                        {
-                            result.repsTested.push_back(reps);
-                        }
+                        const size_t reps = result.repsTested[ri];
 
                         auto [timeS, bandwidth] = l1WriteBandwidthLauncher(arraySizeBytes, numBlocks, numThreads, reps, stream);
 
-                        repsResults.push_back(bandwidth);
+                        result.bandwidth3D[bi][ti][ri] = bandwidth;
+
+                        if (bandwidth > bestThisThread)
+                        {
+                            bestThisThread = bandwidth;
+                        }
 
                         if (bandwidth > result.measuredBandwidth)
                         {
@@ -133,10 +161,20 @@ namespace benchmark {
                         }
                     }
 
-                    threadsResults.push_back(repsResults);
-                }
+                    // A >=25% drop from the best BW ends this thread sweep
+                    // and skips this and lower thread counts for remaining blocks.
+                    if (maxBandwidthThisBlock > 0.0 &&
+                        bestThisThread <= BANDWIDTH_EARLY_TERMINATION_FACTOR * maxBandwidthThisBlock)
+                    {
+                        lowestThreadIndex = ti + 1;
+                        break;
+                    }
 
-                result.bandwidth3D.push_back(threadsResults);
+                    if (bestThisThread > maxBandwidthThisBlock)
+                    {
+                        maxBandwidthThisBlock = bestThisThread;
+                    }
+                }
             }
 
             util::hipCheck(hipStreamDestroy(stream));
