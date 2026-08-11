@@ -69,11 +69,11 @@ include:
 
 | _Memory Element_ | Size | Load Latency | Read & Write Bandwidth | Cache Line Size | Fetch Granularity | Amount per SM/CU or GPU | Physically Shared With |
 | ---------------- | ---- | ------------ | ---------------------- | --------------- | ----------------- | ----------------------- | ---------------------- |
-| **vL1 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ➖ |
-| **sL1d cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ➖ | ✅ |
+| **vL1 cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ➖ |
+| **sL1d cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ➖ | ✅ |
 | **L2 cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ➖ |
 | **L3 cache** | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ | ➖ |
-| **LDS** | ✅ | ✅ | ❌ | ➖ | ➖ | ➖ | ➖ |
+| **LDS** | ✅ | ✅ | ✅ | ➖ | ➖ | ➖ | ➖ |
 | **Device Memory** | ✅ | ✅ | ✅ | ➖ | ➖ | ➖ | ➖ |
 
 #### NVIDIA
@@ -84,8 +84,8 @@ include:
 | **L2 cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ➖ |
 | **Texture cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Readonly cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Constant L1 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
-| **Constant L1.5 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ | ➖ |
+| **Constant L1 cache** | ✅ | ✅ | ✅(read-only) | ✅ | ✅ | ✅ | ✅ |
+| **Constant L1.5 cache** | ✅ | ✅ | ✅(read-only) | ✅ | ✅ | ❌ | ➖ |
 | **Shared Memory** | ✅ | ✅ | ✅ | ➖ | ➖ | ➖ | ➖ |
 | **Device Memory** | ✅ | ✅ | ✅ | ➖ | ➖ | ➖ | ➖ |
 
@@ -126,6 +126,34 @@ Additionally for NVIDIA targets, the `CUDA_PATH` environment variable needs to
 be set to the CUDA installation directory.
 
 **MT4G** has been tested successfully with `hip@6.3.3` and `cuda@12.8`.
+
+#### NVIDIA targets without a ROCm installation
+
+On the NVIDIA backend, HIP is only a header layer that translates the HIP API
+into the CUDA API, and `hipcc` forwards to `nvcc`. No ROCm installation is
+needed, so a bare HIP header tree is sufficient. Point `HIP_PATH` at it, select
+the NVIDIA backend explicitly and build with `hipcc` as the C++ compiler:
+
+```bash
+export HIP_PATH=<path_to_hip>
+export CUDA_PATH=<path_to_cuda>
+export HIP_PLATFORM=nvidia
+export HIP_COMPILER=nvcc
+export HIP_RUNTIME=cuda
+export PATH=$HIP_PATH/bin:$CUDA_PATH/bin:$PATH
+
+cmake .. -DGPU_TARGET_ARCH=sm_XX -DCMAKE_CXX_COMPILER=$HIP_PATH/bin/hipcc
+```
+
+Note that `HIP_PLATFORM` alone is not enough for `hipcc`: unless `HIP_COMPILER`
+and `HIP_RUNTIME` are set as well, it still defaults to `clang`.
+
+For **CUDA 13** or newer, HIP `7.1` or later (`7.2.x` recommended) is required.
+CUDA 13 removed `cudaDeviceProp::clockRate` and `::memoryClockRate` and changed
+`cudaMemAdvise`/`cudaMemPrefetchAsync` to take a `cudaMemLocation`; only those
+HIP releases guard the affected code with `#if CUDA_VERSION >= 13000`. Older HIP
+headers fail to compile against a CUDA 13 toolkit. CUDA 13 additionally requires
+an NVIDIA driver `>= 580.65.06`.
 
 ### Build
 

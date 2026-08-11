@@ -103,7 +103,7 @@ static std::tuple<uint64_t, double, double> textureReadBandwidthLauncher(size_t 
     util::hipCheck(hipFree(d_timingResult));
 
     // calculate the bandwidth
-    double gpuClockHz = util::getDeviceProperties().clockRate * 1000;
+    double gpuClockHz = util::getClockRateKHz() * 1000.0;
     double dataGiB = (double) arraySizeBytes * reps / (1 * GiB);
     double timeS = (double) timingResult[0] / gpuClockHz;
 

@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 3.21)
 
-# CMake 3.21+ supports HIP as a first-class language, which handles compiler
-# and HIP path discovery automatically. If CMake cannot find HIP, set HIP_PATH
-# and call find_package(hip REQUIRED CONFIG) manually as a fallback.
-project(mt4g VERSION 1.2.0 LANGUAGES CXX HIP)
+# CMake 3.21+ supports HIP as a first-class language, but its detection module
+# always requires a ROCm installation. On NVIDIA targets HIP is only a header
+# layer over CUDA and there is no ROCm root to find, so the HIP language is
+# enabled per target architecture below instead of here.
+project(mt4g VERSION 1.2.0 LANGUAGES CXX)
 
 set(GPU_TARGET_ARCH "" CACHE STRING "The target GPU architecture")
 if(GPU_TARGET_ARCH STREQUAL "")
@@ -36,10 +37,27 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(GPU_TARGET_ARCH MATCHES "^sm_")
     set(ENV{HIP_PLATFORM} nvidia)
-    add_compile_options(--gpu-architecture=${GPU_TARGET_ARCH} -x cu -Wno-deprecated-gpu-targets)
+    # Do not pass -x cu here: hipcc classifies the input itself and adds it. An
+    # explicit -x cu makes hipcc treat the file as pre-classified and drop its
+    # own -isystem HIP include flags.
+    add_compile_options(--gpu-architecture=${GPU_TARGET_ARCH} -Wno-deprecated-gpu-targets)
     find_package(CUDAToolkit REQUIRED)
+    # A HIP SDK built for the NVIDIA backend may ship a CMake package config;
+    # if it does not (header-only HIP installations), hip::host is just the HIP
+    # include directory on top of the CUDA toolchain.
+    find_package(hip QUIET CONFIG)
+    if(NOT TARGET hip::host)
+        add_library(hip::host INTERFACE IMPORTED)
+        if(DEFINED ENV{HIP_PATH})
+            target_include_directories(hip::host INTERFACE $ENV{HIP_PATH}/include)
+        endif()
+    endif()
 elseif(GPU_TARGET_ARCH MATCHES "^gfx")
     set(ENV{HIP_PLATFORM} amd)
+    enable_language(HIP)
+    if(NOT TARGET hip::host)
+        find_package(hip REQUIRED CONFIG)
+    endif()
     add_compile_options(--offload-arch=${GPU_TARGET_ARCH} -x hip -Wall -Wextra -Wpedantic -Wnull-dereference)
 else()
     message(FATAL_ERROR "Invalid GPU_TARGET_ARCH '${GPU_TARGET_ARCH}'. Must start with sm_ or gfx")

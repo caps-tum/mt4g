@@ -138,7 +138,7 @@ static std::tuple<uint64_t, double, double> sharedWriteBandwidthLauncher(uint32_
 
     uint64_t cycles = t[0];
 
-    double gpuClockHz = util::getDeviceProperties().clockRate * 1000.0;
+    double gpuClockHz = util::getClockRateKHz() * 1000.0;
     double timeS = (double) cycles / gpuClockHz;
     double dataGiB = (double) arraySizeBytes  * reps / (1 * GiB);
  

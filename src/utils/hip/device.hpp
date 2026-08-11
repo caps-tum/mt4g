@@ -54,13 +54,28 @@ namespace util {
     }
 
     /**
+     * @brief Retrieve the memory clock rate in kHz.
+     *
+     * Queried as a device attribute rather than read from hipDeviceProp_t:
+     * CUDA 13 removed cudaDeviceProp::memoryClockRate, so HIP's NVIDIA backend
+     * leaves the corresponding hipDeviceProp_t field unwritten there.
+     */
+    inline uint32_t getMemoryClockRateKHz() {
+        int32_t device;
+        util::hipCheck(hipGetDevice(&device));
+        int32_t rateKHz;
+        util::hipCheck(hipDeviceGetAttribute(&rateKHz, hipDeviceAttributeMemoryClockRate, device));
+        return rateKHz;
+    }
+
+    /**
      * @brief Compute the theoretical peak global memory bandwidth in GiB/s.
      */
     inline double getTheoreticalMaxGlobalMemoryBandwidthGiBs() {
         static double bwGiBs = []() -> double {
-            hipDeviceProp_t prop;
+            hipDeviceProp_t prop{};
             hipCheck(hipGetDeviceProperties(&prop, 0));
-            double clkMHz = static_cast<double>(prop.memoryClockRate) / 1000.0;
+            double clkMHz = static_cast<double>(getMemoryClockRateKHz()) / 1000.0;
             double busBytes = static_cast<double>(prop.memoryBusWidth) / 8.0;
             double bytesPerSec = clkMHz * 1e6 * busBytes * 2.0;
             return bytesPerSec / (1024.0 * 1024.0 * 1024.0);
@@ -250,6 +265,9 @@ namespace util {
 
     /**
      * @brief Retrieve the GPU core clock rate in kHz.
+     *
+     * Queried as a device attribute for the same reason as
+     * getMemoryClockRateKHz(): CUDA 13 removed cudaDeviceProp::clockRate.
      */
     inline uint32_t getClockRateKHz() {
         int32_t device;
