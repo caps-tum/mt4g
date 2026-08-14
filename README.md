@@ -169,8 +169,9 @@ git clone https://github.com/caps-tum/mt4g.git
 cd mt4g
 mkdir build && cd build
 cmake .. -DGPU_TARGET_ARCH=<gfxXXX|sm_XX>
+# MT4G forces CMAKE_BUILD_TYPE=Release; a build type given on the command line
+# is ignored and the configure step prints "CMAKE_BUILD_TYPE is set to Release by MT4G"
 # optional build flags:
-# -DCMAKE_BUILD_TYPE=<Release|Debug>             -- to choose between release and debug builds
 # -DCMAKE_INSTALL_PREFIX=<install_prefix>        -- to set the install destination (default on UNIX platforms: /usr/local)
 make all install -j $(nproc)
 ```
