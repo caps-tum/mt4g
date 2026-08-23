@@ -111,7 +111,7 @@ int main(int argc, char* argv[]) {
                 }},
                 {
                     "clockRate", {
-                        {"value", deviceProperties.clockRate},
+                        {"value", util::getClockRateKHz()},
                         {"unit", "kHz"}
                     },
                 },
@@ -142,7 +142,7 @@ int main(int argc, char* argv[]) {
                     "main", {
                         {
                             "memoryClockRate", {
-                                {"value", deviceProperties.memoryClockRate},
+                                {"value", util::getMemoryClockRateKHz()},
                                 {"unit", "kHz"}
                             },
                         },

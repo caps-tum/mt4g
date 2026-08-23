@@ -69,11 +69,11 @@ include:
 
 | _Memory Element_ | Size | Load Latency | Read & Write Bandwidth | Cache Line Size | Fetch Granularity | Amount per SM/CU or GPU | Physically Shared With |
 | ---------------- | ---- | ------------ | ---------------------- | --------------- | ----------------- | ----------------------- | ---------------------- |
-| **vL1 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ➖ |
-| **sL1d cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ➖ | ✅ |
+| **vL1 cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ➖ |
+| **sL1d cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ➖ | ✅ |
 | **L2 cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ➖ |
 | **L3 cache** | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ | ➖ |
-| **LDS** | ✅ | ✅ | ❌ | ➖ | ➖ | ➖ | ➖ |
+| **LDS** | ✅ | ✅ | ✅ | ➖ | ➖ | ➖ | ➖ |
 | **Device Memory** | ✅ | ✅ | ✅ | ➖ | ➖ | ➖ | ➖ |
 
 #### NVIDIA
@@ -84,8 +84,8 @@ include:
 | **L2 cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ➖ |
 | **Texture cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Readonly cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Constant L1 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
-| **Constant L1.5 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ | ➖ |
+| **Constant L1 cache** | ✅ | ✅ | ✅(read-only) | ✅ | ✅ | ✅ | ✅ |
+| **Constant L1.5 cache** | ✅ | ✅ | ✅(read-only) | ✅ | ✅ | ❌ | ➖ |
 | **Shared Memory** | ✅ | ✅ | ✅ | ➖ | ➖ | ➖ | ➖ |
 | **Device Memory** | ✅ | ✅ | ✅ | ➖ | ➖ | ➖ | ➖ |
 

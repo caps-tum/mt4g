@@ -45,7 +45,7 @@ __global__ void l2ReadBandwidthKernel(uint32v4* __restrict__ dst, uint32v4* __re
             #ifdef __HIP_PLATFORM_AMD__
             const uint64_t addr = reinterpret_cast<uint64_t>(src + i);
             asm volatile(
-                "flat_load_dwordx4 %0, %1 sc1\n" // bypass L1
+                "flat_load_dwordx4 %0, %1 " GLC "\n" // bypass L1
                 : "=v"(loaded) // uint32v4
                 : "v"(addr) // uint32v4*
                 : "memory"

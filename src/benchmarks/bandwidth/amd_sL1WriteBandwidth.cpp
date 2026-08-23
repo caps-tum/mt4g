@@ -148,7 +148,7 @@ static std::tuple<uint64_t, double, double> sL1WriteBandwidthLauncher(size_t arr
     std::vector<uint64_t> t = util::copyFromDevice<uint64_t>(d_timings, 2);
 
     uint64_t cycles = t[1] - t[0];
-    double gpuClockHz = util::getDeviceProperties().clockRate * 1000.0;
+    double gpuClockHz = util::getClockRateKHz() * 1000.0;
     double timeS = (double)cycles / gpuClockHz;
     double dataGiB = (double)arraySizeBytes * reps / (1 * GiB);
 

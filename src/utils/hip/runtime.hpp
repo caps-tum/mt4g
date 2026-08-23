@@ -77,7 +77,7 @@ namespace util {
         static hipDeviceProp_t deviceProperties = []() {
             int device;
             util::hipCheck(hipGetDevice(&device));
-            hipDeviceProp_t props;
+            hipDeviceProp_t props{};
             util::hipCheck(hipGetDeviceProperties(&props, device));
             return props;
         }();
