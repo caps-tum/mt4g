@@ -5,6 +5,11 @@ cmake_minimum_required(VERSION 3.21)
 # and call find_package(hip REQUIRED CONFIG) manually as a fallback.
 project(mt4g VERSION 1.2.0 LANGUAGES CXX HIP)
 
+# MT4G always builds optimized; unoptimized device code can cause illegal
+# memory accesses on AMD CDNA3. FORCE also overrides -DCMAKE_BUILD_TYPE=...
+set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type (forced by MT4G)" FORCE)
+message(STATUS "CMAKE_BUILD_TYPE is set to Release by MT4G")
+
 set(GPU_TARGET_ARCH "" CACHE STRING "The target GPU architecture")
 if(GPU_TARGET_ARCH STREQUAL "")
     message(FATAL_ERROR "Please set GPU_TARGET_ARCH, e.g. -DGPU_TARGET_ARCH=sm_70 or -DGPU_TARGET_ARCH=gfx90a")
