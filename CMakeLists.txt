@@ -1,8 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-
-# CMake 3.21+ supports HIP as a first-class language, which handles compiler
-# and HIP path discovery automatically. If CMake cannot find HIP, set HIP_PATH
-# and call find_package(hip REQUIRED CONFIG) manually as a fallback.
+# Enable HIP compilation and load the HIP package that defines hip::host.
 project(mt4g VERSION 1.2.0 LANGUAGES CXX HIP)
 
 set(GPU_TARGET_ARCH "" CACHE STRING "The target GPU architecture")
@@ -12,6 +9,7 @@ endif()
 
 find_package(nlohmann_json 3.11.2 REQUIRED)
 find_package(cxxopts 3.2.0 REQUIRED)
+find_package(hip REQUIRED CONFIG)
 
 find_package(Git QUIET)
 if(GIT_FOUND AND EXISTS ${CMAKE_SOURCE_DIR}/.git)
@@ -40,7 +38,13 @@ if(GPU_TARGET_ARCH MATCHES "^sm_")
     find_package(CUDAToolkit REQUIRED)
 elseif(GPU_TARGET_ARCH MATCHES "^gfx")
     set(ENV{HIP_PLATFORM} amd)
-    add_compile_options(--offload-arch=${GPU_TARGET_ARCH} -x hip -Wall -Wextra -Wpedantic -Wnull-dereference)
+    find_package(hsa-runtime64 REQUIRED CONFIG)
+    get_filename_component(ROCM_ROOT "${hip_DIR}/../../.." ABSOLUTE)
+    find_library(ROCM_SMI_LIBRARY
+        NAMES rocm_smi64
+        HINTS "${ROCM_ROOT}/lib"
+        REQUIRED
+    )
 else()
     message(FATAL_ERROR "Invalid GPU_TARGET_ARCH '${GPU_TARGET_ARCH}'. Must start with sm_ or gfx")
 endif()
@@ -48,6 +52,14 @@ endif()
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/src/*.cpp")
 
 add_executable(mt4g ${SOURCES})
+
+if(GPU_TARGET_ARCH MATCHES "^gfx")
+    set_source_files_properties(${SOURCES} PROPERTIES LANGUAGE HIP)
+    set_property(TARGET mt4g PROPERTY HIP_ARCHITECTURES ${GPU_TARGET_ARCH})
+    target_compile_options(mt4g PRIVATE
+        $<$<COMPILE_LANGUAGE:HIP>:-Wall;-Wextra;-Wpedantic;-Wnull-dereference>
+    )
+endif()
 
 target_include_directories(mt4g PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_compile_features(mt4g PUBLIC cxx_std_20)
@@ -60,8 +72,11 @@ target_link_libraries(mt4g PRIVATE
 if(GPU_TARGET_ARCH MATCHES "^sm_")
     target_link_libraries(mt4g PRIVATE CUDA::cudart)
 elseif(GPU_TARGET_ARCH MATCHES "^gfx")
-    target_link_directories(mt4g PRIVATE /opt/rocm/lib)
-    target_link_libraries(mt4g PRIVATE rocm_smi64 hsa-runtime64 pthread)
+    target_link_libraries(mt4g PRIVATE
+        ${ROCM_SMI_LIBRARY}
+        hsa-runtime64::hsa-runtime64
+        pthread
+    )
 endif()
 
 install(TARGETS mt4g DESTINATION bin)
