@@ -152,5 +152,26 @@ inline std::optional<size_t> getKfdCacheAmountForLevel(uint32_t level) {
     if (count == 0) return std::nullopt;
     return count;
 }
+
+inline std::optional<uint32_t> getNumXccFromKfd() {
+    hsa_agent_t agent = getCurrentHsaAgent();
+    if (!agent.handle) return std::nullopt;
+    uint32_t node = 0;
+    if (hsa_agent_get_info(agent,
+          (hsa_agent_info_t)HSA_AMD_AGENT_INFO_DRIVER_NODE_ID, &node) != HSA_STATUS_SUCCESS)
+        return std::nullopt;
+    const std::string prop_path =
+        "/sys/class/kfd/kfd/topology/nodes/" + std::to_string(node) + "/properties";
+    std::ifstream f(prop_path);
+    if (!f) return std::nullopt;
+    std::string key, val;
+    while (f >> key >> val) {
+        if (key == "num_xcc") {
+            int n = std::stoi(val);
+            if (n > 0) return static_cast<uint32_t>(n);
+        }
+    }
+    return std::nullopt;
+}
 #endif
 
