@@ -127,6 +127,9 @@ export HIP_PATH=<path_to_spack>/opt/spack/<system_architecture>/hip-<version>-<h
 Additionally for NVIDIA targets, the `CUDA_PATH` environment variable needs to
 be set to the CUDA installation directory.
 
+Additionally for AMD targets, `<libdrm/drm.h>` (pulled in by `rocm_smi.h`) must
+be in an include path; driver-only AMDGPU installs need e.g. `export CPATH=/opt/amdgpu/include`.
+
 **MT4G** has been tested successfully with `hip@6.3.3` and `cuda@12.8`.
 
 ### Build

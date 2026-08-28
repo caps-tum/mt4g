@@ -3,8 +3,11 @@ cmake_minimum_required(VERSION 3.21)
 set(GPU_TARGET_ARCH "" CACHE STRING "The target GPU architecture")
 if(GPU_TARGET_ARCH STREQUAL "")
     message(FATAL_ERROR "Please set GPU_TARGET_ARCH, e.g. -DGPU_TARGET_ARCH=sm_70 or -DGPU_TARGET_ARCH=gfx90a")
-elseif(GPU_TARGET_ARCH MATCHES "^sm_")
-    find_program(CMAKE_CXX_COMPILER hipcc REQUIRED)
+endif()
+
+find_program(CMAKE_CXX_COMPILER hipcc REQUIRED)
+
+if(GPU_TARGET_ARCH MATCHES "^sm_")
     set(CMAKE_EXECUTABLE_RUNTIME_CXX_FLAG "-Xlinker -rpath -Xlinker ")
 endif()
 
