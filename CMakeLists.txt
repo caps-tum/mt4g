@@ -1,14 +1,14 @@
 cmake_minimum_required(VERSION 3.21)
 
-# CMake 3.21+ supports HIP as a first-class language, which handles compiler
-# and HIP path discovery automatically. If CMake cannot find HIP, set HIP_PATH
-# and call find_package(hip REQUIRED CONFIG) manually as a fallback.
-project(mt4g VERSION 1.2.0 LANGUAGES CXX HIP)
-
 set(GPU_TARGET_ARCH "" CACHE STRING "The target GPU architecture")
 if(GPU_TARGET_ARCH STREQUAL "")
     message(FATAL_ERROR "Please set GPU_TARGET_ARCH, e.g. -DGPU_TARGET_ARCH=sm_70 or -DGPU_TARGET_ARCH=gfx90a")
+elseif(GPU_TARGET_ARCH MATCHES "^sm_")
+    find_program(CMAKE_CXX_COMPILER hipcc REQUIRED)
+    set(CMAKE_EXECUTABLE_RUNTIME_CXX_FLAG "-Xlinker -rpath -Xlinker ")
 endif()
+
+project(mt4g VERSION 1.2.0 LANGUAGES CXX)
 
 find_package(nlohmann_json 3.11.2 REQUIRED)
 find_package(cxxopts 3.2.0 REQUIRED)
@@ -45,6 +45,8 @@ else()
     message(FATAL_ERROR "Invalid GPU_TARGET_ARCH '${GPU_TARGET_ARCH}'. Must start with sm_ or gfx")
 endif()
 
+find_package(hip CONFIG REQUIRED)
+
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/src/*.cpp")
 
 add_executable(mt4g ${SOURCES})
@@ -59,6 +61,7 @@ target_link_libraries(mt4g PRIVATE
 
 if(GPU_TARGET_ARCH MATCHES "^sm_")
     target_link_libraries(mt4g PRIVATE CUDA::cudart)
+    set_target_properties(mt4g PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
 elseif(GPU_TARGET_ARCH MATCHES "^gfx")
     target_link_directories(mt4g PRIVATE /opt/rocm/lib)
     target_link_libraries(mt4g PRIVATE rocm_smi64 hsa-runtime64 pthread)

@@ -122,6 +122,8 @@ directory. Please export manually if not automatically set by `spack`, e.g.
 export HIP_PATH=<path_to_spack>/opt/spack/<system_architecture>/hip-<version>-<hash>
 ```
 
+`$HIP_PATH/bin` must be on `PATH`; CMake locates `hipcc` and the HIP package through it.
+
 Additionally for NVIDIA targets, the `CUDA_PATH` environment variable needs to
 be set to the CUDA installation directory.
 
