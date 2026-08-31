@@ -7,10 +7,6 @@ endif()
 
 find_program(CMAKE_CXX_COMPILER hipcc REQUIRED)
 
-if(GPU_TARGET_ARCH MATCHES "^sm_")
-    set(CMAKE_EXECUTABLE_RUNTIME_CXX_FLAG "-Xlinker -rpath -Xlinker ")
-endif()
-
 project(mt4g VERSION 1.2.0 LANGUAGES CXX)
 
 find_package(nlohmann_json 3.11.2 REQUIRED)
@@ -39,6 +35,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(GPU_TARGET_ARCH MATCHES "^sm_")
     set(ENV{HIP_PLATFORM} nvidia)
+    set(CMAKE_EXECUTABLE_RUNTIME_CXX_FLAG "-Xlinker -rpath -Xlinker ")
     add_compile_options(--gpu-architecture=${GPU_TARGET_ARCH} -x cu -Wno-deprecated-gpu-targets)
     find_package(CUDAToolkit REQUIRED)
 elseif(GPU_TARGET_ARCH MATCHES "^gfx")
