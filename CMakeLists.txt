@@ -18,7 +18,7 @@ elseif(GPU_TARGET_ARCH MATCHES "^sm_")
     endif()
 endif()
 
-project(mt4g VERSION 1.2.0 LANGUAGES CXX)
+project(mt4g VERSION 1.2.0 LANGUAGES ${MT4G_LANGUAGES})
 
 find_package(nlohmann_json 3.11.2 REQUIRED)
 find_package(cxxopts 3.2.0 REQUIRED)
