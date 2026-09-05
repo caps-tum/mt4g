@@ -5,11 +5,16 @@ if(GPU_TARGET_ARCH STREQUAL "")
     message(FATAL_ERROR "Please set GPU_TARGET_ARCH, e.g. -DGPU_TARGET_ARCH=sm_70 or -DGPU_TARGET_ARCH=gfx90a")
 endif()
 
-find_program(CMAKE_CXX_COMPILER hipcc)
-if(NOT CMAKE_CXX_COMPILER)
-    message(FATAL_ERROR
-        "Could not find hipcc. Set HIP_PATH to the HIP installation "
-        "and add $HIP_PATH/bin to PATH, or pass -DCMAKE_CXX_COMPILER=<path to hipcc>.")
+set(MT4G_LANGUAGES CXX)
+if(GPU_TARGET_ARCH MATCHES "^gfx")
+    list(APPEND MT4G_LANGUAGES HIP)
+elseif(GPU_TARGET_ARCH MATCHES "^sm_")
+    find_program(CMAKE_CXX_COMPILER hipcc)
+    if(NOT CMAKE_CXX_COMPILER)
+        message(FATAL_ERROR
+            "Could not find hipcc. Set HIP_PATH to the HIP installation "
+            "and add $HIP_PATH/bin to PATH, or pass -DCMAKE_CXX_COMPILER=<path to hipcc>.")
+    endif()
 endif()
 
 project(mt4g VERSION 1.2.0 LANGUAGES CXX)
@@ -40,7 +45,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(GPU_TARGET_ARCH MATCHES "^sm_")
     set(ENV{HIP_PLATFORM} nvidia)
-    set(CMAKE_EXECUTABLE_RUNTIME_CXX_FLAG "-Xlinker -rpath -Xlinker ")
+    #set(CMAKE_EXECUTABLE_RUNTIME_CXX_FLAG "-Xlinker -rpath -Xlinker ")
+    set(CMAKE_CXX_LINKER_WRAPPER_FLAG "-Xlinker" " ")
     add_compile_options(--gpu-architecture=${GPU_TARGET_ARCH} -x cu -Wno-deprecated-gpu-targets)
     find_package(CUDAToolkit REQUIRED)
 elseif(GPU_TARGET_ARCH MATCHES "^gfx")
@@ -66,7 +72,9 @@ target_link_libraries(mt4g PRIVATE
 
 if(GPU_TARGET_ARCH MATCHES "^sm_")
     target_link_libraries(mt4g PRIVATE CUDA::cudart)
-    set_target_properties(mt4g PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
+    #set_target_properties(mt4g PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
+    target_link_options(mt4g PRIVATE "LINKER:-rpath,${CUDAToolkit_LIBRARY_DIR}")
+    set_target_properties(mt4g PROPERTIES INSTALL_RPATH "${CUDAToolkit_LIBRARY_DIR}")
 elseif(GPU_TARGET_ARCH MATCHES "^gfx")
     target_link_directories(mt4g PRIVATE /opt/rocm/lib)
     target_link_libraries(mt4g PRIVATE rocm_smi64 hsa-runtime64 pthread)
