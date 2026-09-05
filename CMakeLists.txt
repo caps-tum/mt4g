@@ -5,11 +5,12 @@ if(GPU_TARGET_ARCH STREQUAL "")
     message(FATAL_ERROR "Please set GPU_TARGET_ARCH, e.g. -DGPU_TARGET_ARCH=sm_70 or -DGPU_TARGET_ARCH=gfx90a")
 endif()
 
+find_program(CMAKE_CXX_COMPILER hipcc)
+
 set(MT4G_LANGUAGES CXX)
 if(GPU_TARGET_ARCH MATCHES "^gfx")
     list(APPEND MT4G_LANGUAGES HIP)
 elseif(GPU_TARGET_ARCH MATCHES "^sm_")
-    find_program(CMAKE_CXX_COMPILER hipcc)
     if(NOT CMAKE_CXX_COMPILER)
         message(FATAL_ERROR
             "Could not find hipcc. Set HIP_PATH to the HIP installation "
