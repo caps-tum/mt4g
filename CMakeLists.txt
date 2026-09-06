@@ -1,14 +1,24 @@
 cmake_minimum_required(VERSION 3.21)
 
-# CMake 3.21+ supports HIP as a first-class language, which handles compiler
-# and HIP path discovery automatically. If CMake cannot find HIP, set HIP_PATH
-# and call find_package(hip REQUIRED CONFIG) manually as a fallback.
-project(mt4g VERSION 1.2.0 LANGUAGES CXX HIP)
-
 set(GPU_TARGET_ARCH "" CACHE STRING "The target GPU architecture")
 if(GPU_TARGET_ARCH STREQUAL "")
     message(FATAL_ERROR "Please set GPU_TARGET_ARCH, e.g. -DGPU_TARGET_ARCH=sm_70 or -DGPU_TARGET_ARCH=gfx90a")
 endif()
+
+find_program(CMAKE_CXX_COMPILER hipcc)
+
+set(MT4G_LANGUAGES CXX)
+if(GPU_TARGET_ARCH MATCHES "^gfx")
+    list(APPEND MT4G_LANGUAGES HIP)
+elseif(GPU_TARGET_ARCH MATCHES "^sm_")
+    if(NOT CMAKE_CXX_COMPILER)
+        message(FATAL_ERROR
+            "Could not find hipcc. Set HIP_PATH to the HIP installation "
+            "and add $HIP_PATH/bin to PATH, or pass -DCMAKE_CXX_COMPILER=<path to hipcc>.")
+    endif()
+endif()
+
+project(mt4g VERSION 1.2.0 LANGUAGES ${MT4G_LANGUAGES})
 
 find_package(nlohmann_json 3.11.2 REQUIRED)
 find_package(cxxopts 3.2.0 REQUIRED)
@@ -36,14 +46,27 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(GPU_TARGET_ARCH MATCHES "^sm_")
     set(ENV{HIP_PLATFORM} nvidia)
+    #set(CMAKE_EXECUTABLE_RUNTIME_CXX_FLAG "-Xlinker -rpath -Xlinker ")
+    set(CMAKE_CXX_LINKER_WRAPPER_FLAG "-Xlinker" " ")
     add_compile_options(--gpu-architecture=${GPU_TARGET_ARCH} -x cu -Wno-deprecated-gpu-targets)
     find_package(CUDAToolkit REQUIRED)
 elseif(GPU_TARGET_ARCH MATCHES "^gfx")
     set(ENV{HIP_PLATFORM} amd)
     add_compile_options(--offload-arch=${GPU_TARGET_ARCH} -x hip -Wall -Wextra -Wpedantic -Wnull-dereference)
+
+    #find_path(DRM_INCLUDE_DIR libdrm/drm.h REQUIRED)
+    find_library(ROCM_SMI_LIBRARY
+        NAMES rocm_smi64
+        HINTS "/opt/rocm/lib"
+        REQUIRED
+    )
+    find_package(hsa-runtime64 CONFIG REQUIRED)
+    find_package(Threads REQUIRED)
 else()
     message(FATAL_ERROR "Invalid GPU_TARGET_ARCH '${GPU_TARGET_ARCH}'. Must start with sm_ or gfx")
 endif()
+
+find_package(hip CONFIG REQUIRED)
 
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/src/*.cpp")
 
@@ -59,9 +82,15 @@ target_link_libraries(mt4g PRIVATE
 
 if(GPU_TARGET_ARCH MATCHES "^sm_")
     target_link_libraries(mt4g PRIVATE CUDA::cudart)
+    #set_target_properties(mt4g PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
+    target_link_options(mt4g PRIVATE "LINKER:-rpath,${CUDAToolkit_LIBRARY_DIR}")
+    set_target_properties(mt4g PROPERTIES INSTALL_RPATH "${CUDAToolkit_LIBRARY_DIR}")
 elseif(GPU_TARGET_ARCH MATCHES "^gfx")
-    target_link_directories(mt4g PRIVATE /opt/rocm/lib)
-    target_link_libraries(mt4g PRIVATE rocm_smi64 hsa-runtime64 pthread)
+    target_link_libraries(mt4g PRIVATE
+        ${ROCM_SMI_LIBRARY}
+        hsa-runtime64::hsa-runtime64
+        Threads::Threads
+    )
 endif()
 
 install(TARGETS mt4g DESTINATION bin)
