@@ -53,6 +53,15 @@ if(GPU_TARGET_ARCH MATCHES "^sm_")
 elseif(GPU_TARGET_ARCH MATCHES "^gfx")
     set(ENV{HIP_PLATFORM} amd)
     add_compile_options(--offload-arch=${GPU_TARGET_ARCH} -x hip -Wall -Wextra -Wpedantic -Wnull-dereference)
+
+    #find_path(DRM_INCLUDE_DIR libdrm/drm.h REQUIRED)
+    find_library(ROCM_SMI_LIBRARY
+        NAMES rocm_smi64
+        HINTS "/opt/rocm/lib"
+        REQUIRED
+    )
+    find_package(hsa-runtime64 CONFIG REQUIRED)
+    find_package(Threads REQUIRED)
 else()
     message(FATAL_ERROR "Invalid GPU_TARGET_ARCH '${GPU_TARGET_ARCH}'. Must start with sm_ or gfx")
 endif()
@@ -77,9 +86,11 @@ if(GPU_TARGET_ARCH MATCHES "^sm_")
     target_link_options(mt4g PRIVATE "LINKER:-rpath,${CUDAToolkit_LIBRARY_DIR}")
     set_target_properties(mt4g PROPERTIES INSTALL_RPATH "${CUDAToolkit_LIBRARY_DIR}")
 elseif(GPU_TARGET_ARCH MATCHES "^gfx")
-    #find_path(DRM_INCLUDE_DIR libdrm/drm.h REQUIRED)
-    target_link_directories(mt4g PRIVATE /opt/rocm/lib)
-    target_link_libraries(mt4g PRIVATE rocm_smi64 hsa-runtime64 pthread)
+    target_link_libraries(mt4g PRIVATE
+        ${ROCM_SMI_LIBRARY}
+        hsa-runtime64::hsa-runtime64
+        Threads::Threads
+    )
 endif()
 
 install(TARGETS mt4g DESTINATION bin)
