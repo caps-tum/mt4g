@@ -54,7 +54,9 @@ elseif(GPU_TARGET_ARCH MATCHES "^gfx")
     set(ENV{HIP_PLATFORM} amd)
     add_compile_options(--offload-arch=${GPU_TARGET_ARCH} -x hip -Wall -Wextra -Wpedantic -Wnull-dereference)
 
-    #find_path(DRM_INCLUDE_DIR libdrm/drm.h REQUIRED)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(DRM REQUIRED libdrm)
+
     find_library(ROCM_SMI_LIBRARY
         NAMES rocm_smi64
         HINTS "/opt/rocm/lib"
@@ -86,6 +88,7 @@ if(GPU_TARGET_ARCH MATCHES "^sm_")
     target_link_options(mt4g PRIVATE "LINKER:-rpath,${CUDAToolkit_LIBRARY_DIR}")
     set_target_properties(mt4g PROPERTIES INSTALL_RPATH "${CUDAToolkit_LIBRARY_DIR}")
 elseif(GPU_TARGET_ARCH MATCHES "^gfx")
+    target_include_directories(mt4g SYSTEM PRIVATE ${DRM_INCLUDE_DIRS})
     target_link_libraries(mt4g PRIVATE
         ${ROCM_SMI_LIBRARY}
         hsa-runtime64::hsa-runtime64
