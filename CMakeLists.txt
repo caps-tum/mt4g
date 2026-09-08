@@ -5,6 +5,7 @@ if(GPU_TARGET_ARCH STREQUAL "")
     message(FATAL_ERROR "Please set GPU_TARGET_ARCH, e.g. -DGPU_TARGET_ARCH=sm_70 or -DGPU_TARGET_ARCH=gfx90a")
 endif()
 
+# Use hipcc as the C++ compiler because the src/*.cpp files contain HIP code.
 find_program(CMAKE_CXX_COMPILER hipcc)
 
 set(MT4G_LANGUAGES CXX)
@@ -46,7 +47,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(GPU_TARGET_ARCH MATCHES "^sm_")
     set(ENV{HIP_PLATFORM} nvidia)
-    #set(CMAKE_EXECUTABLE_RUNTIME_CXX_FLAG "-Xlinker -rpath -Xlinker ")
+    # hipcc drops -Wl,... options, so use -Xlinker to pass linker options through.
     set(CMAKE_CXX_LINKER_WRAPPER_FLAG "-Xlinker" " ")
     add_compile_options(--gpu-architecture=${GPU_TARGET_ARCH} -x cu -Wno-deprecated-gpu-targets)
     find_package(CUDAToolkit REQUIRED)
@@ -56,12 +57,10 @@ elseif(GPU_TARGET_ARCH MATCHES "^gfx")
 
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(DRM REQUIRED libdrm)
-
-    find_library(ROCM_SMI_LIBRARY
-        NAMES rocm_smi64
-        HINTS "/opt/rocm/lib"
-        REQUIRED
-    )
+    find_package(rocm_smi REQUIRED)
+    # rocm_smi64 exposes libdrm-dependent headers, so propagate include path
+    # to targets linking against it
+    set_property(TARGET rocm_smi64 PROPERTY INTERFACE_INCLUDE_DIRECTORIES ${DRM_INCLUDE_DIRS})
     find_package(hsa-runtime64 CONFIG REQUIRED)
     find_package(Threads REQUIRED)
 else()
@@ -84,11 +83,12 @@ target_link_libraries(mt4g PRIVATE
 
 if(GPU_TARGET_ARCH MATCHES "^sm_")
     target_link_libraries(mt4g PRIVATE CUDA::cudart)
-    #set_target_properties(mt4g PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
+    # Add the CUDA library directory to the build and installed binaries' runtime search paths.
     target_link_options(mt4g PRIVATE "LINKER:-rpath,${CUDAToolkit_LIBRARY_DIR}")
     set_target_properties(mt4g PROPERTIES INSTALL_RPATH "${CUDAToolkit_LIBRARY_DIR}")
 elseif(GPU_TARGET_ARCH MATCHES "^gfx")
     target_include_directories(mt4g SYSTEM PRIVATE ${DRM_INCLUDE_DIRS})
+    target_include_directories(rocm_smi64 INTERFACE ${DRM_INCLUDE_DIRS})
     target_link_libraries(mt4g PRIVATE
         ${ROCM_SMI_LIBRARY}
         hsa-runtime64::hsa-runtime64
