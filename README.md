@@ -29,20 +29,20 @@ microarchitectures from Pascal onwards. Currently, we do not support AMD RDNA
 GPUs given our primary focus on HPC/AI systems. Tested microarchitectures
 include:
 
-| GPU Name | Vendor | Microarch. |
+| Vendor | Microarch. | GPUs |
 | -------- | ------ | ---------- |
-| MI100 | AMD | CDNA |
-| MI210 | AMD | CDNA2 |
-| MI300X | AMD | CDNA3 |
-| P6000 | NVIDIA | Pascal |
-| V100 | NVIDIA | Volta |
-| T1000 | NVIDIA | Turing |
-| RTX2080 | NVIDIA | Turing |
-| A100 | NVIDIA | Ampere |
-| H100-80 | NVIDIA | Hopper |
-| H100-96 | NVIDIA | Hopper |
+| AMD | CDNA | MI100 |
+| AMD | CDNA2 | MI210 |
+| AMD | CDNA3 | MI300X, MI300A |
+| NVIDIA | Pascal | P6000 | NVIDIA |
+| NVIDIA | Volta | V100 | NVIDIA |
+| NVIDIA | Turing | T1000, RTX2080 |
+| NVIDIA | Ampere | A100 | 
+| NVIDIA | Hopper | H100-80, H100-96 |
 
 ## Topological metrics
+
+*See the `.json` files in `sample_results/` folder for the full extent of the provided information.*
 
 ### General & Compute Resource Information
 
@@ -93,15 +93,14 @@ include:
 
 ### Dependencies
 
-- ROCm or CUDA backend including drivers, compilers and libraries for AMD or
-  NVIDIA targets respectively
+- ROCm (AMD) or CUDA (NVIDIA) backend including drivers, compilers, and libraries
 - HIP SDK with the `hipcc` compiler
 - CMake ≥ 3.21
 - A C++ compiler with C++20 support (e.g. GCC 10+)
 - `nlohmann-json` for JSON output
 - `cxxopts` for CLI parsing
-- Python 3 including the `matplotlib`, `pandas` and `numpy` packages for
-  graphical plots
+- (optional) Python 3 including the `matplotlib`, `pandas` and `numpy` packages for graphical plots
+- (AMD-only) `pkg-config`, `rocm_smi`, `hsa-runtime` for API-retrieved information on AMD
 
 A suitable HIP environment can for instance be obtained via
 [Spack](https://spack.readthedocs.io/en/latest/getting_started.html):
