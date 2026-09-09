@@ -70,11 +70,14 @@ endif()
 find_package(hip CONFIG REQUIRED)
 
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/src/*.cpp")
+# Force all .cpp sources through the HIP compiler (clang++) instead of the
+# default CXX compiler (GCC), which does not understand --offload-arch / -x hip.
+set_source_files_properties(${SOURCES} PROPERTIES LANGUAGE HIP)
 
 add_executable(mt4g ${SOURCES})
 
-target_include_directories(mt4g PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_compile_features(mt4g PUBLIC cxx_std_20)
+target_include_directories(mt4g PRIVATE ${CMAKE_SOURCE_DIR}/src ${LIBDRM_INCLUDE_DIRS})
+set_target_properties(mt4g PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON HIP_STANDARD 20 HIP_STANDARD_REQUIRED ON)
 target_link_libraries(mt4g PRIVATE
     nlohmann_json::nlohmann_json
     cxxopts::cxxopts
