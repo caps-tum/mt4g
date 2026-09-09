@@ -69,24 +69,24 @@ include:
 
 | _Memory Element_ | Size | Load Latency | Read & Write Bandwidth | Cache Line Size | Fetch Granularity | Amount per SM/CU or GPU | Physically Shared With |
 | ---------------- | ---- | ------------ | ---------------------- | --------------- | ----------------- | ----------------------- | ---------------------- |
-| **vL1 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ➖ |
-| **sL1d cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ➖ | ✅ |
+| **vL1 cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ➖ |
+| **sL1d cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ➖ | ✅ |
 | **L2 cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ➖ |
 | **L3 cache** | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ | ➖ |
-| **LDS** | ✅ | ✅ | ❌ | ➖ | ➖ | ➖ | ➖ |
+| **LDS** | ✅ | ✅ | ✅ | ➖ | ➖ | ➖ | ➖ |
 | **Device Memory** | ✅ | ✅ | ✅ | ➖ | ➖ | ➖ | ➖ |
 
 #### NVIDIA
 
 | _Memory Element_ | Size | Load Latency | Read & Write Bandwidth | Cache Line Size | Fetch Granularity | Amount per SM/CU or GPU | Physically Shared With |
 | ---------------- | ---- | ------------ | ---------------------- | --------------- | ----------------- | ----------------------- | ---------------------- |
-| **L1 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| **L1 cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **L2 cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ➖ |
-| **Texture cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
-| **Readonly cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
-| **Constant L1 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
-| **Constant L1.5 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ | ➖ |
-| **Shared Memory** | ✅ | ✅ | ❌ | ➖ | ➖ | ➖ | ➖ |
+| **Texture cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Readonly cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Constant L1 cache** | ✅ | ✅ | ✅(read-only) | ✅ | ✅ | ✅ | ✅ |
+| **Constant L1.5 cache** | ✅ | ✅ | ✅(read-only) | ✅ | ✅ | ❌ | ➖ |
+| **Shared Memory** | ✅ | ✅ | ✅ | ➖ | ➖ | ➖ | ➖ |
 | **Device Memory** | ✅ | ✅ | ✅ | ➖ | ➖ | ➖ | ➖ |
 
 ## Installation
@@ -100,8 +100,6 @@ include:
 - A C++ compiler with C++20 support (e.g. GCC 10+)
 - `nlohmann-json` for JSON output
 - `cxxopts` for CLI parsing
-- `libdrm-devel` / `libdrm-dev` (AMD targets with ROCm ≥ 7.x only —
-  `rocm_smi.h` transitively requires it via `kfd_ioctl.h`)
 - Python 3 including the `matplotlib`, `pandas` and `numpy` packages for
   graphical plots
 
@@ -112,19 +110,22 @@ A suitable HIP environment can for instance be obtained via
 spack install hip           # includes ROCm backend for AMD targets
 spack install hip+cuda      # includes CUDA backend for NVIDIA targets
 spack install nlohmann-json cxxopts
-spack install libdrm        # AMD targets with ROCm >= 7.x only
 
 spack load hip              # (or hip+cuda for NVIDIA targets)
-spack load nlohmann-json cxxopts libdrm
+spack load nlohmann-json cxxopts
 ```
 
-On distro-managed systems, install `libdrm-devel` (RHEL/Fedora) or
-`libdrm-dev` (Debian/Ubuntu) instead.
+The `HIP_PATH` environment variable should be set to the HIP installation
+directory. Please export manually if not automatically set by `spack`, e.g.
+
+```bash
+export HIP_PATH=<path_to_spack>/opt/spack/<system_architecture>/hip-<version>-<hash>
+```
 
 Additionally for NVIDIA targets, the `CUDA_PATH` environment variable needs to
 be set to the CUDA installation directory.
 
-**MT4G** has been tested successfully with `hip@6.3.3`, `hip@7.2.1` and `cuda@12.8`.
+**MT4G** has been tested successfully with `hip@6.3.3` and `cuda@12.8`.
 
 ### Build
 
@@ -165,6 +166,7 @@ make all install -j $(nproc)
 | `-r, --random` | Randomize P-Chase arrays |
 | `-s, --stdout` | Dump final JSON result into stdout |
 | `-q, --quiet` | Only write the final JSON to stdout |
+| `-t, --timing` | Print wall-clock time of each benchmark and the total run |
 | `--l1` | Run L1 cache benchmarks |
 | `--l2` | Run L2 cache benchmarks |
 | `--l3` | Run L3 cache benchmarks (AMD only) |
@@ -176,6 +178,8 @@ make all install -j $(nproc)
 | `--memory` | Run main memory benchmarks |
 | `--departuredelay` | Run departure delay benchmarks |
 | `--resourceshare` | Run resource sharing benchmarks |
+| `--optimal` | Run bandwidth benchmarks with optimal configuration (number of threads and blocks) search |
+| `--static` | Run shared memory bandwidth benchmark with statically allocated memory (32 KiB). (if not set, runs with dynamic allocation) |
 | `-v, --version` | Display the version of MT4G and exit |
 | `-h, --help` | Display a detailed help message and exit |
 

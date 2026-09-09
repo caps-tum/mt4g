@@ -7,11 +7,16 @@
 #include <fstream>
 #include <vector>
 #include <set>
+#include <string>
+#include <cstdlib>
+#include <cmath>
 #include <unistd.h>
 #include <nlohmann/json.hpp>
 
 #include "utils/util.hpp"
+#include "typedef/cacheBandwidthResult.hpp"
 #include "const/chartScript.hpp"
+#include "const/bandwidthChartScript.hpp"
 
 template <typename T> struct is_vector : std::false_type {};
 
@@ -457,5 +462,130 @@ namespace util {
             return;
         }
         for (auto v : data) ofs << v << '\n';
+    }
+
+    inline void writeBandwidthGridToCSV(const CacheBandwidthResult& result, const std::string& filePath)
+    {
+        std::ofstream ofs(filePath);
+        if (!ofs)
+        {
+            std::cerr << "Could not open '" << filePath << "' for writing" << std::endl;
+            return;
+        }
+
+        const auto& threads = result.threadsTested;
+        const auto& reps = result.repsTested;
+
+        if (result.blocksTested.empty()) // 2D Grid
+        {
+            const auto& gridGiBs = result.bandwidthGridGiBs;
+
+            ofs << "threads";
+            for (auto r : reps) ofs << ',' << r;
+            ofs << '\n';
+
+            for (size_t i = 0; i < threads.size(); ++i)
+            {
+                ofs << threads[i];
+                for (size_t j = 0; j < reps.size(); ++j)
+                {
+                    double v = (i < gridGiBs.size() && j < gridGiBs[i].size()) ? gridGiBs[i][j] : 0.0;
+                    ofs << ',' << v;
+                }
+                ofs << '\n';
+            }
+        }
+        else
+        {
+            const auto& blocks = result.blocksTested;
+            const auto& grid3D = result.bandwidth3D;
+
+            // blocks,threads,reps,bandwidth
+            ofs << "blocks,threads,reps,bandwidth\n";
+
+            for (size_t b = 0; b < blocks.size(); ++b)
+            {
+                for (size_t t = 0; t < threads.size(); ++t)
+                {
+                    for (size_t r = 0; r < reps.size(); ++r)
+                    {
+                        if (!(b < grid3D.size() && t < grid3D[b].size() && r < grid3D[b][t].size()))
+                        {
+                            continue;
+                        }
+
+                        double v = grid3D[b][t][r];
+                        // Skip configurations early stopping never measured (NaN):
+                        // omitting the row lets the plot treat them as absent
+                        // rather than a real 0 GiB/s data point.
+                        if (std::isnan(v))
+                        {
+                            continue;
+                        }
+
+                        ofs << blocks[b] << ',' << threads[t] << ',' << reps[r] << ',' << v << '\n';
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * @brief Build the file stem for a bandwidth grid CSV.
+     *
+     * The grid file name carries the metadata the plotting script needs to pick
+     * the right figure and legend:
+     *   - @p benchmark : display token (e.g. "vL1d", "sL1d", "L2", "L3", "LDS")
+     *   - @p direction : "Read" or "Write"
+     *   - @p suffix    : optional extra tag for LDS (e.g. "16KiB_dyn")
+     *
+     * Example: ``MI300A__LDS_Read_16KiB_dyn_BW_Grid.csv``.
+     */
+    inline std::string bandwidthGridFileName(const std::string& fileBase,
+                                             const std::string& benchmark,
+                                             const std::string& direction,
+                                             const std::string& suffix = "") {
+        std::string name = fileBase + "__" + benchmark + "_" + direction + "_";
+        if (!suffix.empty()) name += suffix + "_";
+        name += "BW_Grid.csv";
+        return name;
+    }
+
+    /**
+     * @brief Generate all bandwidth figures from grid CSVs.
+     *
+     * Writes the embedded plotting script (scripts/plot_bandwidth.py) to a
+     * temporary file and runs it in "auto" mode over @p gridDir, which is
+     * expected to already contain the ``*_BW_Grid.csv`` files emitted by
+     * @ref writeBandwidthGridToCSV. The script classifies each grid (block-sweep
+     * vs. single-config LDS, read vs. write) and produces a PNG + PDF per figure
+     * into @p gridDir, overwriting any existing files. Requires python3 with
+     * matplotlib; failures are reported but never abort the benchmark run.
+     */
+    inline void generateBandwidthCharts(const std::string& gridDir, int dpi = 150) {
+        std::filesystem::path scriptTmp = std::filesystem::temp_directory_path() / "mt4gBandwidthXXXXXX.py";
+        std::string tmpName = scriptTmp.string();
+        int fd = mkstemps(tmpName.data(), 3);
+        if (fd == -1) {
+            std::fprintf(stderr, "Failed to create temporary bandwidth plotting script.\n");
+            return;
+        }
+        close(fd);
+        {
+            std::ofstream ofs(tmpName);
+            ofs << bandwidthChartScript;
+        }
+
+        std::string cmd = "python3 " + tmpName +
+                          " auto --indir \"" + gridDir + "\"" +
+                          " --outdir \"" + gridDir + "\"" +
+                          " --dpi " + std::to_string(dpi);
+
+        int status = std::system(cmd.c_str());
+        if (status != 0) {
+            std::fprintf(stderr,
+                         "Bandwidth chart generation failed. Ensure python3 with matplotlib is available.\n");
+        }
+        std::filesystem::remove(tmpName);
     }
 }

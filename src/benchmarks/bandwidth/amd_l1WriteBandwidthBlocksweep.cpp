@@ -2,106 +2,90 @@
 #include "utils/util.hpp"
 
 #include <vector>
-#include <map>
-#include <numeric>
-#include <optional>
+#include <cstdlib>
+#include <string>
+#include <algorithm>
+#include <cctype>
 #include <limits>
 
-static constexpr auto WARMUP_REPS = 512;
+static constexpr auto WARMUP_REPS = 128;
 
 
 static constexpr auto MS_PER_SECOND = 1000.0; // ms
-static constexpr auto ROUNDS = DEFAULT_ROUNDS; // rounds
 
-__global__ void l3ReadBandwidthKernel(uint32v4* __restrict__ dst, uint32v4* __restrict__ src, size_t n, size_t reps) {
-    size_t tid;
-    size_t stride = gridDim.x * blockDim.x;
+__global__ void l1WriteBandwidthKernel(uint32v4* __restrict__ dst, size_t totalElements, size_t reps)
+{
+    const uint32_t gtid = static_cast<uint32_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+    const uint32_t stride = static_cast<uint32_t>(gridDim.x) * blockDim.x;
 
-    uint32v4 dummy = {0, 0, 0, 0};
+    const uint32v4 dummy = {gtid, gtid + 1, gtid + 2, gtid + 3};
 
-    for (size_t j = 0; j < reps; ++j) {
-        tid = (((blockIdx.x + j) * blockDim.x) + threadIdx.x) % stride;
+    #ifdef __HIP_PLATFORM_AMD__
+    const uint64_t baseAddr = reinterpret_cast<uint64_t>(dst);
+    #endif
 
-        for (size_t i = tid; i < n; i += stride) {
-            uint32v4 loaded;
+    for (size_t rep = 0; rep < reps; ++rep)
+    {
+        for (size_t i = gtid; i < totalElements; i += stride)
+        {
             #ifdef __HIP_PLATFORM_AMD__
-            asm volatile(
-                "flat_load_dwordx4 %0, %1\n"
-                : "=v"(loaded)
-                : "v"(src + i)
+            __asm__ volatile (
+                "flat_store_dwordx4 %0, %1\n\t"
+                :
+                : "v"(baseAddr + i * sizeof(uint32v4)),
+                  "v"(dummy)
                 : "memory"
             );
             #endif
-            dummy.x ^= loaded.x;
         }
     }
-
-    dst[threadIdx.x] = dummy; // prevent dead code elimination
 }
 
-static std::tuple<double, double> l3ReadBandwidthLauncher(size_t arraySizeBytes, uint32_t numBlocks, uint32_t numThreads, size_t reps) 
+static std::tuple<double, double> l1WriteBandwidthLauncher(size_t arraySizeBytes, uint32_t numBlocks, uint32_t numThreads, size_t reps, hipStream_t stream)
 {
-    uint32v4* d_srcArr = util::allocateGPUMemory<uint32v4>(arraySizeBytes / sizeof(uint32v4));
-    uint32v4* d_dstArr = util::allocateGPUMemory<uint32v4>(numThreads);
+    const size_t totalElements = arraySizeBytes / sizeof(uint32v4);
+    const size_t totalThreads = static_cast<size_t>(numBlocks) * numThreads;
 
-    // warm up
-    l3ReadBandwidthKernel<<<numBlocks, numThreads>>>(d_dstArr, d_srcArr, arraySizeBytes / sizeof(uint32v4), WARMUP_REPS);
-
+    uint32v4 *d_dstArr = util::allocateGPUMemory<uint32v4>(totalThreads);
+    
+    //warm up
+    l1WriteBandwidthKernel<<<numBlocks, numThreads, 0, stream>>>(d_dstArr, totalElements, WARMUP_REPS);
+    
     auto start = util::createHipEvent();
     auto end = util::createHipEvent();
 
     util::hipCheck(hipDeviceSynchronize());
-    util::hipCheck(hipEventRecord(start));
-    l3ReadBandwidthKernel<<<numBlocks, numThreads>>>(d_dstArr, d_srcArr, arraySizeBytes / sizeof(uint32v4), reps);
-    util::hipCheck(hipEventRecord(end));
+    util::hipCheck(hipEventRecord(start, stream));
+    l1WriteBandwidthKernel<<<numBlocks, numThreads, 0, stream>>>(d_dstArr, totalElements, reps);
+    util::hipCheck(hipEventRecord(end, stream));
     util::hipCheck(hipDeviceSynchronize());
 
     const double elapsedMs = util::getElapsedTimeMs(start, end);
 
     util::hipCheck(hipEventDestroy(start));
     util::hipCheck(hipEventDestroy(end));
-
-    util::hipCheck(hipFree(d_srcArr));
     util::hipCheck(hipFree(d_dstArr));
 
-    double dataGiB = (double) arraySizeBytes * reps / (1 * GiB); // Convert to GiB
-    double timeS = elapsedMs / MS_PER_SECOND;
-    
+    const double timeS = elapsedMs / MS_PER_SECOND;
+    const double dataGiB = (double) arraySizeBytes * reps / (1 * GiB);
+
     return {timeS, dataGiB / timeS};
 }
 
+
 namespace benchmark {
-    namespace amd {
-        double measureL3ReadBandwidth(size_t l2SizeBytes, size_t l3SizeBytes)
+    namespace amd
+    {
+        CacheBandwidthResult measureL1WriteBandwidthBlockSweep(size_t arraySizeBytes) 
         {
-            util::hipDeviceReset();
-
-            const size_t arraySizeBytes = util::max(l2SizeBytes * (util::getNumXCDs() + 2), l3SizeBytes / 4);
-            uint32_t maxThreads = util::getDeviceProperties().maxThreadsPerBlock;
-            uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getDeviceProperties().maxBlocksPerMultiProcessor;
-            size_t maxReps = MAX_REPS / 4;
-
-            std::vector<double> results(ROUNDS);
-            for (uint32_t i = 0; i < ROUNDS; ++i) 
-            {
-                results[i] = std::get<1>(l3ReadBandwidthLauncher(arraySizeBytes, maxBlocks, maxThreads, maxReps));
-            }
-
-            return util::average(results);
-        }
-
-        CacheBandwidthResult measureL3ReadBandwidthSweep(size_t l2SizeBytes, size_t l3SizeBytes) 
-        {
-            util::hipDeviceReset();
-
-            size_t arraySizeBytes = util::max(l2SizeBytes * (util::getNumXCDs() + 2), l3SizeBytes / 4);
+            // pin the entire sweep to a single CU.
+            auto stream = util::createStreamForCU(0);
 
             uint32_t minThreads = util::getDeviceProperties().warpSize;
             uint32_t maxThreads = util::getDeviceProperties().maxThreadsPerBlock;
-
-            uint32_t minBlocks = util::getNumberOfComputeUnits();
-            uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getDeviceProperties().maxBlocksPerMultiProcessor;
-
+            uint32_t minBlocks = 1;
+            uint32_t maxBlocks = util::getDeviceProperties().maxBlocksPerMultiProcessor;
+            
             size_t minReps = MIN_REPS;
             size_t maxReps = MAX_REPS;
 
@@ -158,7 +142,7 @@ namespace benchmark {
                     {
                         const size_t reps = result.repsTested[ri];
 
-                        auto [timeS, bandwidth] = l3ReadBandwidthLauncher(arraySizeBytes, numBlocks, numThreads, reps);
+                        auto [timeS, bandwidth] = l1WriteBandwidthLauncher(arraySizeBytes, numBlocks, numThreads, reps, stream);
 
                         result.bandwidth3D[bi][ti][ri] = bandwidth;
 
@@ -192,7 +176,9 @@ namespace benchmark {
                     }
                 }
             }
-            
+
+            util::hipCheck(hipStreamDestroy(stream));
+
             return result;
         }
     }

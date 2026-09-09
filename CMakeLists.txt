@@ -1,24 +1,26 @@
 cmake_minimum_required(VERSION 3.21)
 
 set(GPU_TARGET_ARCH "" CACHE STRING "The target GPU architecture")
-
-# Lock CMake's HIP arch to GPU_TARGET_ARCH before project() so the build
-# machine's GPU is never auto-detected. For NVIDIA (sm_*) targets the HIP
-# arch variable is not used; set it empty to avoid contamination.
-if(GPU_TARGET_ARCH MATCHES "^gfx")
-    set(CMAKE_HIP_ARCHITECTURES "${GPU_TARGET_ARCH}" CACHE STRING "" FORCE)
-else()
-    set(CMAKE_HIP_ARCHITECTURES "" CACHE STRING "" FORCE)
-endif()
-
-# CMake 3.21+ supports HIP as a first-class language.
-project(mt4g VERSION 1.2.0 LANGUAGES CXX HIP)
-
 if(GPU_TARGET_ARCH STREQUAL "")
     message(FATAL_ERROR "Please set GPU_TARGET_ARCH, e.g. -DGPU_TARGET_ARCH=sm_70 or -DGPU_TARGET_ARCH=gfx90a")
 endif()
 
-find_package(hip REQUIRED CONFIG)
+# Use hipcc as the C++ compiler because the src/*.cpp files contain HIP code.
+find_program(CMAKE_CXX_COMPILER hipcc)
+
+set(MT4G_LANGUAGES CXX)
+if(GPU_TARGET_ARCH MATCHES "^gfx")
+    list(APPEND MT4G_LANGUAGES HIP)
+elseif(GPU_TARGET_ARCH MATCHES "^sm_")
+    if(NOT CMAKE_CXX_COMPILER)
+        message(FATAL_ERROR
+            "Could not find hipcc. Set HIP_PATH to the HIP installation "
+            "and add $HIP_PATH/bin to PATH, or pass -DCMAKE_CXX_COMPILER=<path to hipcc>.")
+    endif()
+endif()
+
+project(mt4g VERSION 1.2.0 LANGUAGES ${MT4G_LANGUAGES})
+
 find_package(nlohmann_json 3.11.2 REQUIRED)
 find_package(cxxopts 3.2.0 REQUIRED)
 
@@ -45,25 +47,27 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(GPU_TARGET_ARCH MATCHES "^sm_")
     set(ENV{HIP_PLATFORM} nvidia)
+    # hipcc drops -Wl,... options, so use -Xlinker to pass linker options through.
+    set(CMAKE_CXX_LINKER_WRAPPER_FLAG "-Xlinker" " ")
     add_compile_options(--gpu-architecture=${GPU_TARGET_ARCH} -x cu -Wno-deprecated-gpu-targets)
     find_package(CUDAToolkit REQUIRED)
 elseif(GPU_TARGET_ARCH MATCHES "^gfx")
     set(ENV{HIP_PLATFORM} amd)
     add_compile_options(--offload-arch=${GPU_TARGET_ARCH} -x hip -Wall -Wextra -Wpedantic -Wnull-dereference)
-    find_package(hsa-runtime64 REQUIRED CONFIG)
-    get_filename_component(_hip_bin "${CMAKE_HIP_COMPILER}" DIRECTORY)
-    get_filename_component(_rocm_root "${_hip_bin}/../../.." ABSOLUTE)
-    find_library(ROCM_SMI_LIB NAMES rocm_smi64 REQUIRED HINTS "${_rocm_root}/lib")
 
-    # ROCm >= 7.x: rocm_smi.h transitively includes <libdrm/drm.h> via kfd_ioctl.h.
-    # Requires libdrm-devel (dnf/apt) or libdrm loaded via spack.
-    find_package(PkgConfig QUIET)
-    if(PkgConfig_FOUND)
-        pkg_check_modules(LIBDRM QUIET libdrm)
-    endif()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(DRM REQUIRED libdrm)
+    find_package(rocm_smi REQUIRED)
+    # rocm_smi64 exposes libdrm-dependent headers, so propagate include path
+    # to targets linking against it
+    set_property(TARGET rocm_smi64 PROPERTY INTERFACE_INCLUDE_DIRECTORIES ${DRM_INCLUDE_DIRS})
+    find_package(hsa-runtime64 CONFIG REQUIRED)
+    find_package(Threads REQUIRED)
 else()
     message(FATAL_ERROR "Invalid GPU_TARGET_ARCH '${GPU_TARGET_ARCH}'. Must start with sm_ or gfx")
 endif()
+
+find_package(hip CONFIG REQUIRED)
 
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/src/*.cpp")
 # Force all .cpp sources through the HIP compiler (clang++) instead of the
@@ -82,8 +86,17 @@ target_link_libraries(mt4g PRIVATE
 
 if(GPU_TARGET_ARCH MATCHES "^sm_")
     target_link_libraries(mt4g PRIVATE CUDA::cudart)
+    # Add the CUDA library directory to the build and installed binaries' runtime search paths.
+    target_link_options(mt4g PRIVATE "LINKER:-rpath,${CUDAToolkit_LIBRARY_DIR}")
+    set_target_properties(mt4g PROPERTIES INSTALL_RPATH "${CUDAToolkit_LIBRARY_DIR}")
 elseif(GPU_TARGET_ARCH MATCHES "^gfx")
-    target_link_libraries(mt4g PRIVATE hsa-runtime64::hsa-runtime64 ${ROCM_SMI_LIB} pthread)
+    target_include_directories(mt4g SYSTEM PRIVATE ${DRM_INCLUDE_DIRS})
+    target_include_directories(rocm_smi64 INTERFACE ${DRM_INCLUDE_DIRS})
+    target_link_libraries(mt4g PRIVATE
+        ${ROCM_SMI_LIBRARY}
+        hsa-runtime64::hsa-runtime64
+        Threads::Threads
+    )
 endif()
 
 install(TARGETS mt4g DESTINATION bin)

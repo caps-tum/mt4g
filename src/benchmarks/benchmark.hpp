@@ -8,6 +8,7 @@
 #include "typedef/cacheSizeResult.hpp"
 #include "typedef/cacheLineSizeResult.hpp"
 #include "typedef/cacheLatencyResult.hpp"
+#include "typedef/cacheBandwidthResult.hpp"
 #include "typedef/vectorTypes.hpp"
 
 #include "benchmarks/size/cacheSize/l1CacheSize.hpp"
@@ -30,8 +31,14 @@
 
 #include "benchmarks/bandwidth/mainMemoryReadBandwidth.hpp"
 #include "benchmarks/bandwidth/mainMemoryWriteBandwidth.hpp"
+#include "benchmarks/bandwidth/l1ReadBandwidth.hpp"
+#include "benchmarks/bandwidth/l1WriteBandwidth.hpp"
 #include "benchmarks/bandwidth/l2ReadBandwidth.hpp"
 #include "benchmarks/bandwidth/l2WriteBandwidth.hpp"
+#include "benchmarks/bandwidth/sharedReadBandwidth.hpp"
+#include "benchmarks/bandwidth/sharedWriteBandwidth.hpp"
+#include "benchmarks/bandwidth/sharedReadBandwidthStatic.hpp"
+#include "benchmarks/bandwidth/sharedWriteBandwidthStatic.hpp"
 
 #include "benchmarks/departureDelay/departureDelay.hpp"
 
@@ -47,6 +54,10 @@
 
 #include "benchmarks/bandwidth/amd_l3ReadBandwidth.hpp"
 #include "benchmarks/bandwidth/amd_l3WriteBandwidth.hpp"
+#include "benchmarks/bandwidth/amd_sL1ReadBandwidth.hpp"
+#include "benchmarks/bandwidth/amd_sL1WriteBandwidth.hpp"
+#include "benchmarks/bandwidth/amd_l1ReadBandwidthBlocksweep.hpp"
+#include "benchmarks/bandwidth/amd_l1WriteBandwidthBlocksweep.hpp"
 
 #include "benchmarks/size/fetchGranularity/amd_scalarL1FetchGranularity.hpp"
 #include "benchmarks/size/cacheSize/amd_scalarL1CacheSize.hpp"
@@ -65,6 +76,11 @@
 #include "benchmarks/latency/nvidia_constantL15Latency.hpp"
 #include "benchmarks/latency/nvidia_readOnlyLatency.hpp"
 #include "benchmarks/latency/nvidia_textureLatency.hpp"
+
+#include "benchmarks/bandwidth/nvidia_readOnlyReadBandwidth.hpp"
+#include "benchmarks/bandwidth/nvidia_textureReadBandwidth.hpp"
+#include "benchmarks/bandwidth/nvidia_constantL1ReadBandwidth.hpp"
+#include "benchmarks/bandwidth/nvidia_constantL15ReadBandwidth.hpp"
 
 #include "benchmarks/share/nvidia_constantL1SharedWithL1.hpp"
 #include "benchmarks/share/nvidia_readOnlySharedWithL1.hpp"
