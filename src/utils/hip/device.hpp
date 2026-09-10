@@ -54,6 +54,17 @@ namespace util {
     }
 
     /**
+     * @brief Query a single attribute of the current device.
+     */
+    inline int32_t getDeviceAttribute(hipDeviceAttribute_t attribute) {
+        int32_t device;
+        util::hipCheck(hipGetDevice(&device));
+        int32_t value;
+        util::hipCheck(hipDeviceGetAttribute(&value, attribute, device));
+        return value;
+    }
+
+    /**
      * @brief Retrieve the memory clock rate in kHz.
      *
      * Queried as a device attribute rather than read from hipDeviceProp_t:
@@ -61,10 +72,7 @@ namespace util {
      * leaves the corresponding hipDeviceProp_t field unwritten there.
      */
     inline uint32_t getMemoryClockRateKHz() {
-        int32_t device;
-        util::hipCheck(hipGetDevice(&device));
-        int32_t rateKHz;
-        util::hipCheck(hipDeviceGetAttribute(&rateKHz, hipDeviceAttributeMemoryClockRate, device));
+        static uint32_t rateKHz = static_cast<uint32_t>(getDeviceAttribute(hipDeviceAttributeMemoryClockRate));
         return rateKHz;
     }
 
@@ -73,10 +81,8 @@ namespace util {
      */
     inline double getTheoreticalMaxGlobalMemoryBandwidthGiBs() {
         static double bwGiBs = []() -> double {
-            hipDeviceProp_t prop{};
-            hipCheck(hipGetDeviceProperties(&prop, 0));
             double clkMHz = static_cast<double>(getMemoryClockRateKHz()) / 1000.0;
-            double busBytes = static_cast<double>(prop.memoryBusWidth) / 8.0;
+            double busBytes = static_cast<double>(getDeviceAttribute(hipDeviceAttributeMemoryBusWidth)) / 8.0;
             double bytesPerSec = clkMHz * 1e6 * busBytes * 2.0;
             return bytesPerSec / (1024.0 * 1024.0 * 1024.0);
         }();
@@ -247,19 +253,18 @@ namespace util {
     }
 
     /**
+     * @brief Return the total number of compute units on the device.
+     */
+    inline uint32_t getNumberOfComputeUnits() {
+        static uint32_t cus = static_cast<uint32_t>(getDeviceAttribute(hipDeviceAttributeMultiprocessorCount));
+        return cus;
+    }
+
+    /**
      * @brief Compute the number of compute units per die.
      */
     inline uint32_t getComputeUnitsPerDie() {
-        static uint32_t cusPerDie = []() {
-            int device;
-            util::hipCheck(hipGetDevice(&device));
-            int32_t cuCount;
-            util::hipCheck(hipDeviceGetAttribute(
-                &cuCount,
-                hipDeviceAttributeMultiprocessorCount,
-                device));
-            return static_cast<uint32_t>(cuCount) / getNumXCDs();
-        }();
+        static uint32_t cusPerDie = getNumberOfComputeUnits() / getNumXCDs();
         return cusPerDie;
     }
 
@@ -270,10 +275,7 @@ namespace util {
      * getMemoryClockRateKHz(): CUDA 13 removed cudaDeviceProp::clockRate.
      */
     inline uint32_t getClockRateKHz() {
-        int32_t device;
-        util::hipCheck(hipGetDevice(&device));
-        int32_t rateKHz;
-        util::hipCheck(hipDeviceGetAttribute(&rateKHz, hipDeviceAttributeClockRate, device));
+        static uint32_t rateKHz = static_cast<uint32_t>(getDeviceAttribute(hipDeviceAttributeClockRate));
         return rateKHz;
     }
 
@@ -281,13 +283,7 @@ namespace util {
      * @brief Return the native warp/wavefront size of the device.
      */
     inline uint32_t getWarpSize() {
-        static int32_t warpSize = [](){
-            int32_t device;
-            util::hipCheck(hipGetDevice(&device));
-            int32_t v;
-            util::hipCheck(hipDeviceGetAttribute(&v, hipDeviceAttributeWarpSize, device));
-            return v;
-        }();
+        static int32_t warpSize = getDeviceAttribute(hipDeviceAttributeWarpSize);
         return warpSize;
     }
 
@@ -309,59 +305,41 @@ namespace util {
      * @brief Estimate the number of cores per multiprocessor.
      */
     inline uint32_t getNumberOfCoresPerSM() {
-        int device = 0;
-        (void)hipGetDevice(&device);
-        hipDeviceProp_t prop{};
-        if (hipGetDeviceProperties(&prop, device) != hipSuccess) {
-            #ifdef __HIP_PLATFORM_NVIDIA__
-            return 128u;          // safe default for modern NVIDIA (Turing/Ampere/Ada)
-            #else
-            return 64u;           // AMD CUs have 64 FP32 ALUs per CU
+        static uint32_t coresPerSM = []() -> uint32_t {
+            #ifdef __HIP_PLATFORM_AMD__
+            // AMD (GCN/RDNA/CDNA): 64 FP32 ALUs ("stream processors") per CU
+            return 64u;
             #endif
-        }
 
-        #ifdef __HIP_PLATFORM_NVIDIA__
-        const int maj = prop.major;
-        const int min = prop.minor;
+            #ifdef __HIP_PLATFORM_NVIDIA__
+            int device = 0;
+            int maj = 0;
+            int min = 0;
+            // Deliberately not hipCheck'd: an unavailable device falls back to a
+            // default below
+            if (hipGetDevice(&device) != hipSuccess ||
+                hipDeviceGetAttribute(&maj, hipDeviceAttributeComputeCapabilityMajor, device) != hipSuccess ||
+                hipDeviceGetAttribute(&min, hipDeviceAttributeComputeCapabilityMinor, device) != hipSuccess) {
+                return 128u;      // safe default for modern NVIDIA (Turing/Ampere/Ada)
+            }
 
-        // Returns FP32 "CUDA cores" per SM, by compute capability.
-        switch (maj) {
-            case 1:  return 8u;                                 // Tesla
-            case 2:  return (min == 1 ? 48u : 32u);             // Fermi 2.1 vs 2.0
-            case 3:  return 192u;                               // Kepler (SMX)
-            case 5:  return 128u;                               // Maxwell (SMM) 5.0/5.2/5.3
-            case 6:  return (min == 0 ? 64u : 128u);            // Pascal: GP100(6.0)=64, GP10x(6.1/6.2)=128
-            case 7:  return 64u;                                // Volta(7.0/7.2)=64, Turing(7.5)=64
-            case 8:  return (min == 0 ? 64u : 128u);            // Ampere: GA100(8.0)=64, GA10x/Orin/Ada(8.6/8.7/8.9)=128
-            case 9:  return 128u;                               // Hopper (GH100)
-            default: return 128u;                               // reasonable default for unknown future parts
-        }
-        #endif
-        
-        #ifdef __HIP_PLATFORM_AMD__
-        // AMD (GCN/RDNA/CDNA): 64 FP32 ALUs ("stream processors") per CU
-        (void)prop;
-        return 64u;
-        #endif
+            // Returns FP32 "CUDA cores" per SM, by compute capability.
+            switch (maj) {
+                case 1:  return 8u;                             // Tesla
+                case 2:  return (min == 1 ? 48u : 32u);         // Fermi 2.1 vs 2.0
+                case 3:  return 192u;                           // Kepler (SMX)
+                case 5:  return 128u;                           // Maxwell (SMM) 5.0/5.2/5.3
+                case 6:  return (min == 0 ? 64u : 128u);        // Pascal: GP100(6.0)=64, GP10x(6.1/6.2)=128
+                case 7:  return 64u;                            // Volta(7.0/7.2)=64, Turing(7.5)=64
+                case 8:  return (min == 0 ? 64u : 128u);        // Ampere: GA100(8.0)=64, GA10x/Orin/Ada(8.6/8.7/8.9)=128
+                case 9:  return 128u;                           // Hopper (GH100)
+                default: return 128u;                           // reasonable default for unknown future parts
+            }
+            #endif
 
-        return 0u;
-    }
-
-    /**
-     * @brief Return the total number of compute units on the device.
-     */
-    inline uint32_t getNumberOfComputeUnits() {
-        static uint32_t cus = []() {
-            int device;
-            util::hipCheck(hipGetDevice(&device));
-            int32_t cuCount;
-            util::hipCheck(hipDeviceGetAttribute(
-                &cuCount,
-                hipDeviceAttributeMultiprocessorCount,
-                device));
-            return static_cast<uint32_t>(cuCount);
+            return 0u;
         }();
-        return cus;
+        return coresPerSM;
     }
 
 } // namespace util

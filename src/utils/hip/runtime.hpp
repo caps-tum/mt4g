@@ -57,16 +57,7 @@ namespace util {
      * @brief Determine if the device supports cooperative launches.
      */
     inline bool supportsCooperativeLaunch() {
-        static bool supported = []() {
-            int device;
-            util::hipCheck(hipGetDevice(&device));
-            int val = 0;
-            util::hipCheck(hipDeviceGetAttribute(
-                &val,
-                hipDeviceAttributeCooperativeLaunch,
-                device));
-            return val != 0;
-        }();
+        static bool supported = getDeviceAttribute(hipDeviceAttributeCooperativeLaunch) != 0;
         return supported;
     }
 
@@ -116,14 +107,16 @@ namespace util {
      * @brief Maximum number of threads supported per block.
      */
     inline uint32_t getMaxThreadsPerBlock() {
-        static uint32_t maxThreads = [](){
-            int32_t device;
-            util::hipCheck(hipGetDevice(&device));
-            int32_t v;
-            util::hipCheck(hipDeviceGetAttribute(&v, hipDeviceAttributeMaxThreadsPerBlock, device));
-            return v;
-        }();
+        static uint32_t maxThreads = static_cast<uint32_t>(getDeviceAttribute(hipDeviceAttributeMaxThreadsPerBlock));
         return maxThreads;
+    }
+
+    /**
+     * @brief Maximum number of resident blocks per compute unit.
+     */
+    inline uint32_t getMaxBlocksPerMultiProcessor() {
+        static uint32_t maxBlocks = static_cast<uint32_t>(getDeviceAttribute(hipDeviceAttributeMaxBlocksPerMultiProcessor));
+        return maxBlocks;
     }
 
     /**
@@ -131,17 +124,13 @@ namespace util {
      */
     template <typename KernelFunc>
     inline uint32_t getMaxActiveBlocks(KernelFunc kernel, uint32_t blockSize, size_t dynamicSharedMemoryBytes = 0U) {
-        int32_t device;
-        util::hipCheck(hipGetDevice(&device));
-        hipDeviceProp_t prop;
-        util::hipCheck(hipGetDeviceProperties(&prop, device));
         int32_t blocksPerSM = 0;
         util::hipCheck(hipOccupancyMaxActiveBlocksPerMultiprocessor(
             &blocksPerSM,
             kernel,
             static_cast<int>(blockSize),
             dynamicSharedMemoryBytes));
-        return static_cast<uint32_t>(blocksPerSM) * static_cast<uint32_t>(prop.multiProcessorCount);
+        return static_cast<uint32_t>(blocksPerSM) * getNumberOfComputeUnits();
     }
 
     /**
@@ -149,10 +138,7 @@ namespace util {
      */
     inline hipStream_t createStreamForCU(int32_t cuIdx) {
         #ifdef __HIP_PLATFORM_AMD__
-        int32_t dev = 0;
-        util::hipCheck(hipGetDevice(&dev));
-        int32_t numCUs = 0;
-        util::hipCheck(hipDeviceGetAttribute(&numCUs, hipDeviceAttributeMultiprocessorCount, dev));
+        const int32_t numCUs = static_cast<int32_t>(getNumberOfComputeUnits());
         assert(cuIdx >= 0 && cuIdx < numCUs);
         const int32_t len = (numCUs + 31) / 32;
         std::vector<uint32_t> mask(len, 0u);
@@ -175,10 +161,7 @@ namespace util {
      */
     inline hipStream_t createStreamForCUs(const std::vector<uint32_t>& cuIdxs) {
         #ifdef __HIP_PLATFORM_AMD__
-        int32_t dev = 0;
-        util::hipCheck(hipGetDevice(&dev));
-        int32_t numCUs = 0;
-        util::hipCheck(hipDeviceGetAttribute(&numCUs, hipDeviceAttributeMultiprocessorCount, dev));
+        const int32_t numCUs = static_cast<int32_t>(getNumberOfComputeUnits());
         for (int32_t cuIdx : cuIdxs) {
             assert(cuIdx >= 0 && cuIdx < numCUs);
         }
