@@ -29,20 +29,20 @@ microarchitectures from Pascal onwards. Currently, we do not support AMD RDNA
 GPUs given our primary focus on HPC/AI systems. Tested microarchitectures
 include:
 
-| GPU Name | Vendor | Microarch. |
+| Vendor | Microarch. | GPUs |
 | -------- | ------ | ---------- |
-| MI100 | AMD | CDNA |
-| MI210 | AMD | CDNA2 |
-| MI300X | AMD | CDNA3 |
-| P6000 | NVIDIA | Pascal |
-| V100 | NVIDIA | Volta |
-| T1000 | NVIDIA | Turing |
-| RTX2080 | NVIDIA | Turing |
-| A100 | NVIDIA | Ampere |
-| H100-80 | NVIDIA | Hopper |
-| H100-96 | NVIDIA | Hopper |
+| AMD | CDNA | MI100 |
+| AMD | CDNA2 | MI210 |
+| AMD | CDNA3 | MI300X, MI300A |
+| NVIDIA | Pascal | P6000 | NVIDIA |
+| NVIDIA | Volta | V100 | NVIDIA |
+| NVIDIA | Turing | T1000, RTX2080 |
+| NVIDIA | Ampere | A100 | 
+| NVIDIA | Hopper | H100-80, H100-96 |
 
 ## Topological metrics
+
+*See the `.json` files in `sample_results/` folder for the full extent of the provided information.*
 
 ### General & Compute Resource Information
 
@@ -69,37 +69,38 @@ include:
 
 | _Memory Element_ | Size | Load Latency | Read & Write Bandwidth | Cache Line Size | Fetch Granularity | Amount per SM/CU or GPU | Physically Shared With |
 | ---------------- | ---- | ------------ | ---------------------- | --------------- | ----------------- | ----------------------- | ---------------------- |
-| **vL1 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ➖ |
-| **sL1d cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ➖ | ✅ |
+| **vL1 cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ➖ |
+| **sL1d cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ➖ | ✅ |
 | **L2 cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ➖ |
 | **L3 cache** | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ | ➖ |
-| **LDS** | ✅ | ✅ | ❌ | ➖ | ➖ | ➖ | ➖ |
+| **LDS** | ✅ | ✅ | ✅ | ➖ | ➖ | ➖ | ➖ |
 | **Device Memory** | ✅ | ✅ | ✅ | ➖ | ➖ | ➖ | ➖ |
 
 #### NVIDIA
 
 | _Memory Element_ | Size | Load Latency | Read & Write Bandwidth | Cache Line Size | Fetch Granularity | Amount per SM/CU or GPU | Physically Shared With |
 | ---------------- | ---- | ------------ | ---------------------- | --------------- | ----------------- | ----------------------- | ---------------------- |
-| **L1 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| **L1 cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **L2 cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ➖ |
-| **Texture cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
-| **Readonly cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
-| **Constant L1 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
-| **Constant L1.5 cache** | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ | ➖ |
-| **Shared Memory** | ✅ | ✅ | ❌ | ➖ | ➖ | ➖ | ➖ |
+| **Texture cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Readonly cache** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Constant L1 cache** | ✅ | ✅ | ✅(read-only) | ✅ | ✅ | ✅ | ✅ |
+| **Constant L1.5 cache** | ✅ | ✅ | ✅(read-only) | ✅ | ✅ | ❌ | ➖ |
+| **Shared Memory** | ✅ | ✅ | ✅ | ➖ | ➖ | ➖ | ➖ |
 | **Device Memory** | ✅ | ✅ | ✅ | ➖ | ➖ | ➖ | ➖ |
 
 ## Installation
 
 ### Dependencies
 
-- ROCm or CUDA backend including drivers, compilers and libraries for AMD or
-  NVIDIA targets respectively
+- ROCm (AMD) or CUDA (NVIDIA) backend including drivers, compilers, and libraries
 - HIP SDK with the `hipcc` compiler
+- CMake ≥ 3.21
+- A C++ compiler with C++20 support (e.g. GCC 10+)
 - `nlohmann-json` for JSON output
 - `cxxopts` for CLI parsing
-- Python 3 including the `matplotlib`, `pandas` and `numpy` packages for
-  graphical plots
+- (optional) Python 3 including the `matplotlib`, `pandas` and `numpy` packages for graphical plots
+- (AMD-only) `pkg-config`, `rocm_smi`, `hsa-runtime` for API-retrieved information on AMD
 
 A suitable HIP environment can for instance be obtained via
 [Spack](https://spack.readthedocs.io/en/latest/getting_started.html):
@@ -107,8 +108,10 @@ A suitable HIP environment can for instance be obtained via
 ```bash
 spack install hip           # includes ROCm backend for AMD targets
 spack install hip+cuda      # includes CUDA backend for NVIDIA targets
+spack install nlohmann-json cxxopts
 
-spack load hip              # exports binaries and libraries
+spack load hip              # (or hip+cuda for NVIDIA targets)
+spack load nlohmann-json cxxopts
 ```
 
 The `HIP_PATH` environment variable should be set to the HIP installation
@@ -137,8 +140,10 @@ git clone https://github.com/caps-tum/mt4g.git
 cd mt4g
 mkdir build && cd build
 cmake .. -DGPU_TARGET_ARCH=<gfxXXX|sm_XX>
+# MT4G forces CMAKE_BUILD_TYPE=Release; a build type given on the command line
+# is ignored and the configure step prints
+# "CMAKE_BUILD_TYPE is set to Release by MT4G"
 # optional build flags:
-# -DCMAKE_BUILD_TYPE=<Release|Debug>             -- to choose between release and debug builds
 # -DCMAKE_INSTALL_PREFIX=<install_prefix>        -- to set the install destination (default on UNIX platforms: /usr/local)
 make all install -j $(nproc)
 ```
@@ -162,6 +167,7 @@ make all install -j $(nproc)
 | `-r, --random` | Randomize P-Chase arrays |
 | `-s, --stdout` | Dump final JSON result into stdout |
 | `-q, --quiet` | Only write the final JSON to stdout |
+| `-t, --timing` | Print wall-clock time of each benchmark and the total run |
 | `--l1` | Run L1 cache benchmarks |
 | `--l2` | Run L2 cache benchmarks |
 | `--l3` | Run L3 cache benchmarks (AMD only) |
@@ -173,6 +179,8 @@ make all install -j $(nproc)
 | `--memory` | Run main memory benchmarks |
 | `--departuredelay` | Run departure delay benchmarks |
 | `--resourceshare` | Run resource sharing benchmarks |
+| `--optimal` | Run bandwidth benchmarks with optimal configuration (number of threads and blocks) search |
+| `--static` | Run shared memory bandwidth benchmark with statically allocated memory (32 KiB). (if not set, runs with dynamic allocation) |
 | `-v, --version` | Display the version of MT4G and exit |
 | `-h, --help` | Display a detailed help message and exit |
 
@@ -205,11 +213,17 @@ flag generates a `README.md` that embeds all graphs and links to the raw data.
 ```
 mt4g
 ├── CMakeLists.txt        -- Build configuration
-├── include               -- Header files
 ├── LICENSE               -- Project license
 ├── README.md             -- Project description
 ├── sample_results        -- Exemplary output files from selected hardware
-└── src                   -- Benchmark implementation and CLI helpers
+└── src                   -- Headers, benchmark implementations and CLI helpers
+    ├── benchmarks        -- Benchmark kernels, grouped by category
+    │   ├── <category>/               -- Shared benchmarks (no prefix)
+    │   ├── <category>/nvidia_*       -- NVIDIA-specific benchmarks
+    │   └── <category>/amd_*          -- AMD-specific benchmarks
+    ├── const             -- Compile-time constant arrays
+    ├── typedef           -- Type definitions and result structs
+    └── utils             -- Utility helpers (HIP wrappers, statistics, I/O)
 ```
 
 ### Adding new Measurements
@@ -224,12 +238,13 @@ share your measurements.
 
 To add a new benchmark to the **MT4G**, follow the subsequent instructions:
 
-1. Implement the benchmark in `src/benchmarks/` and expose a suitable interface
-   in `include/`.
+1. Implement the benchmark in `src/benchmarks/<category>/` — place the header
+   and source in the same directory, using a `nvidia_` or `amd_` prefix for
+   vendor-specific files.
 2. Try to follow the pattern of `measureXXX()`, `XXXLauncher()` and `XXXKernel()` to keep the structure modular and readable.
    Every benchmark should get its own file to keep code flow as easy as possible to follow -- this is not about software engineering!
-4. Update `CMakeLists.txt` if necessary.
-5. Document the new benchmark and its command line switch in the `README.md` if suitable.
+3. Update `CMakeLists.txt` if necessary.
+4. Document the new benchmark and its command line switch in the `README.md` if suitable.
 
 ### Coding Style
 
