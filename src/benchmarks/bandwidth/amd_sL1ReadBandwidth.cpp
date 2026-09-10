@@ -155,7 +155,7 @@ __global__ void sL1ReadBandwidthKernel(uint32_t* __restrict__ dst, uint32v16* __
 static std::tuple<uint64_t, double, double> sL1ReadBandwidthLauncher(size_t arraySizeBytes, uint32_t numThreads, size_t reps) 
 {
     size_t numElements = arraySizeBytes / sizeof(uint32v16);
-    uint32_t waveSize = util::getDeviceProperties().warpSize;
+    uint32_t waveSize = util::getWarpSize();
     uint32_t numWaves = numThreads / waveSize;
     size_t elementsPerWave = numElements / numWaves;
     
@@ -181,7 +181,7 @@ namespace benchmark {
         {
             std::vector<double> results(ROUNDS);
 
-            uint32_t maxNumThreads = util::getDeviceProperties().maxThreadsPerBlock;
+            uint32_t maxNumThreads = util::getMaxThreadsPerBlock();
             size_t maxReps = MAX_REPS;
 
             for (uint32_t i = 0; i < ROUNDS; ++i) 
@@ -194,8 +194,8 @@ namespace benchmark {
 
         CacheBandwidthResult measureScalarL1ReadBandwidthSweep(size_t arraySizeBytes) 
         {
-            uint32_t minNumThreads = util::getDeviceProperties().warpSize;
-            uint32_t maxNumThreads = util::getDeviceProperties().maxThreadsPerBlock;
+            uint32_t minNumThreads = util::getWarpSize();
+            uint32_t maxNumThreads = util::getMaxThreadsPerBlock();
             size_t minReps = MIN_REPS;
             size_t maxReps = MAX_REPS;
 

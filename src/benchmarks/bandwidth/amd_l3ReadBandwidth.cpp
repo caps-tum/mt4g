@@ -77,8 +77,8 @@ namespace benchmark {
             util::hipDeviceReset();
 
             const size_t arraySizeBytes = util::max(l2SizeBytes * (util::getNumXCDs() + 2), l3SizeBytes / 4);
-            uint32_t maxThreads = util::getDeviceProperties().maxThreadsPerBlock;
-            uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getDeviceProperties().maxBlocksPerMultiProcessor;
+            uint32_t maxThreads = util::getMaxThreadsPerBlock();
+            uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getMaxBlocksPerMultiProcessor();
             size_t maxReps = MAX_REPS / 4;
 
             std::vector<double> results(ROUNDS);
@@ -96,11 +96,11 @@ namespace benchmark {
 
             size_t arraySizeBytes = util::max(l2SizeBytes * (util::getNumXCDs() + 2), l3SizeBytes / 4);
 
-            uint32_t minThreads = util::getDeviceProperties().warpSize;
-            uint32_t maxThreads = util::getDeviceProperties().maxThreadsPerBlock;
+            uint32_t minThreads = util::getWarpSize();
+            uint32_t maxThreads = util::getMaxThreadsPerBlock();
 
             uint32_t minBlocks = util::getNumberOfComputeUnits();
-            uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getDeviceProperties().maxBlocksPerMultiProcessor;
+            uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getMaxBlocksPerMultiProcessor();
 
             size_t minReps = MIN_REPS;
             size_t maxReps = MAX_REPS;

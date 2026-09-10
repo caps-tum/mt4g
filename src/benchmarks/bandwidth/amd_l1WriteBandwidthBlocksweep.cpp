@@ -81,10 +81,10 @@ namespace benchmark {
             // pin the entire sweep to a single CU.
             auto stream = util::createStreamForCU(0);
 
-            uint32_t minThreads = util::getDeviceProperties().warpSize;
-            uint32_t maxThreads = util::getDeviceProperties().maxThreadsPerBlock;
+            uint32_t minThreads = util::getWarpSize();
+            uint32_t maxThreads = util::getMaxThreadsPerBlock();
             uint32_t minBlocks = 1;
-            uint32_t maxBlocks = util::getDeviceProperties().maxBlocksPerMultiProcessor;
+            uint32_t maxBlocks = util::getMaxBlocksPerMultiProcessor();
             
             size_t minReps = MIN_REPS;
             size_t maxReps = MAX_REPS;

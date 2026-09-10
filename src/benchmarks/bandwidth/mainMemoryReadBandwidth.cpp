@@ -53,7 +53,7 @@ double mainMemoryReadBandwidthLauncher(size_t arraySizeBytes) {
     util::hipDeviceReset(); 
 
     uint32_t maxThreadsPerBlock = util::min(util::getMaxThreadsPerBlock(), util::getWarpSize() * util::getSIMDsPerCU()); 
-    uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getDeviceProperties().maxBlocksPerMultiProcessor;
+    uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getMaxBlocksPerMultiProcessor();
 
     // Initialize device Arrays
     // sizeof(uint32v4) = 16 bytes -> allows us to load 4 integers with one instruction -> probability 
@@ -165,11 +165,11 @@ namespace benchmark {
         // over-reports bandwidth, so main memory uses one pass over a ~1 GiB set.
         size_t arraySizeBytes = util::min(mainMemorySizeBytes / SIZE_DOWN, static_cast<size_t>(1) * 1024 * 1024 * 1024);
 
-        uint32_t minThreads = util::getDeviceProperties().warpSize;
-        uint32_t maxThreads = util::getDeviceProperties().maxThreadsPerBlock;
+        uint32_t minThreads = util::getWarpSize();
+        uint32_t maxThreads = util::getMaxThreadsPerBlock();
 
         uint32_t minBlocks = util::getNumberOfComputeUnits();
-        uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getDeviceProperties().maxBlocksPerMultiProcessor;
+        uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getMaxBlocksPerMultiProcessor();
 
         CacheBandwidthResult result{};
         result.measuredBandwidth = 0.0;

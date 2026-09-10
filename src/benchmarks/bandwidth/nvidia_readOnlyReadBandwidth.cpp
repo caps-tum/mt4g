@@ -139,7 +139,7 @@ namespace benchmark
         {
             std::vector<double> results(ROUNDS);
 
-            uint32_t maxNumThreads = util::getDeviceProperties().maxThreadsPerBlock;
+            uint32_t maxNumThreads = util::getMaxThreadsPerBlock();
             size_t maxReps = MAX_REPS;
 
             for (uint32_t i = 0; i < ROUNDS; ++i)
@@ -152,8 +152,8 @@ namespace benchmark
 
         CacheBandwidthResult measureReadOnlyReadBandwidthSweep(size_t arraySizeBytes)
         {
-            uint32_t minNumThreads = util::getDeviceProperties().warpSize;
-            uint32_t maxNumThreads = util::getDeviceProperties().maxThreadsPerBlock;
+            uint32_t minNumThreads = util::getWarpSize();
+            uint32_t maxNumThreads = util::getMaxThreadsPerBlock();
             size_t minReps = MIN_REPS;
             size_t maxReps = MAX_REPS;
 

@@ -128,7 +128,7 @@ static std::tuple<uint64_t, double, double> constantL1ReadBandwidthLauncher(size
 
     // Constant working sets are small, so integer division can leave bytes untouched.
     // Use the bytes actually read rather than the requested array size.
-    double gpuClockHz = util::getDeviceProperties().clockRate * 1000;
+    double gpuClockHz = util::getClockRateKHz() * 1000.0;
     double dataGiB = (double) (elementsPerThread * numThreads * sizeof(uint32_t)) * reps / (1 * GiB);
     double timeS = (double) timingResult[0] / gpuClockHz;
 
@@ -153,7 +153,7 @@ static size_t capConstantArraySize(size_t arraySizeBytes, const char* benchmarkN
 static uint32_t capNumThreads(size_t arraySizeBytes)
 {
     size_t totalElements = arraySizeBytes / sizeof(uint32_t);
-    uint32_t maxNumThreads = util::getDeviceProperties().maxThreadsPerBlock;
+    uint32_t maxNumThreads = util::getMaxThreadsPerBlock();
 
     return static_cast<uint32_t>(std::min(static_cast<size_t>(maxNumThreads), totalElements));
 }
@@ -189,7 +189,7 @@ namespace benchmark
         {
             arraySizeBytes = capConstantArraySize(arraySizeBytes, "Constant L1 Read Bandwidth");
 
-            uint32_t minNumThreads = util::getDeviceProperties().warpSize;
+            uint32_t minNumThreads = util::getWarpSize();
             uint32_t maxNumThreads = capNumThreads(arraySizeBytes);
             size_t minReps = MIN_REPS;
             size_t maxReps = MAX_REPS;

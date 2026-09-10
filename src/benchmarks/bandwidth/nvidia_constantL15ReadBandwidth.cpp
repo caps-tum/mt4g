@@ -139,7 +139,7 @@ static std::tuple<uint64_t, double, double> constantL15ReadBandwidthLauncher(siz
 
     // Constant working sets are small, so integer division can leave bytes untouched.
     // Count only the bytes actually read, not the full cache lines fetched by the stride.
-    double gpuClockHz = util::getDeviceProperties().clockRate * 1000;
+    double gpuClockHz = util::getClockRateKHz() * 1000.0;
     double dataGiB = (double) (elementsPerThread * numThreads * sizeof(uint32_t)) * reps / (1 * GiB);
     double timeS = (double) timingResult[0] / gpuClockHz;
 
@@ -178,7 +178,7 @@ static size_t capStride(size_t strideBytes)
 static uint32_t capNumThreads(size_t arraySizeBytes, size_t strideBytes)
 {
     size_t lines = (arraySizeBytes / sizeof(uint32_t)) / (strideBytes / sizeof(uint32_t));
-    uint32_t maxNumThreads = util::getDeviceProperties().maxThreadsPerBlock;
+    uint32_t maxNumThreads = util::getMaxThreadsPerBlock();
 
     return static_cast<uint32_t>(std::min(static_cast<size_t>(maxNumThreads), lines));
 }
@@ -216,7 +216,7 @@ namespace benchmark
             arraySizeBytes = capConstantArraySize(arraySizeBytes);
             size_t strideBytes = capStride(constantFetchGranularityBytes);
 
-            uint32_t minNumThreads = util::getDeviceProperties().warpSize;
+            uint32_t minNumThreads = util::getWarpSize();
             uint32_t maxNumThreads = capNumThreads(arraySizeBytes, strideBytes);
             size_t minReps = MIN_REPS;
             size_t maxReps = MAX_REPS;

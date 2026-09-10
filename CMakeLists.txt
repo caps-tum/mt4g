@@ -21,6 +21,10 @@ endif()
 
 project(mt4g VERSION 1.2.0 LANGUAGES ${MT4G_LANGUAGES})
 
+# MT4G is always built optimized; FORCE also overrides a command-line build type.
+set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type (forced by MT4G)" FORCE)
+message(STATUS "CMAKE_BUILD_TYPE is set to Release by MT4G")
+
 find_package(nlohmann_json 3.11.2 REQUIRED)
 find_package(cxxopts 3.2.0 REQUIRED)
 
