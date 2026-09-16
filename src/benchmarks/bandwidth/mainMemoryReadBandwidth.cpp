@@ -37,7 +37,7 @@ __global__ void mainMemoryReadBandwidthKernel(uint32v4* __restrict__ dst, uint32
         asm volatile(
             "flat_load_dwordx4 %0, %1\n" 
             : "=v"(loaded) // uint32v4
-            : "s"(src + i) // uint32v4*
+            : "v"(src + i) // uint32v4*
             :
         );
         #endif
@@ -103,7 +103,7 @@ __global__ void mainMemoryReadBandwidthSweepKernel(uint32v4* __restrict__ dst, u
             asm volatile(
                 "flat_load_dwordx4 %0, %1\n"
                 : "=v"(loaded) // uint32v4
-                : "s"(src + i) // uint32v4*
+                : "v"(src + i) // uint32v4*
                 :
             );
             #endif

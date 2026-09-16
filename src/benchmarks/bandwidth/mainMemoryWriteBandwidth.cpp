@@ -36,7 +36,7 @@ __global__ void mainMemoryWriteBandwidthKernel(uint32v4* __restrict__ dst, size_
         asm volatile(
             "flat_store_dwordx4 %0, %1\n"
             :
-            : "s"(dst + i) // uint32v4*
+            : "v"(dst + i) // uint32v4*
             , "v"(dummy) // uint32v4
             : "memory"
         );
@@ -93,7 +93,7 @@ __global__ void mainMemoryWriteBandwidthSweepKernel(uint32v4* __restrict__ dst, 
             asm volatile(
                 "flat_store_dwordx4 %0, %1\n"
                 :
-                : "s"(dst + i) // uint32v4*
+                : "v"(dst + i) // uint32v4*
                 , "v"(dummy) // uint32v4
                 : "memory"
             );
