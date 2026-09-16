@@ -152,5 +152,30 @@ inline std::optional<size_t> getKfdCacheAmountForLevel(uint32_t level) {
     if (count == 0) return std::nullopt;
     return count;
 }
+
+/**
+ * @brief Read the number of XCCs of the current GPU from the KFD topology
+ *        (num_xcc in /sys/class/kfd/kfd/topology/nodes/<node>/properties).
+ *
+ * @return Number of XCCs, or std::nullopt if it is not reported.
+ */
+inline std::optional<uint32_t> getNumXccFromKfd() {
+    hsa_agent_t agent = getCurrentHsaAgent();
+    if (!agent.handle) return std::nullopt;
+    uint32_t node = 0;
+    if (hsa_agent_get_info(agent, static_cast<hsa_agent_info_t>(HSA_AMD_AGENT_INFO_DRIVER_NODE_ID), &node) != HSA_STATUS_SUCCESS) {
+        return std::nullopt;
+    }
+    std::ifstream properties("/sys/class/kfd/kfd/topology/nodes/" + std::to_string(node) + "/properties");
+    std::string key;
+    uint64_t value = 0;
+    while (properties >> key >> value) {
+        if (key == "num_xcc") {
+            if (value == 0) return std::nullopt;
+            return static_cast<uint32_t>(value);
+        }
+    }
+    return std::nullopt;
+}
 #endif
 

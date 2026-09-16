@@ -225,23 +225,42 @@ namespace util {
     }
 
     /**
-     * @brief Query how many XCDs (dies) the GPU comprises.
+     * @brief Query how many XCDs (dies) the GPU comprises, via ROCm SMI.
+     *
+     * @return Number of XCDs, or std::nullopt if ROCm SMI cannot report it
+     *         (e.g. the metric is not supported for this GPU or driver).
      */
-    inline uint32_t getNumXCDs() {
-        static uint32_t xcdCount = [](){
-            #ifdef __HIP_PLATFORM_NVIDIA__
-            return 1;
-            #endif
+    inline std::optional<uint32_t> getNumXCDs() {
+        static const std::optional<uint32_t> xcdCount = []() -> std::optional<uint32_t> {
             #ifdef __HIP_PLATFORM_AMD__
-            util::rocmCheck(rsmi_init(0));
+            if (rsmi_init(0) != RSMI_STATUS_SUCCESS) return std::nullopt;
             int device;
             util::hipCheck(hipGetDevice(&device));
-            uint16_t xcdCounter;
-            util::rocmCheck(rsmi_dev_metrics_xcd_counter_get(device, &xcdCounter));
+            uint16_t xcdCounter = 0;
+            if (rsmi_dev_metrics_xcd_counter_get(device, &xcdCounter) != RSMI_STATUS_SUCCESS || xcdCounter == 0) {
+                return std::nullopt;
+            }
             return static_cast<uint32_t>(xcdCounter);
+            #else
+            return 1u;
             #endif
         }();
         return xcdCount;
+    }
+
+    /**
+     * @brief Query how many XCCs the GPU comprises, via the KFD topology.
+     *
+     * @return Number of XCCs, or std::nullopt if the KFD does not report it
+     *         (e.g. on older CDNA generations).
+     */
+    inline std::optional<uint32_t> getNumXCCs() {
+        #ifdef __HIP_PLATFORM_AMD__
+        static const std::optional<uint32_t> xccCount = getNumXccFromKfd();
+        return xccCount;
+        #else
+        return 1u;
+        #endif
     }
 
     /**
@@ -256,7 +275,7 @@ namespace util {
      * @brief Compute the number of compute units per die.
      */
     inline uint32_t getComputeUnitsPerDie() {
-        static uint32_t cusPerDie = getNumberOfComputeUnits() / getNumXCDs();
+        static uint32_t cusPerDie = getNumberOfComputeUnits() / getNumXCDs().value_or(1);
         return cusPerDie;
     }
 

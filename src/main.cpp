@@ -130,8 +130,6 @@ int main(int argc, char* argv[]) {
                 {"maxThreadsPerMultiProcessor", deviceProperties.maxThreadsPerMultiProcessor},
                 {"maxBlocksPerMultiProcessor", deviceProperties.maxBlocksPerMultiProcessor},
                 #ifdef __HIP_PLATFORM_AMD__
-                {"numXCDs", util::getNumXCDs()},
-                {"computeUnitsPerDie", util::getComputeUnitsPerDie()},
                 {"numSIMDsPerCU", util::getSIMDsPerCU()},
                 //{"logicalCUIdToPhysical", util::getLogicalToPhysicalCUsLUT()} // Not reliable on CDNA 3
                 #endif
@@ -220,6 +218,19 @@ int main(int argc, char* argv[]) {
             },
         }
     };
+
+    #ifdef __HIP_PLATFORM_AMD__
+    // XCD and XCC counts are only reported if the system provides them. If neither
+    // is available (e.g. older CDNA generations), the GPU is reported as one XCD.
+    std::optional<uint32_t> numXCDs = util::getNumXCDs();
+    const std::optional<uint32_t> numXCCs = util::getNumXCCs();
+    if (!numXCDs && !numXCCs) numXCDs = 1;
+    if (numXCDs) {
+        result["compute"]["numXCDs"] = *numXCDs;
+        result["compute"]["computeUnitsPerDie"] = util::getComputeUnitsPerDie();
+    }
+    if (numXCCs) result["compute"]["numXCCs"] = *numXCCs;
+    #endif
 
     #ifdef __HIP_PLATFORM_AMD__
     auto l2Size = util::getL2SizeBytes();
