@@ -21,15 +21,25 @@
    *     when both cache bypass flags were used (see Memory Model section,
    *     table for GFX940–942)
    *
-   * Thus we branch using __gfx94[0‑2] to select "sc1" vs "glc" so our inline ASM
-   * always matches the AMD backend's expected modifier syntax.
+   * CDNA-4 (gfx950) uses the same sc0/sc1 syntax as CDNA-3.
    */
-    #if defined(__gfx942__) || defined(__gfx941__) || defined(__gfx940__)
-        #define GLC     "sc1"
-        #define GLC_SLC "sc0 sc1"
-    #else
+
+  /*
+   * MT4G_CDNA2_OR_OLDER is defined when building for AMD CDNA (gfx908, MI100)
+   * or CDNA-2 (gfx90a, MI210/MI250/MI250X). All other AMD targets, i.e. CDNA-3
+   * (gfx940/941/942), CDNA-4 (gfx950) and newer, leave it undefined.
+   * Use this macro for every CDNA-generation check.
+   */
+    #if defined(__gfx90a__) || defined(__gfx908__)
+        #define MT4G_CDNA2_OR_OLDER
+    #endif
+
+    #ifdef MT4G_CDNA2_OR_OLDER
         #define GLC     "glc"
         #define GLC_SLC "glc slc"
+    #else
+        #define GLC     "sc1"
+        #define GLC_SLC "sc0 sc1"
     #endif
 #endif
 
@@ -214,8 +224,8 @@ __device__ __forceinline__ uint32_t __forceBypassAllCacheReads(uint32_t *baseAdd
     __asm__ volatile(
         // Flat-Load with GLC=1 and SLC=1: Bypasses L1 and L2
         "flat_load_dword %0, %1 " GLC_SLC 
-        #if defined(__gfx942__) || defined(__gfx941__) || defined(__gfx940__)
-        " nt" // Only on CDNA3(+)
+        #ifndef MT4G_CDNA2_OR_OLDER
+        " nt" // CDNA-3 and newer only
         #endif
          " \n\t"
         // Wait for VMEM
