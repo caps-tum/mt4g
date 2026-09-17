@@ -225,42 +225,33 @@ namespace util {
     }
 
     /**
-     * @brief Query how many XCDs (dies) the GPU comprises, via ROCm SMI.
+     * @brief Query the number of physical compute dies of the GPU.
      *
-     * @return Number of XCDs, or std::nullopt if ROCm SMI cannot report it
-     *         (e.g. the metric is not supported for this GPU or driver).
+     * NVIDIA GPUs have one die. On AMD, the value is taken from the first
+     * source that reports it:
+     *   1. ROCm SMI XCD counter (available on older CDNA generations).
+     *   2. KFD topology num_xcc (available on CDNA-3 and newer, where it
+     *      matches the number of physical dies).
+     * If neither source reports a value, the GPU is assumed to have one die.
      */
-    inline std::optional<uint32_t> getNumXCDs() {
-        static const std::optional<uint32_t> xcdCount = []() -> std::optional<uint32_t> {
+    inline uint32_t getNumComputeDies() {
+        static const uint32_t dieCount = []() -> uint32_t {
             #ifdef __HIP_PLATFORM_AMD__
-            if (rsmi_init(0) != RSMI_STATUS_SUCCESS) return std::nullopt;
-            int device;
-            util::hipCheck(hipGetDevice(&device));
-            uint16_t xcdCounter = 0;
-            if (rsmi_dev_metrics_xcd_counter_get(device, &xcdCounter) != RSMI_STATUS_SUCCESS || xcdCounter == 0) {
-                return std::nullopt;
+            if (rsmi_init(0) == RSMI_STATUS_SUCCESS) {
+                int device;
+                util::hipCheck(hipGetDevice(&device));
+                uint16_t xcdCounter = 0;
+                if (rsmi_dev_metrics_xcd_counter_get(device, &xcdCounter) == RSMI_STATUS_SUCCESS && xcdCounter > 0) {
+                    return static_cast<uint32_t>(xcdCounter);
+                }
             }
-            return static_cast<uint32_t>(xcdCounter);
-            #else
-            return 1u;
+            if (const auto xcc = getNumXccFromKfd()) {
+                return *xcc;
+            }
             #endif
+            return 1;
         }();
-        return xcdCount;
-    }
-
-    /**
-     * @brief Query how many XCCs the GPU comprises, via the KFD topology.
-     *
-     * @return Number of XCCs, or std::nullopt if the KFD does not report it
-     *         (e.g. on older CDNA generations).
-     */
-    inline std::optional<uint32_t> getNumXCCs() {
-        #ifdef __HIP_PLATFORM_AMD__
-        static const std::optional<uint32_t> xccCount = getNumXccFromKfd();
-        return xccCount;
-        #else
-        return 1u;
-        #endif
+        return dieCount;
     }
 
     /**
@@ -275,7 +266,7 @@ namespace util {
      * @brief Compute the number of compute units per die.
      */
     inline uint32_t getComputeUnitsPerDie() {
-        static uint32_t cusPerDie = getNumberOfComputeUnits() / getNumXCDs().value_or(1);
+        static uint32_t cusPerDie = getNumberOfComputeUnits() / getNumComputeDies();
         return cusPerDie;
     }
 

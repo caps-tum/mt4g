@@ -220,16 +220,8 @@ int main(int argc, char* argv[]) {
     };
 
     #ifdef __HIP_PLATFORM_AMD__
-    // XCD and XCC counts are only reported if the system provides them. If neither
-    // is available (e.g. older CDNA generations), the GPU is reported as one XCD.
-    std::optional<uint32_t> numXCDs = util::getNumXCDs();
-    const std::optional<uint32_t> numXCCs = util::getNumXCCs();
-    if (!numXCDs && !numXCCs) numXCDs = 1;
-    if (numXCDs) {
-        result["compute"]["numXCDs"] = *numXCDs;
-        result["compute"]["computeUnitsPerDie"] = util::getComputeUnitsPerDie();
-    }
-    if (numXCCs) result["compute"]["numXCCs"] = *numXCCs;
+    result["compute"]["numComputeDies"] = util::getNumComputeDies();
+    result["compute"]["computeUnitsPerDie"] = util::getComputeUnitsPerDie();
     #endif
 
     #ifdef __HIP_PLATFORM_AMD__
