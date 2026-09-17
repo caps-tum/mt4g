@@ -926,16 +926,15 @@ int main(int argc, char* argv[]) {
             }
 
             std::cout << "[Scalar L1] CU Sharing" << std::endl;
-            if (util::isCDNA3())
-            {
-                std::cout << "CU Sharing is currently not available on CDNA 3." << std::endl;
-            }
-            else
+            #ifdef MT4G_CDNA2_OR_OLDER
             {
                 auto sharedBetweenCUs = timed("amd_cuShareScalarL1", [&] { return benchmark::amd::measureCuShareScalarL1(scalarL1Size.size, scalarL1FetchGranularity.size); });
                 result["memory"]["scalarL1"]["sharedBetween"] = sharedBetweenCUs;
                 result["memory"]["scalarL1"]["uniqueAmount"] = sharedBetweenCUs.size();
             }
+            #else
+            std::cout << "CU Sharing is currently not available on CDNA 3 and newer." << std::endl;
+            #endif
         } else {
             std::cout << "Could not measure valid Scalar L1 Size or Fetch Granularity, skipping Scalar L1 Line Size, Miss Penalty, Bandwidth and CU Sharing benchmarks." << std::endl;
         }
