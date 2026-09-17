@@ -74,9 +74,9 @@ endif()
 find_package(hip CONFIG REQUIRED)
 
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/src/*.cpp")
-# Force all .cpp sources through the HIP compiler (clang++) instead of the
-# default CXX compiler (GCC), which does not understand --offload-arch / -x hip.
-set_source_files_properties(${SOURCES} PROPERTIES LANGUAGE HIP)
+if(GPU_TARGET_ARCH MATCHES "^gfx")
+    set_source_files_properties(${SOURCES} PROPERTIES LANGUAGE HIP)
+endif()
 
 add_executable(mt4g ${SOURCES})
 
