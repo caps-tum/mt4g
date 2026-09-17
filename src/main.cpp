@@ -130,8 +130,6 @@ int main(int argc, char* argv[]) {
                 {"maxThreadsPerMultiProcessor", deviceProperties.maxThreadsPerMultiProcessor},
                 {"maxBlocksPerMultiProcessor", deviceProperties.maxBlocksPerMultiProcessor},
                 #ifdef __HIP_PLATFORM_AMD__
-                {"numXCDs", util::getNumXCDs()},
-                {"computeUnitsPerDie", util::getComputeUnitsPerDie()},
                 {"numSIMDsPerCU", util::getSIMDsPerCU()},
                 //{"logicalCUIdToPhysical", util::getLogicalToPhysicalCUsLUT()} // Not reliable on CDNA 3
                 #endif
@@ -220,6 +218,11 @@ int main(int argc, char* argv[]) {
             },
         }
     };
+
+    #ifdef __HIP_PLATFORM_AMD__
+    result["compute"]["numComputeDies"] = util::getNumComputeDies();
+    result["compute"]["computeUnitsPerDie"] = util::getComputeUnitsPerDie();
+    #endif
 
     #ifdef __HIP_PLATFORM_AMD__
     auto l2Size = util::getL2SizeBytes();

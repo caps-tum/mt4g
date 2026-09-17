@@ -76,7 +76,7 @@ namespace benchmark {
         {
             util::hipDeviceReset();
 
-            const size_t arraySizeBytes = util::max(l2SizeBytes * (util::getNumXCDs() + 2), l3SizeBytes / 4);
+            const size_t arraySizeBytes = util::max(l2SizeBytes * (util::getNumComputeDies() + 2), l3SizeBytes / 4);
             uint32_t maxThreads = util::getMaxThreadsPerBlock();
             uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getMaxBlocksPerMultiProcessor();
             size_t maxReps = MAX_REPS / 4;
@@ -94,7 +94,7 @@ namespace benchmark {
         {
             util::hipDeviceReset();
 
-            size_t arraySizeBytes = util::max(l2SizeBytes * (util::getNumXCDs() + 2), l3SizeBytes / 4);
+            size_t arraySizeBytes = util::max(l2SizeBytes * (util::getNumComputeDies() + 2), l3SizeBytes / 4);
 
             uint32_t minThreads = util::getWarpSize();
             uint32_t maxThreads = util::getMaxThreadsPerBlock();

@@ -29,16 +29,13 @@ microarchitectures from Pascal onwards. Currently, we do not support AMD RDNA
 GPUs given our primary focus on HPC/AI systems. Tested microarchitectures
 include:
 
-| Vendor | Microarch. | GPUs |
-| -------- | ------ | ---------- |
-| AMD | CDNA | MI100 |
-| AMD | CDNA2 | MI210 |
-| AMD | CDNA3 | MI300X, MI300A |
-| NVIDIA | Pascal | P6000 | NVIDIA |
-| NVIDIA | Volta | V100 | NVIDIA |
-| NVIDIA | Turing | T1000, RTX2080 |
-| NVIDIA | Ampere | A100 | 
-| NVIDIA | Hopper | H100-80, H100-96 |
+| Vendor | Microarch. | GPUs |  | Vendor | Microarch. | GPUs |
+| -------- | ------ | ---------- | - | -------- | ------ | ---------- |
+| NVIDIA | Pascal | P6000 | |    AMD | CDNA | MI100 |
+| NVIDIA | Volta | V100 | |      AMD | CDNA2 | MI210 |
+| NVIDIA | Turing | T1000, RTX2080 | |    AMD | CDNA3 | MI300X, MI300A |
+| NVIDIA | Ampere | A100 | |              AMD | CDNA4 | MI350P |
+| NVIDIA | Hopper | H100-80, H100-96 | |
 
 ## Topological metrics
 
