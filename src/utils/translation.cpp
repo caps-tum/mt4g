@@ -50,7 +50,7 @@ namespace util {
     std::vector<uint32_t> getLogicalToPhysicalCUsLUT() {
         std::map<uint32_t, std::vector<uint32_t>> mappingsPerXCD;
 
-        for (uint32_t xcdId = 0; xcdId < util::getNumXCDs(); ++xcdId) {
+        for (uint32_t xcdId = 0; xcdId < util::getNumComputeDies(); ++xcdId) {
             uint32_t numCUs = 304;
 
             uint32_t *d_resultBuffer = util::allocateGPUMemory(numCUs); 
@@ -58,7 +58,7 @@ namespace util {
 
             for (uint32_t cuIdOnXCD = 0; cuIdOnXCD < numCUs; ++cuIdOnXCD) {
                 hipStream_t stream = util::createStreamForCU(cuIdOnXCD);
-                translationKernel<<<util::getNumXCDs() * 2, 1, 0, stream>>>(d_resultBuffer, cuIdOnXCD, cuIdOnXCD / 8);
+                translationKernel<<<util::getNumComputeDies() * 2, 1, 0, stream>>>(d_resultBuffer, cuIdOnXCD, cuIdOnXCD / 8);
 
                 util::hipCheck(hipStreamSynchronize(stream));
                 util::hipCheck(hipStreamDestroy(stream));

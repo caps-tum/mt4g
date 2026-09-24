@@ -98,6 +98,15 @@ elseif(GPU_TARGET_ARCH MATCHES "^gfx")
         hsa-runtime64::hsa-runtime64
         Threads::Threads
     )
+
+    # CMake omits the compiler's implicit link directories (which include the ROCm lib dir) from automatic rpaths, so set the ROCm lib dir explicitly.
+    if(NOT CMAKE_HIP_COMPILER_ROCM_ROOT)
+        message(FATAL_ERROR "CMAKE_HIP_COMPILER_ROCM_ROOT is not set; cannot determine the ROCm library directory")
+    endif()
+    set_target_properties(mt4g PROPERTIES
+        BUILD_RPATH   "${CMAKE_HIP_COMPILER_ROCM_ROOT}/lib"
+        INSTALL_RPATH "${CMAKE_HIP_COMPILER_ROCM_ROOT}/lib"
+    )
 endif()
 
 install(TARGETS mt4g DESTINATION bin)
