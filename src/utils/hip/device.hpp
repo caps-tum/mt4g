@@ -22,14 +22,6 @@ namespace util {
         return false;
     }
 
-    inline bool isCDNA3()
-    {
-        #if defined(__gfx942__) || defined(__gfx941__) || defined(__gfx940__)
-        return true;
-        #endif
-        return false;
-    }
-
     /**
      * @brief Check whether the build targets the NVIDIA HIP backend.
      */
@@ -233,23 +225,33 @@ namespace util {
     }
 
     /**
-     * @brief Query how many XCDs (dies) the GPU comprises.
+     * @brief Query the number of physical compute dies of the GPU.
+     *
+     * NVIDIA GPUs have one die. On AMD, the value is taken from the first
+     * source that reports it:
+     *   1. ROCm SMI XCD counter (available on older CDNA generations).
+     *   2. KFD topology num_xcc (available on CDNA-3 and newer, where it
+     *      matches the number of physical dies).
+     * If neither source reports a value, the GPU is assumed to have one die.
      */
-    inline uint32_t getNumXCDs() {
-        static uint32_t xcdCount = [](){
-            #ifdef __HIP_PLATFORM_NVIDIA__
-            return 1;
-            #endif
+    inline uint32_t getNumComputeDies() {
+        static const uint32_t dieCount = []() -> uint32_t {
             #ifdef __HIP_PLATFORM_AMD__
-            util::rocmCheck(rsmi_init(0));
-            int device;
-            util::hipCheck(hipGetDevice(&device));
-            uint16_t xcdCounter;
-            util::rocmCheck(rsmi_dev_metrics_xcd_counter_get(device, &xcdCounter));
-            return static_cast<uint32_t>(xcdCounter);
+            if (rsmi_init(0) == RSMI_STATUS_SUCCESS) {
+                int device;
+                util::hipCheck(hipGetDevice(&device));
+                uint16_t xcdCounter = 0;
+                if (rsmi_dev_metrics_xcd_counter_get(device, &xcdCounter) == RSMI_STATUS_SUCCESS && xcdCounter > 0) {
+                    return static_cast<uint32_t>(xcdCounter);
+                }
+            }
+            if (const auto xcc = getNumXccFromKfd()) {
+                return *xcc;
+            }
             #endif
+            return 1;
         }();
-        return xcdCount;
+        return dieCount;
     }
 
     /**
@@ -264,7 +266,7 @@ namespace util {
      * @brief Compute the number of compute units per die.
      */
     inline uint32_t getComputeUnitsPerDie() {
-        static uint32_t cusPerDie = getNumberOfComputeUnits() / getNumXCDs();
+        static uint32_t cusPerDie = getNumberOfComputeUnits() / getNumComputeDies();
         return cusPerDie;
     }
 

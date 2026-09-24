@@ -74,14 +74,11 @@ endif()
 find_package(hip CONFIG REQUIRED)
 
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/src/*.cpp")
-# Force all .cpp sources through the HIP compiler (clang++) instead of the
-# default CXX compiler (GCC), which does not understand --offload-arch / -x hip.
-set_source_files_properties(${SOURCES} PROPERTIES LANGUAGE HIP)
 
 add_executable(mt4g ${SOURCES})
 
-target_include_directories(mt4g PRIVATE ${CMAKE_SOURCE_DIR}/src ${LIBDRM_INCLUDE_DIRS})
-set_target_properties(mt4g PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON HIP_STANDARD 20 HIP_STANDARD_REQUIRED ON)
+target_include_directories(mt4g PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_compile_features(mt4g PRIVATE cxx_std_20)
 target_link_libraries(mt4g PRIVATE
     nlohmann_json::nlohmann_json
     cxxopts::cxxopts
@@ -100,6 +97,15 @@ elseif(GPU_TARGET_ARCH MATCHES "^gfx")
         ${ROCM_SMI_LIBRARY}
         hsa-runtime64::hsa-runtime64
         Threads::Threads
+    )
+
+    # CMake omits the compiler's implicit link directories (which include the ROCm lib dir) from automatic rpaths, so set the ROCm lib dir explicitly.
+    if(NOT CMAKE_HIP_COMPILER_ROCM_ROOT)
+        message(FATAL_ERROR "CMAKE_HIP_COMPILER_ROCM_ROOT is not set; cannot determine the ROCm library directory")
+    endif()
+    set_target_properties(mt4g PROPERTIES
+        BUILD_RPATH   "${CMAKE_HIP_COMPILER_ROCM_ROOT}/lib"
+        INSTALL_RPATH "${CMAKE_HIP_COMPILER_ROCM_ROOT}/lib"
     )
 endif()
 

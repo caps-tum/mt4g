@@ -54,7 +54,7 @@ __global__ void l2LineSizeKernel(uint32_t *pChaseArray, uint32_t *timingResults,
             : "+s"(start) //uint64_t
             , "+v"(index) //uint32_t
             , "+s"(end) //uint64_t
-            : "s"(addr) //uint32_t*
+            : "v"(addr) //uint32_t*
             : "memory", "scc"
         );
         #endif 
