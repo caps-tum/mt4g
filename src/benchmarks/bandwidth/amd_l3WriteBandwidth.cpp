@@ -38,9 +38,9 @@ __global__ void l3WriteBandwidthKernel(uint32v4* __restrict__ dst, size_t n, siz
     }
 }
 
-static std::tuple<double, double> l3WriteBandwidthLauncher(size_t arraySizeBytes, uint32_t numBlocks, uint32_t numThreads, size_t reps) 
+static std::tuple<double, double> l3WriteBandwidthLauncher(size_t arraySizeBytes, uint32_t numBlocks, uint32_t numThreads, size_t reps, util::AllocatorType allocType = util::AllocatorType::HipMalloc)
 {
-    uint32v4* d_dstArr = util::allocateGPUMemory<uint32v4>(arraySizeBytes / sizeof(uint32v4));
+    uint32v4* d_dstArr = util::allocateMemory<uint32v4>(arraySizeBytes / sizeof(uint32v4), allocType);
 
     // warm up
     l3WriteBandwidthKernel<<<numBlocks, numThreads>>>(d_dstArr, arraySizeBytes / sizeof(uint32v4), WARMUP_REPS);
@@ -59,7 +59,7 @@ static std::tuple<double, double> l3WriteBandwidthLauncher(size_t arraySizeBytes
     util::hipCheck(hipEventDestroy(start));
     util::hipCheck(hipEventDestroy(end));
 
-    util::hipCheck(hipFree(d_dstArr));
+    util::freeMemory(d_dstArr, allocType);
 
     double dataGiB = (double) arraySizeBytes * reps / (1 * GiB); // Convert to GiB
     double timeS = elapsedMs / MS_PER_SECOND;
@@ -73,9 +73,9 @@ namespace benchmark {
         {
             util::hipDeviceReset();
 
-            const size_t arraySizeBytes = util::max(l2SizeBytes * (util::getNumComputeDies() + 2), l3SizeBytes / 4);
-            uint32_t maxThreads = util::getMaxThreadsPerBlock();
-            uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getMaxBlocksPerMultiProcessor();
+            const size_t arraySizeBytes = util::max(l2SizeBytes * (util::getNumXCDs() + 2), l3SizeBytes / 4);
+            uint32_t maxThreads = util::getDeviceProperties().maxThreadsPerBlock;
+            uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getDeviceProperties().maxBlocksPerMultiProcessor;
             size_t maxReps = MAX_REPS / 4;
 
             std::vector<double> results(ROUNDS);
@@ -87,17 +87,17 @@ namespace benchmark {
             return util::average(results);
         }
 
-        CacheBandwidthResult measureL3WriteBandwidthSweep(size_t l2SizeBytes, size_t l3SizeBytes) 
+        CacheBandwidthResult measureL3WriteBandwidthSweep(size_t l2SizeBytes, size_t l3SizeBytes, util::AllocatorType allocType)
         {
             util::hipDeviceReset();
 
-            size_t arraySizeBytes = util::max(l2SizeBytes * (util::getNumComputeDies() + 2), l3SizeBytes / 4);
+            size_t arraySizeBytes = util::max(l2SizeBytes * (util::getNumXCDs() + 2), l3SizeBytes / 4);
 
-            uint32_t minThreads = util::getWarpSize();
-            uint32_t maxThreads = util::getMaxThreadsPerBlock();
+            uint32_t minThreads = util::getDeviceProperties().warpSize;
+            uint32_t maxThreads = util::getDeviceProperties().maxThreadsPerBlock;
 
             uint32_t minBlocks = util::getNumberOfComputeUnits();
-            uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getMaxBlocksPerMultiProcessor();
+            uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getDeviceProperties().maxBlocksPerMultiProcessor;
 
             size_t minReps = MIN_REPS;
             size_t maxReps = MAX_REPS;
@@ -155,7 +155,7 @@ namespace benchmark {
                     {
                         const size_t reps = result.repsTested[ri];
 
-                        auto [timeS, bandwidth] = l3WriteBandwidthLauncher(arraySizeBytes, numBlocks, numThreads, reps);
+                        auto [timeS, bandwidth] = l3WriteBandwidthLauncher(arraySizeBytes, numBlocks, numThreads, reps, allocType);
 
                         result.bandwidth3D[bi][ti][ri] = bandwidth;
 

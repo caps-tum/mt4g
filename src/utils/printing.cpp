@@ -29,6 +29,7 @@ namespace util {
         opts.runOptimalSearch = false;
         opts.sharedStatic = false;
         opts.timing = false;
+        opts.allocType = util::AllocatorType::HipMalloc;
 
         opts.runL3 = false;
         opts.runL2 = false;
@@ -73,6 +74,8 @@ namespace util {
                 cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
             ("t,timing", "Measure and print wall-clock time of the whole run and each individual benchmark",
                 cxxopts::value<bool>()->default_value("false")->implicit_value("true"))
+            ("allocator", "Memory allocator for L3/main-memory latency and bandwidth sweeps: hipmalloc | hipmallocmanaged | hiphostmalloc | malloc (default: hipmalloc)",
+                cxxopts::value<std::string>()->default_value("hipmalloc"))
 
             // ------- Benchmark group toggles -------
             ("l2", "Run L2 benchmarks",
@@ -148,6 +151,22 @@ namespace util {
                         [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
             return s;
         };
+
+        const std::unordered_map<std::string, util::AllocatorType> allocator_map{
+            {"hipmalloc",        util::AllocatorType::HipMalloc},
+            {"hipmallocmanaged", util::AllocatorType::HipMallocManaged},
+            {"hiphostmalloc",    util::AllocatorType::HipHostMalloc},
+            {"malloc",           util::AllocatorType::Malloc}
+        };
+
+        const auto allocator = to_lower(result["allocator"].as<std::string>());
+        if (auto it = allocator_map.find(allocator); it != allocator_map.end()) {
+            opts.allocType = it->second;
+        } else {
+            std::cerr << "Invalid --allocator value: '" << allocator
+                    << "'. Allowed: hipmalloc | hipmallocmanaged | hiphostmalloc | malloc\n";
+            std::exit(EXIT_FAILURE);
+        }
 
         const std::unordered_map<std::string, hipFuncCache_t> cache_map{
             {"l1",     hipFuncCachePreferL1},

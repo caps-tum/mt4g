@@ -53,7 +53,7 @@ double mainMemoryReadBandwidthLauncher(size_t arraySizeBytes) {
     util::hipDeviceReset(); 
 
     uint32_t maxThreadsPerBlock = util::min(util::getMaxThreadsPerBlock(), util::getWarpSize() * util::getSIMDsPerCU()); 
-    uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getMaxBlocksPerMultiProcessor();
+    uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getDeviceProperties().maxBlocksPerMultiProcessor;
 
     // Initialize device Arrays
     // sizeof(uint32v4) = 16 bytes -> allows us to load 4 integers with one instruction -> probability 
@@ -115,8 +115,8 @@ __global__ void mainMemoryReadBandwidthSweepKernel(uint32v4* __restrict__ dst, u
     dst[tid % blockDim.x] = dummy; // prevent dead code elimination
 }
 
-static std::tuple<double, double> mainMemoryReadBandwidthSweepLauncher(size_t arraySizeBytes, uint32_t numBlocks, uint32_t numThreads, size_t reps) {
-    uint32v4* d_srcArr = util::allocateGPUMemory<uint32v4>(arraySizeBytes / sizeof(uint32v4));
+static std::tuple<double, double> mainMemoryReadBandwidthSweepLauncher(size_t arraySizeBytes, uint32_t numBlocks, uint32_t numThreads, size_t reps, util::AllocatorType allocType) {
+    uint32v4* d_srcArr = util::allocateMemory<uint32v4>(arraySizeBytes / sizeof(uint32v4), allocType);
     uint32v4* d_dstArr = util::allocateGPUMemory<uint32v4>(numThreads);
 
     mainMemoryReadBandwidthSweepKernel<<<numBlocks, numThreads>>>(d_dstArr, d_srcArr, arraySizeBytes / sizeof(uint32v4), WARMUP_REPS);
@@ -134,7 +134,7 @@ static std::tuple<double, double> mainMemoryReadBandwidthSweepLauncher(size_t ar
 
     util::hipCheck(hipEventDestroy(start));
     util::hipCheck(hipEventDestroy(end));
-    util::hipCheck(hipFree(d_srcArr));
+    util::freeMemory(d_srcArr, allocType);
     util::hipCheck(hipFree(d_dstArr));
 
     const double dataGiB = (double) arraySizeBytes * reps / (1 * GiB);
@@ -156,7 +156,7 @@ namespace benchmark {
         return testSizeGiB / util::average(results);
     }
 
-    CacheBandwidthResult measureMainMemoryReadBandwidthSweep(size_t mainMemorySizeBytes) {
+    CacheBandwidthResult measureMainMemoryReadBandwidthSweep(size_t mainMemorySizeBytes, util::AllocatorType allocType) {
         util::hipDeviceReset();
 
         // Main memory bandwidth must be measured with a SINGLE streaming pass over a
@@ -165,11 +165,11 @@ namespace benchmark {
         // over-reports bandwidth, so main memory uses one pass over a ~1 GiB set.
         size_t arraySizeBytes = util::min(mainMemorySizeBytes / SIZE_DOWN, static_cast<size_t>(1) * 1024 * 1024 * 1024);
 
-        uint32_t minThreads = util::getWarpSize();
-        uint32_t maxThreads = util::getMaxThreadsPerBlock();
+        uint32_t minThreads = util::getDeviceProperties().warpSize;
+        uint32_t maxThreads = util::getDeviceProperties().maxThreadsPerBlock;
 
         uint32_t minBlocks = util::getNumberOfComputeUnits();
-        uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getMaxBlocksPerMultiProcessor();
+        uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getDeviceProperties().maxBlocksPerMultiProcessor;
 
         CacheBandwidthResult result{};
         result.measuredBandwidth = 0.0;
@@ -215,7 +215,7 @@ namespace benchmark {
             {
                 const uint32_t numThreads = result.threadsTested[ti];
 
-                auto [timeS, bandwidth] = mainMemoryReadBandwidthSweepLauncher(arraySizeBytes, numBlocks, numThreads, 1);
+                auto [timeS, bandwidth] = mainMemoryReadBandwidthSweepLauncher(arraySizeBytes, numBlocks, numThreads, 1, allocType);
 
                 result.bandwidth3D[bi][ti][0] = bandwidth;
 

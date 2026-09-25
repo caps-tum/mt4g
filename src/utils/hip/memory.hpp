@@ -9,7 +9,7 @@
 
 namespace util {
     /**
-     * @brief Allocator selector for main-memory and L3 bandwidth sweeps.
+     * @brief Allocator selector for L3/main-memory latency and bandwidth sweeps.
      */
     enum class AllocatorType {
         HipMalloc,         // hipMalloc — baseline device memory
@@ -142,3 +142,4 @@ namespace util {
     }
 
 } // namespace util
+
