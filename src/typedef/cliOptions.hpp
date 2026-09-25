@@ -4,6 +4,8 @@
 #include <filesystem>
 #include <string>
 
+#include "utils/hip/memory.hpp"
+
 struct CLIOptions {
     std::string fileName;             // Name of output files
     std::filesystem::path location;   // Location of output files
@@ -17,6 +19,7 @@ struct CLIOptions {
     bool runOptimalSearch;            // Run linear search of optimal configuration for bandwidth benchmarks
     bool sharedStatic;                // Run shared memory bandwidth benchmarks with static allocated memory
     bool timing;                      // Measure and print wall-clock time of the run and each benchmark group
+    util::AllocatorType allocType;    // Memory allocator for L3/main-memory latency and bandwidth sweeps
     
     // Benchmark groups
     bool runL3;

@@ -66,6 +66,12 @@ int main(int argc, char* argv[]) {
     util::hipCheck(hipSetDevice(opts.deviceId));
     auto deviceProperties = util::getDeviceProperties();
 
+    const char* allocatorName =
+        opts.allocType == util::AllocatorType::HipMalloc        ? "hipmalloc" :
+        opts.allocType == util::AllocatorType::HipMallocManaged ? "hipmallocmanaged" :
+        opts.allocType == util::AllocatorType::HipHostMalloc    ? "hiphostmalloc" :
+                                                                  "malloc";
+
     std::string fancyName = deviceProperties.name;
 
     std::cout << "[mt4g] Starting Benchmarks on " << fancyName << std::endl;
@@ -490,8 +496,9 @@ int main(int argc, char* argv[]) {
             };
 
             std::cout << "[L3] Latency" << std::endl;
-            CacheLatencyResult l3Latency = timed("amd_l3Latency", [&] { return benchmark::amd::measureL3Latency(deviceProperties.l2CacheSize, 128); });
+            CacheLatencyResult l3Latency = timed("amd_l3Latency", [&] { return benchmark::amd::measureL3Latency(deviceProperties.l2CacheSize, 128, opts.allocType); });
             result["memory"]["l3"]["latency"] = l3Latency;
+            result["memory"]["l3"]["latency"]["allocator"] = allocatorName;
 
             /* Not working yet
             std::cout << "[L3] Fetch Granularity" << std::endl;
@@ -508,12 +515,14 @@ int main(int argc, char* argv[]) {
 
             if (opts.runOptimalSearch)
             {
+                result["memory"]["l3"]["bandwidthAllocator"] = allocatorName;
+
                 std::cout << "[L3] Read Bandwidth with optimal search" << std::endl;
-                CacheBandwidthResult l3ReadBandwidth = timed("amd_l3ReadBandwidth", [&] { return benchmark::amd::measureL3ReadBandwidthSweep(deviceProperties.l2CacheSize, l3Size.value()); });
+                CacheBandwidthResult l3ReadBandwidth = timed("amd_l3ReadBandwidth", [&] { return benchmark::amd::measureL3ReadBandwidthSweep(deviceProperties.l2CacheSize, l3Size.value(), opts.allocType); });
                 result["memory"]["l3"]["readBandwidth"] = l3ReadBandwidth;
 
                 std::cout << "[L3] Write Bandwidth with optimal search" << std::endl;
-                CacheBandwidthResult l3WriteBandwidth = timed("amd_l3WriteBandwidth", [&] { return benchmark::amd::measureL3WriteBandwidthSweep(deviceProperties.l2CacheSize, l3Size.value()); });
+                CacheBandwidthResult l3WriteBandwidth = timed("amd_l3WriteBandwidth", [&] { return benchmark::amd::measureL3WriteBandwidthSweep(deviceProperties.l2CacheSize, l3Size.value(), opts.allocType); });
                 result["memory"]["l3"]["writeBandwidth"] = l3WriteBandwidth;
 
                 if (opts.rawData || opts.graphs)
@@ -1038,20 +1047,23 @@ int main(int argc, char* argv[]) {
         std::cout << "[Main Memory] Starting Benchmarks" << std::endl;
 
         std::cout << "[Main Memory] Latency" << std::endl;
-        CacheLatencyResult mainMemLatency = timed("mainMemoryLatency", [&] { return benchmark::measureMainMemoryLatency(); });
+        CacheLatencyResult mainMemLatency = timed("mainMemoryLatency", [&] { return benchmark::measureMainMemoryLatency(opts.allocType); });
         result["memory"]["main"]["latency"] = mainMemLatency;
+        result["memory"]["main"]["latency"]["allocator"] = allocatorName;
         if (opts.rawData) {
             util::writeVectorToFile(mainMemLatency.timings, (graphDir / (fancyFileName + "__Main_Memory_Latency.txt")).string());
         }
 
         if (opts.runOptimalSearch)
         {
+            result["memory"]["main"]["bandwidthAllocator"] = allocatorName;
+
             std::cout << "[Main Memory] Read Bandwidth with optimal search" << std::endl;
-            CacheBandwidthResult mainMemReadBandwidth = timed("mainMemoryReadBandwidth", [&] { return benchmark::measureMainMemoryReadBandwidthSweep(deviceProperties.totalGlobalMem); });
+            CacheBandwidthResult mainMemReadBandwidth = timed("mainMemoryReadBandwidth", [&] { return benchmark::measureMainMemoryReadBandwidthSweep(deviceProperties.totalGlobalMem, opts.allocType); });
             result["memory"]["main"]["readBandwidth"] = mainMemReadBandwidth;
 
             std::cout << "[Main Memory] Write Bandwidth with optimal search" << std::endl;
-            CacheBandwidthResult mainMemWriteBandwidth = timed("mainMemoryWriteBandwidth", [&] { return benchmark::measureMainMemoryWriteBandwidthSweep(deviceProperties.totalGlobalMem); });
+            CacheBandwidthResult mainMemWriteBandwidth = timed("mainMemoryWriteBandwidth", [&] { return benchmark::measureMainMemoryWriteBandwidthSweep(deviceProperties.totalGlobalMem, opts.allocType); });
             result["memory"]["main"]["writeBandwidth"] = mainMemWriteBandwidth;
 
             if (opts.rawData || opts.graphs)

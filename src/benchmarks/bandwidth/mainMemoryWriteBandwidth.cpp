@@ -48,7 +48,7 @@ double mainMemoryWriteBandwidthLauncher(size_t arraySizeBytes) {
     util::hipDeviceReset(); 
 
     uint32_t maxThreadsPerBlock = util::min(util::getMaxThreadsPerBlock(), util::getWarpSize() * util::getSIMDsPerCU()); 
-    uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getMaxBlocksPerMultiProcessor();
+    uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getDeviceProperties().maxBlocksPerMultiProcessor;
 
     uint32v4 *d_dstArr = util::allocateGPUMemory<uint32v4>(arraySizeBytes / sizeof(uint32v4));
     
@@ -102,8 +102,8 @@ __global__ void mainMemoryWriteBandwidthSweepKernel(uint32v4* __restrict__ dst, 
     }
 }
 
-static std::tuple<double, double> mainMemoryWriteBandwidthSweepLauncher(size_t arraySizeBytes, uint32_t numBlocks, uint32_t numThreads, size_t reps) {
-    uint32v4* d_dstArr = util::allocateGPUMemory<uint32v4>(arraySizeBytes / sizeof(uint32v4));
+static std::tuple<double, double> mainMemoryWriteBandwidthSweepLauncher(size_t arraySizeBytes, uint32_t numBlocks, uint32_t numThreads, size_t reps, util::AllocatorType allocType) {
+    uint32v4* d_dstArr = util::allocateMemory<uint32v4>(arraySizeBytes / sizeof(uint32v4), allocType);
 
     mainMemoryWriteBandwidthSweepKernel<<<numBlocks, numThreads>>>(d_dstArr, arraySizeBytes / sizeof(uint32v4), WARMUP_REPS);
 
@@ -120,7 +120,7 @@ static std::tuple<double, double> mainMemoryWriteBandwidthSweepLauncher(size_t a
 
     util::hipCheck(hipEventDestroy(start));
     util::hipCheck(hipEventDestroy(end));
-    util::hipCheck(hipFree(d_dstArr));
+    util::freeMemory(d_dstArr, allocType);
 
     const double dataGiB = (double) arraySizeBytes * reps / (1 * GiB);
     const double timeS = elapsedMs / MS_PER_SECOND;
@@ -141,7 +141,7 @@ namespace benchmark {
         return testSizeGiB / util::average(results);
     }
 
-    CacheBandwidthResult measureMainMemoryWriteBandwidthSweep(size_t mainMemorySizeBytes) {
+    CacheBandwidthResult measureMainMemoryWriteBandwidthSweep(size_t mainMemorySizeBytes, util::AllocatorType allocType) {
         util::hipDeviceReset();
 
         // Main memory bandwidth must be measured with a SINGLE streaming pass over a
@@ -150,11 +150,11 @@ namespace benchmark {
         // over-reports bandwidth, so main memory uses one pass over a ~1 GiB set.
         size_t arraySizeBytes = util::min(mainMemorySizeBytes / SIZE_DOWN, static_cast<size_t>(1) * 1024 * 1024 * 1024);
 
-        uint32_t minThreads = util::getWarpSize();
-        uint32_t maxThreads = util::getMaxThreadsPerBlock();
+        uint32_t minThreads = util::getDeviceProperties().warpSize;
+        uint32_t maxThreads = util::getDeviceProperties().maxThreadsPerBlock;
 
         uint32_t minBlocks = util::getNumberOfComputeUnits();
-        uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getMaxBlocksPerMultiProcessor();
+        uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getDeviceProperties().maxBlocksPerMultiProcessor;
 
         CacheBandwidthResult result{};
         result.measuredBandwidth = 0.0;
@@ -200,7 +200,7 @@ namespace benchmark {
             {
                 const uint32_t numThreads = result.threadsTested[ti];
 
-                auto [timeS, bandwidth] = mainMemoryWriteBandwidthSweepLauncher(arraySizeBytes, numBlocks, numThreads, 1);
+                auto [timeS, bandwidth] = mainMemoryWriteBandwidthSweepLauncher(arraySizeBytes, numBlocks, numThreads, 1, allocType);
 
                 result.bandwidth3D[bi][ti][0] = bandwidth;
 
