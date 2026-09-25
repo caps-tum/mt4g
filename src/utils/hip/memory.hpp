@@ -1,11 +1,74 @@
 #pragma once
 
 #include <vector>
+#include <cstdlib>
+#include <new>
 #include <hip/hip_runtime.h>
 
 #include "utils/errorHandling.hpp"
 
 namespace util {
+    /**
+     * @brief Allocator selector for main-memory and L3 bandwidth sweeps.
+     */
+    enum class AllocatorType {
+        HipMalloc,         // hipMalloc — baseline device memory
+        HipMallocManaged,  // hipMallocManaged — demand-paged unified memory
+        HipHostMalloc,     // hipHostMalloc — pinned host memory accessible from GPU
+        Malloc             // ::malloc — CPU heap accessible from GPU via HMM on MI300A;
+                           // requires XNACK=1
+    };
+
+    /**
+     * @brief Allocate uninitialised memory using the selected allocator.
+     */
+    template <typename T = uint32_t> T* allocateMemory(size_t numElems, AllocatorType type) {
+        T* ptr = nullptr;
+        size_t bytes = numElems * sizeof(T);
+
+        switch (type) {
+            case AllocatorType::HipMalloc:
+                util::hipCheck(hipMalloc(&ptr, bytes));
+                break;
+            case AllocatorType::HipMallocManaged:
+                util::hipCheck(hipMallocManaged(&ptr, bytes));
+                break;
+            case AllocatorType::HipHostMalloc:
+#ifdef __HIP_PLATFORM_AMD__
+                util::hipCheck(hipHostMalloc(&ptr, bytes, hipHostMallocNonCoherent));
+#else
+                util::hipCheck(hipHostMalloc(&ptr, bytes, hipHostMallocDefault));
+#endif
+                break;
+            case AllocatorType::Malloc:
+                ptr = static_cast<T*>(::malloc(bytes));
+                if (!ptr) throw std::bad_alloc();
+                break;
+        }
+
+        return ptr;
+    }
+
+    /**
+     * @brief Free memory using the matching allocator.
+     */
+    inline void freeMemory(void* ptr, AllocatorType type) {
+        if (!ptr) return;
+
+        switch (type) {
+            case AllocatorType::HipMalloc:
+            case AllocatorType::HipMallocManaged:
+                util::hipCheck(hipFree(ptr));
+                break;
+            case AllocatorType::HipHostMalloc:
+                util::hipCheck(hipHostFree(ptr));
+                break;
+            case AllocatorType::Malloc:
+                ::free(ptr);
+                break;
+        }
+    }
+
     /**
      * @brief Create a texture object wrapping linear device memory.
      */
@@ -79,4 +142,3 @@ namespace util {
     }
 
 } // namespace util
-
