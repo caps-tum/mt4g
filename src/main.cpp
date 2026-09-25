@@ -136,8 +136,6 @@ int main(int argc, char* argv[]) {
                 {"maxThreadsPerMultiProcessor", deviceProperties.maxThreadsPerMultiProcessor},
                 {"maxBlocksPerMultiProcessor", deviceProperties.maxBlocksPerMultiProcessor},
                 #ifdef __HIP_PLATFORM_AMD__
-                {"numXCDs", util::getNumXCDs()},
-                {"computeUnitsPerDie", util::getComputeUnitsPerDie()},
                 {"numSIMDsPerCU", util::getSIMDsPerCU()},
                 //{"logicalCUIdToPhysical", util::getLogicalToPhysicalCUsLUT()} // Not reliable on CDNA 3
                 #endif
@@ -226,6 +224,11 @@ int main(int argc, char* argv[]) {
             },
         }
     };
+
+    #ifdef __HIP_PLATFORM_AMD__
+    result["compute"]["numComputeDies"] = util::getNumComputeDies();
+    result["compute"]["computeUnitsPerDie"] = util::getComputeUnitsPerDie();
+    #endif
 
     #ifdef __HIP_PLATFORM_AMD__
     auto l2Size = util::getL2SizeBytes();
@@ -935,16 +938,15 @@ int main(int argc, char* argv[]) {
             }
 
             std::cout << "[Scalar L1] CU Sharing" << std::endl;
-            if (util::isCDNA3())
-            {
-                std::cout << "CU Sharing is currently not available on CDNA 3." << std::endl;
-            }
-            else
+            #ifdef MT4G_CDNA2_OR_OLDER
             {
                 auto sharedBetweenCUs = timed("amd_cuShareScalarL1", [&] { return benchmark::amd::measureCuShareScalarL1(scalarL1Size.size, scalarL1FetchGranularity.size); });
                 result["memory"]["scalarL1"]["sharedBetween"] = sharedBetweenCUs;
                 result["memory"]["scalarL1"]["uniqueAmount"] = sharedBetweenCUs.size();
             }
+            #else
+            std::cout << "CU Sharing is currently not available on CDNA 3 and newer." << std::endl;
+            #endif
         } else {
             std::cout << "Could not measure valid Scalar L1 Size or Fetch Granularity, skipping Scalar L1 Line Size, Miss Penalty, Bandwidth and CU Sharing benchmarks." << std::endl;
         }
