@@ -12,7 +12,6 @@
 static constexpr auto WARMUP_REPS = 512;
 
 
-static constexpr auto ROUNDS = DEFAULT_ROUNDS;// rounds
 
 static constexpr auto MS_PER_SECOND = 1000.0;// ms
 
@@ -96,24 +95,6 @@ static std::tuple<double, double> l2ReadBandwidthLauncher(size_t arraySizeBytes,
 }
 
 namespace benchmark {
-    double measureL2ReadBandwidth(size_t l2SizeBytes)
-    {
-        util::hipDeviceReset();
-
-        const size_t arraySizeBytes = l2SizeBytes * 0.8; // 80% L2 size, L1 is bypassed
-        uint32_t maxThreads = util::getMaxThreadsPerBlock();
-        uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getMaxBlocksPerMultiProcessor();
-        size_t maxReps = MAX_REPS / 4;
-
-        std::vector<double> results(ROUNDS);
-        for (uint32_t i = 0; i < ROUNDS; ++i) 
-        {
-            results[i] = std::get<1>(l2ReadBandwidthLauncher(arraySizeBytes, maxBlocks, maxThreads, maxReps));
-        }
-
-        return util::average(results);
-    }
-
     CacheBandwidthResult measureL2ReadBandwidthSweep(size_t l2SizeBytes) 
     {
         util::hipDeviceReset();

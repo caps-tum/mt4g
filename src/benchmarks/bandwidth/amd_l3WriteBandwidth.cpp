@@ -11,7 +11,6 @@ static constexpr auto WARMUP_REPS = 512;
 
 
 static constexpr auto MS_PER_SECOND = 1000.0; // ms
-static constexpr auto ROUNDS = DEFAULT_ROUNDS; // rounds
 
 __global__ void l3WriteBandwidthKernel(uint32v4* __restrict__ dst, size_t n, size_t reps) 
 {
@@ -69,24 +68,6 @@ static std::tuple<double, double> l3WriteBandwidthLauncher(size_t arraySizeBytes
 
 namespace benchmark {
     namespace amd {
-        double measureL3WriteBandwidth(size_t l2SizeBytes, size_t l3SizeBytes)
-        {
-            util::hipDeviceReset();
-
-            const size_t arraySizeBytes = util::max(l2SizeBytes * (util::getNumComputeDies() + 2), l3SizeBytes / 4);
-            uint32_t maxThreads = util::getMaxThreadsPerBlock();
-            uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getMaxBlocksPerMultiProcessor();
-            size_t maxReps = MAX_REPS / 4;
-
-            std::vector<double> results(ROUNDS);
-            for (uint32_t i = 0; i < ROUNDS; ++i) 
-            {
-                results[i] = std::get<1>(l3WriteBandwidthLauncher(arraySizeBytes, maxBlocks, maxThreads, maxReps));
-            }
-
-            return util::average(results);
-        }
-
         CacheBandwidthResult measureL3WriteBandwidthSweep(size_t l2SizeBytes, size_t l3SizeBytes) 
         {
             util::hipDeviceReset();
