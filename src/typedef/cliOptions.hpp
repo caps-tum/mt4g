@@ -14,7 +14,6 @@ struct CLIOptions {
     bool useStdout;                   // Dump final JSON result to stdout
     bool randomize;                   // Randomize P-Chase arrays if true
     bool runSilently;                 // Do not print progress information if true
-    bool runOptimalSearch;            // Run linear search of optimal configuration for bandwidth benchmarks
     bool sharedStatic;                // Run shared memory bandwidth benchmarks with static allocated memory
     bool timing;                      // Measure and print wall-clock time of the run and each benchmark group
     

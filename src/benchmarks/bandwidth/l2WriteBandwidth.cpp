@@ -12,7 +12,6 @@ static constexpr auto WARMUP_REPS = 512;
 
 
 static constexpr auto MS_PER_SECOND = 1000.0;// ms
-static constexpr auto ROUNDS = DEFAULT_ROUNDS;// rounds
 
 __global__ void l2WriteBandwidthKernel(uint32v4* __restrict__ dst, size_t n, size_t reps) {
     uint32_t tid = static_cast<uint32_t>(blockIdx.x * blockDim.x + threadIdx.x);
@@ -82,24 +81,6 @@ static std::tuple<double, double> l2WriteBandwidthLauncher(size_t arraySizeBytes
 }
 
 namespace benchmark {
-    double measureL2WriteBandwidth(size_t l2SizeBytes)
-    {
-        util::hipDeviceReset();
-
-        const size_t arraySizeBytes = l2SizeBytes * 0.8; // 80% L2 size, L1 is bypassed
-        uint32_t maxThreads = util::getMaxThreadsPerBlock();
-        uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getMaxBlocksPerMultiProcessor();
-        size_t maxReps = MAX_REPS / 4;
-
-        std::vector<double> results(ROUNDS);
-        for (uint32_t i = 0; i < ROUNDS; ++i) 
-        {
-            results[i] = std::get<1>(l2WriteBandwidthLauncher(arraySizeBytes, maxBlocks, maxThreads, maxReps));
-        }
-
-        return util::average(results);
-    }
-
     CacheBandwidthResult measureL2WriteBandwidthSweep(size_t l2SizeBytes) 
     {
         util::hipDeviceReset();

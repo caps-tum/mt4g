@@ -7,7 +7,6 @@
 static constexpr auto WARMUP_REPS = 128;
 
 
-static constexpr auto ROUNDS = DEFAULT_ROUNDS;// rounds
 
 __global__ void sL1WriteBandwidthKernel(uint32v4* __restrict__ dst, uint64_t* __restrict__ timings, uint32_t waveSize, size_t elementsPerWave, size_t reps) 
 {
@@ -157,21 +156,6 @@ static std::tuple<uint64_t, double, double> sL1WriteBandwidthLauncher(size_t arr
 
 namespace benchmark {
     namespace amd {
-        double measureScalarL1WriteBandwidth(size_t arraySizeBytes)
-        {
-            std::vector<double> results(ROUNDS);
-
-            uint32_t maxNumThreads = util::getMaxThreadsPerBlock();
-            size_t maxReps = MAX_REPS;
-
-            for (uint32_t i = 0; i < ROUNDS; ++i) 
-            {
-                results[i] = std::get<2>(sL1WriteBandwidthLauncher(arraySizeBytes, maxNumThreads, maxReps));
-            }
-
-            return util::average(results);
-        }
-
         CacheBandwidthResult measureScalarL1WriteBandwidthSweep(size_t arraySizeBytes) 
         {            
             uint32_t minNumThreads = util::getWarpSize();
