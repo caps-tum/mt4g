@@ -16,6 +16,10 @@ __global__ void sharedWriteBandwidthStaticKernel(uint64_t* __restrict__ timings,
     __shared__ uint32v4 memory[NUM_ELEMENTS];
     (void)memory; // to avoid "unused variable" warning
 
+    #ifdef __HIP_PLATFORM_AMD__
+    __asm__ volatile("" :: "v"(memory) : "memory");
+    #endif
+
     #ifdef __HIP_PLATFORM_NVIDIA__
     uint64_t sharedBaseAddr;
     asm volatile(
