@@ -176,7 +176,6 @@ make all install -j $(nproc)
 | `--memory` | Run main memory benchmarks |
 | `--departuredelay` | Run departure delay benchmarks |
 | `--resourceshare` | Run resource sharing benchmarks |
-| `--static` | Run shared memory bandwidth benchmark with statically allocated memory (32 KiB). (if not set, runs with dynamic allocation) |
 | `-v, --version` | Display the version of MT4G and exit |
 | `-h, --help` | Display a detailed help message and exit |
 

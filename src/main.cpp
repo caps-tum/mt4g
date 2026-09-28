@@ -859,37 +859,32 @@ int main(int argc, char* argv[]) {
             util::writeVectorToFile(sharedLatency.timings, (graphDir / (fancyFileName + "__Shared_Memory_Latency.txt")).string());
         }
 
-        std::cout << "[Shared Memory] Read Bandwidth per CU / MultiProcessor" << std::endl;
-        CacheBandwidthResult sharedReadBandwidth;
-        if (opts.sharedStatic)
-        {
-            sharedReadBandwidth = timed("sharedReadBandwidthStatic", [&] { return benchmark::measureSharedReadBandwidthStaticSweep(); });
-        } else {
-            sharedReadBandwidth = timed("sharedReadBandwidth", [&] { return benchmark::measureSharedReadBandwidthSweep(deviceProperties.sharedMemPerBlock / 2); });
-        }
+        std::cout << "[Shared Memory] Read Bandwidth per CU / MultiProcessor (dynamic)" << std::endl;
+        CacheBandwidthResult sharedReadBandwidth = timed("sharedReadBandwidth", [&] { return benchmark::measureSharedReadBandwidthSweep(deviceProperties.sharedMemPerBlock / 2); });
         result["memory"]["shared"]["readBandwidthPerCU"] = sharedReadBandwidth;
 
-        std::cout << "[Shared Memory] Write Bandwidth per CU / MultiProcessor" << std::endl;
-        CacheBandwidthResult sharedWriteBandwidth;
-        if (opts.sharedStatic)
-        {
-            sharedWriteBandwidth = timed("sharedWriteBandwidthStatic", [&] { return benchmark::measureSharedWriteBandwidthStaticSweep(); });
-        } else {
-            sharedWriteBandwidth = timed("sharedWriteBandwidth", [&] { return benchmark::measureSharedWriteBandwidthSweep(deviceProperties.sharedMemPerBlock / 2); });
-        }
+        std::cout << "[Shared Memory] Read Bandwidth per CU / MultiProcessor (static)" << std::endl;
+        CacheBandwidthResult sharedReadBandwidthStatic = timed("sharedReadBandwidthStatic", [&] { return benchmark::measureSharedReadBandwidthStaticSweep(); });
+        result["memory"]["shared"]["readBandwidthPerCUStatic"] = sharedReadBandwidthStatic;
+
+        std::cout << "[Shared Memory] Write Bandwidth per CU / MultiProcessor (dynamic)" << std::endl;
+        CacheBandwidthResult sharedWriteBandwidth = timed("sharedWriteBandwidth", [&] { return benchmark::measureSharedWriteBandwidthSweep(deviceProperties.sharedMemPerBlock / 2); });
         result["memory"]["shared"]["writeBandwidthPerCU"] = sharedWriteBandwidth;
+
+        std::cout << "[Shared Memory] Write Bandwidth per CU / MultiProcessor (static)" << std::endl;
+        CacheBandwidthResult sharedWriteBandwidthStatic = timed("sharedWriteBandwidthStatic", [&] { return benchmark::measureSharedWriteBandwidthStaticSweep(); });
+        result["memory"]["shared"]["writeBandwidthPerCUStatic"] = sharedWriteBandwidthStatic;
 
         if (opts.rawData || opts.graphs)
         {
-            // Encode array size (KiB) and allocation type so the LDS
-            // best-per-configuration figure can label each line, e.g.
-            // "32_stat (T=512)". Combine several runs (sizes / dyn|stat) into
-            // one figure via: plot_bandwidth.py auto --indir <results dir>.
-            const std::string alloc = opts.sharedStatic ? "stat" : "dyn";
-            const std::string readSuffix = std::to_string(sharedReadBandwidth.dataBytes / 1024) + "KiB_" + alloc;
-            const std::string writeSuffix = std::to_string(sharedWriteBandwidth.dataBytes / 1024) + "KiB_" + alloc;
-            util::writeBandwidthGridToCSV(sharedReadBandwidth, (graphDir / util::bandwidthGridFileName(fancyFileName, "LDS", "Read", readSuffix)).string());
-            util::writeBandwidthGridToCSV(sharedWriteBandwidth, (graphDir / util::bandwidthGridFileName(fancyFileName, "LDS", "Write", writeSuffix)).string());
+            const auto writeLdsGrid = [&](const CacheBandwidthResult& bw, const std::string& direction, const std::string& alloc) {
+                const std::string suffix = std::to_string(bw.dataBytes / 1024) + "KiB_" + alloc;
+                util::writeBandwidthGridToCSV(bw, (graphDir / util::bandwidthGridFileName(fancyFileName, "LDS", direction, suffix)).string());
+            };
+            writeLdsGrid(sharedReadBandwidth, "Read", "dyn");
+            writeLdsGrid(sharedReadBandwidthStatic, "Read", "stat");
+            writeLdsGrid(sharedWriteBandwidth, "Write", "dyn");
+            writeLdsGrid(sharedWriteBandwidthStatic, "Write", "stat");
         }
 
         std::cout << "[Shared Memory] Benchmarks finished" << std::endl;

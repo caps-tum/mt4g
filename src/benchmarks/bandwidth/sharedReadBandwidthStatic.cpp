@@ -23,6 +23,10 @@ __global__ void sharedReadBandwidthStaticKernel(uint32v4* __restrict__ dst, uint
 
     const uint32_t base = tid * elementsPerThread * 16u;
 
+    #ifdef __HIP_PLATFORM_AMD__
+    __asm__ volatile("" :: "v"(memory) : "memory");
+    #endif
+
     #ifdef __HIP_PLATFORM_NVIDIA__
     uint64_t sharedBaseAddr;
     asm volatile(
