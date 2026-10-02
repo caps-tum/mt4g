@@ -321,23 +321,11 @@ int main(int argc, char* argv[]) {
         if (l1Size.confidence > VALIDITY_THRESHOLD) {
             
             std::cout << "[L1] Read Bandwidth per CU / MultiProcessor" << std::endl;
-            CacheBandwidthResult l1ReadBandwidth;
-            if (util::isAMD()) 
-            {
-                l1ReadBandwidth = timed("amd_vL1ReadBandwidth", [&] { return benchmark::amd::measurevL1ReadBandwidth(l1Size.size / 2); });
-            } else {
-                l1ReadBandwidth = timed("l1ReadBandwidth", [&] { return benchmark::measureL1ReadBandwidthSweep(l1Size.size / 2); });
-            }
+            CacheBandwidthResult l1ReadBandwidth = timed(util::isAMD() ? "amd_vL1ReadBandwidth" : "l1ReadBandwidth", [&] { return benchmark::measureL1ReadBandwidthSweep(l1Size.size / 2); });
             result["memory"]["l1"]["readBandwidthPerCU"] = l1ReadBandwidth;
 
             std::cout << "[L1] Write Bandwidth per CU / MultiProcessor" << std::endl;
-            CacheBandwidthResult l1WriteBandwidth;
-            if (util::isAMD())
-            {
-                l1WriteBandwidth = timed("amd_vL1WriteBandwidth", [&] { return benchmark::amd::measurevL1WriteBandwidth(l1Size.size / 2); });
-            } else {
-                l1WriteBandwidth = timed("l1WriteBandwidth", [&] { return benchmark::measureL1WriteBandwidthSweep(l1Size.size / 2); });
-            }
+            CacheBandwidthResult l1WriteBandwidth = timed(util::isAMD() ? "amd_vL1WriteBandwidth" : "l1WriteBandwidth", [&] { return benchmark::measureL1WriteBandwidthSweep(l1Size.size / 2); });
             result["memory"]["l1"]["writeBandwidthPerCU"] = l1WriteBandwidth;
 
             if (opts.rawData || opts.graphs)
