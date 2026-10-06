@@ -1,114 +1,75 @@
 #include "benchmarks/benchmark.hpp"
 #include "utils/util.hpp"
 
+#include <tuple>
 #include <vector>
-#include <cstdlib>
-#include <string>
 
-static constexpr auto WARMUP_REPS = 8;
+static constexpr auto WARMUP_REPS = 128;
+static constexpr auto MS_PER_SECOND = 1000.0; // ms
 
+static constexpr size_t LOADS_PER_GROUP = 8;
+static constexpr size_t GROUP_LOAD_STRIDE = 0;
 
-static constexpr auto ROUNDS = DEFAULT_ROUNDS;// rounds
-
-// Texture cache read bandwidth benchmark for a single SM. Mirrors the L1 benchmark 
-// but measures the texture fetch path (tex1Dfetch) instead of normal global loads.
-__global__ void textureReadBandwidthKernel([[maybe_unused]] hipTextureObject_t tex, uint32_t* __restrict__ dst, uint64_t* __restrict__ timing_result, size_t elementsPerThread, size_t reps)
+__global__ void textureReadBandwidthKernel([[maybe_unused]] hipTextureObject_t tex, uint4* dst, size_t totalElements, size_t reps, [[maybe_unused]] size_t groupLoadStride)
 {
-    const uint32_t tid = threadIdx.x;
-    const size_t base = static_cast<size_t>(tid) * elementsPerThread;
+    uint4 dummy {0, 0, 0, 0};
 
-    uint32_t dummy = 0;
-
-    // Warm up the texture / unified cache
-    for (size_t rep = 0; rep < WARMUP_REPS; ++rep)
+    #ifdef __HIP_PLATFORM_NVIDIA__
+    for (size_t rep = 0; rep < reps; rep += LOADS_PER_GROUP)
     {
-        for (size_t i = 0; i < elementsPerThread; ++i)
+        for (size_t i = threadIdx.x; i < totalElements; i += blockDim.x)
         {
-            #ifdef __HIP_PLATFORM_NVIDIA__
-            int4 loaded = tex1Dfetch<int4>(tex, static_cast<int>(base + i));
-            dummy ^= static_cast<uint32_t>(loaded.x);
-            #endif
+            #pragma unroll
+            for (size_t k = 0; k < LOADS_PER_GROUP; ++k)
+            {
+                const int4 loaded = tex1Dfetch<int4>(tex, static_cast<int>(i + k * groupLoadStride));
+
+                dummy.x ^= loaded.x;
+                dummy.y ^= loaded.y;
+                dummy.z ^= loaded.z;
+                dummy.w ^= loaded.w;
+            }
         }
     }
+    #endif
 
-    uint64_t start = 0, end = 0;
-
-    __syncthreads();
-
-    if (tid == 0)
-    {
-        #ifdef __HIP_PLATFORM_NVIDIA__
-        __asm__ volatile (
-            "mov.u64 %0, %%clock64;\n\t"
-            : "=l"(start)
-            :
-            : "memory"
-        );
-        #endif
-    }
-
-    __syncthreads();
-
-    for (size_t rep = 0; rep < reps; ++rep)
-    {
-        for (size_t i = 0; i < elementsPerThread; ++i)
-        {
-            #ifdef __HIP_PLATFORM_NVIDIA__
-            int4 loaded = tex1Dfetch<int4>(tex, static_cast<int>(base + i));
-            dummy ^= static_cast<uint32_t>(loaded.x);
-            #endif
-        }
-    }
-
-    __syncthreads();
-
-    if (tid == 0)
-    {
-        #ifdef __HIP_PLATFORM_NVIDIA__
-        __asm__ volatile (
-            "mov.u64 %0, %%clock64;\n\t"
-            : "=l"(end)
-            :
-            : "memory"
-        );
-        #endif
-
-        *timing_result = end - start;
-    }
-
-    dst[tid] = dummy; // prevent dead code elimination
+    dst[threadIdx.x] = dummy; // prevent dead code elimination
 }
 
 
-static std::tuple<uint64_t, double, double> textureReadBandwidthLauncher(size_t arraySizeBytes, uint32_t numThreads, size_t reps)
+static std::tuple<double, double> textureReadBandwidthLauncher(size_t arraySizeBytes, uint32_t numThreads, size_t reps, hipStream_t stream)
 {
-    size_t totalElements = arraySizeBytes / sizeof(int4);
-    size_t elementsPerThread = totalElements / numThreads;
+    const size_t totalElements = arraySizeBytes / sizeof(int4);
 
     int4 *d_srcArr = util::allocateGPUMemory<int4>(totalElements);
-    uint32_t *d_dstArr = util::allocateGPUMemory<uint32_t>(numThreads);
-    uint64_t *d_timingResult = util::allocateGPUMemory<uint64_t>(1);
+    uint4 *d_dstArr = util::allocateGPUMemory<uint4>(numThreads);
 
     hipTextureObject_t tex = util::createTextureObject<int4>(d_srcArr, totalElements);
 
-    // Run the kernel
-    textureReadBandwidthKernel<<<1, numThreads>>>(tex, d_dstArr, d_timingResult, elementsPerThread, reps);
+    // Warm up
+    textureReadBandwidthKernel<<<1, numThreads, 0, stream>>>(tex, d_dstArr, totalElements, WARMUP_REPS, GROUP_LOAD_STRIDE);
 
-    // Get the timings from the device
-    std::vector<uint64_t> timingResult = util::copyFromDevice<uint64_t>(d_timingResult, 1);
+    auto start = util::createHipEvent();
+    auto end = util::createHipEvent();
 
+    util::hipCheck(hipDeviceSynchronize());
+    util::hipCheck(hipEventRecord(start, stream));
+    textureReadBandwidthKernel<<<1, numThreads, 0, stream>>>(tex, d_dstArr, totalElements, reps, GROUP_LOAD_STRIDE);
+    util::hipCheck(hipEventRecord(end, stream));
+    util::hipCheck(hipDeviceSynchronize());
+
+    const double elapsedMs = util::getElapsedTimeMs(start, end);
+
+    util::hipCheck(hipEventDestroy(start));
+    util::hipCheck(hipEventDestroy(end));
     util::hipCheck(hipDestroyTextureObject(tex));
     util::hipCheck(hipFree(d_srcArr));
     util::hipCheck(hipFree(d_dstArr));
-    util::hipCheck(hipFree(d_timingResult));
 
-    // calculate the bandwidth
-    double gpuClockHz = util::getClockRateKHz() * 1000.0;
-    double dataGiB = (double) arraySizeBytes * reps / (1 * GiB);
-    double timeS = (double) timingResult[0] / gpuClockHz;
+    const double timeS = elapsedMs / MS_PER_SECOND;
+    const double dataGiB = (double) (totalElements * sizeof(int4)) * reps / (1 * GiB);
 
-    // return (cycles, time in seconds, measured bandwidth)
-    return {timingResult[0], timeS, dataGiB / timeS};
+    return {timeS, dataGiB / timeS};
 }
 
 
@@ -116,23 +77,10 @@ namespace benchmark
 {
     namespace nvidia
     {
-        double measureTextureReadBandwidth(size_t arraySizeBytes)
-        {
-            std::vector<double> results(ROUNDS);
-
-            uint32_t maxNumThreads = util::getMaxThreadsPerBlock();
-            size_t maxReps = MAX_REPS;
-
-            for (uint32_t i = 0; i < ROUNDS; ++i)
-            {
-                results[i] = std::get<2>(textureReadBandwidthLauncher(arraySizeBytes, maxNumThreads, maxReps));
-            }
-
-            return util::average(results);
-        }
-
         CacheBandwidthResult measureTextureReadBandwidthSweep(size_t arraySizeBytes)
         {
+            auto stream = util::createStreamForCU(0);
+
             uint32_t minNumThreads = util::getWarpSize();
             uint32_t maxNumThreads = util::getMaxThreadsPerBlock();
             size_t minReps = MIN_REPS;
@@ -160,14 +108,13 @@ namespace benchmark
                         result.repsTested.push_back(reps);
                     }
 
-                    auto [cycles, timeS, bandwidth] = textureReadBandwidthLauncher(arraySizeBytes, numThreads, reps);
+                    auto [timeS, bandwidth] = textureReadBandwidthLauncher(arraySizeBytes, numThreads, reps, stream);
 
                     bandwidthResults.push_back(bandwidth);
 
                     if (bandwidth > result.measuredBandwidth)
                     {
                         result.measuredBandwidth = bandwidth;
-                        result.cycles = cycles;
                         result.time = timeS;
                         result.numThreads = numThreads;
                         result.numReps = reps;
@@ -176,6 +123,8 @@ namespace benchmark
 
                 result.bandwidthGridGiBs.push_back(bandwidthResults);
             }
+
+            util::hipCheck(hipStreamDestroy(stream));
 
             return result;
         }

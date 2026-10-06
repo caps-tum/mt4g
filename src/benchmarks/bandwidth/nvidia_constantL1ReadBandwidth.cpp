@@ -6,156 +6,74 @@
 #include <cstdlib>
 #include <string>
 #include <algorithm>
+#include <tuple>
 
 static constexpr auto WARMUP_REPS = 8;
+static constexpr auto MS_PER_SECOND = 1000.0; // ms
 
-
-static constexpr auto ROUNDS = DEFAULT_ROUNDS;// rounds
-
-static constexpr auto MAX_ALLOWED_SIZE = MAX_ALLOWED_INDEX * sizeof(uint32_t);// 63 KiB of the 64 KiB constant array
-
-// Constant L1 bandwidth benchmark for a single SM. Uses ld.const on the shared
-// constant array; the caller provides a working set that fits in constant L1.
-// Scalar loads are used because the uint32_t array has no guaranteed 16-byte alignment.
-__global__ void constantL1ReadBandwidthKernel(uint32_t* __restrict__ dst, uint64_t* __restrict__ timing_result, size_t elementsPerThread, size_t reps)
+__global__ void constantL1ReadBandwidthKernel(uint32_t* __restrict__ dst, size_t totalElements, size_t reps)
 {
     const uint32_t tid = threadIdx.x;
-    const uint32_t* base = arr16384AscStride0 + tid * elementsPerThread;
+    const size_t alignOffset = (reinterpret_cast<uintptr_t>(arr16384AscStride0) % sizeof(uint2)) / sizeof(uint32_t);
+    const uint32_t* base = arr16384AscStride0 + alignOffset;
 
     uint32_t dummy = 0;
 
-    // Warm up the constant cache
-    for (size_t rep = 0; rep < WARMUP_REPS; ++rep)
-    {
-        for (size_t i = 0; i < elementsPerThread; ++i)
-        {
-            uint32_t loaded = 0;
-
-            #ifdef __HIP_PLATFORM_NVIDIA__
-            asm volatile (
-                "{\n\t"
-                ".reg .u64 cp;\n\t"
-                "cvta.to.const.u64 cp, %1;\n\t"
-                "ld.const.u32 %0, [cp];\n\t"
-                "}"
-                : "=r"(loaded)
-                : "l"(base + i)
-                : "memory"
-            );
-            #endif
-
-            dummy ^= loaded;
-        }
-    }
-
-    uint64_t start = 0, end = 0;
-
-    __syncthreads();
-
-    if (tid == 0)
-    {
-        #ifdef __HIP_PLATFORM_NVIDIA__
-        __asm__ volatile (
-            "mov.u64 %0, %%clock64;\n\t"
-            : "=l"(start)
-            :
-            : "memory"
-        );
-        #endif
-    }
-
-    __syncthreads();
-
     for (size_t rep = 0; rep < reps; ++rep)
     {
-        for (size_t i = 0; i < elementsPerThread; ++i)
+        for (size_t i = 0; i < totalElements; ++i)
         {
-            uint32_t loaded = 0;
+            uint64_t loaded = 0;
 
             #ifdef __HIP_PLATFORM_NVIDIA__
             __asm__ volatile (
                 "{\n\t"
                 ".reg .u64 cp;\n\t"
                 "cvta.to.const.u64 cp, %1;\n\t"
-                "ld.const.u32 %0, [cp];\n\t"
+                "ld.const.u64 %0, [cp];\n\t"
                 "}"
-                : "=r"(loaded)
-                : "l"(base + i)
-                : "memory"
+                : "=l"(loaded)
+                : "l"(base + i * 2)
             );
             #endif
 
-            dummy ^= loaded;
+            dummy ^= static_cast<uint32_t>(loaded) ^ static_cast<uint32_t>(loaded >> 32);
         }
-    }
-
-    __syncthreads();
-
-    if (tid == 0)
-    {
-        #ifdef __HIP_PLATFORM_NVIDIA__
-        __asm__ volatile (
-            "mov.u64 %0, %%clock64;\n\t"
-            : "=l"(end)
-            :
-            : "memory"
-        );
-        #endif
-
-        *timing_result = end - start;
     }
 
     dst[tid] = dummy; // prevent dead code elimination
 }
 
 
-static std::tuple<uint64_t, double, double> constantL1ReadBandwidthLauncher(size_t arraySizeBytes, uint32_t numThreads, size_t reps)
+static std::tuple<double, double> constantL1ReadBandwidthLauncher(size_t arraySizeBytes, uint32_t numThreads, size_t reps, hipStream_t stream)
 {
-    size_t totalElements = arraySizeBytes / sizeof(uint32_t);
-    size_t elementsPerThread = totalElements / numThreads;
+    size_t totalElements = arraySizeBytes / sizeof(uint2);
 
     uint32_t *d_dstArr = util::allocateGPUMemory<uint32_t>(numThreads);
-    uint64_t *d_timingResult = util::allocateGPUMemory<uint64_t>(1);
 
-    // Run the kernel
-    constantL1ReadBandwidthKernel<<<1, numThreads>>>(d_dstArr, d_timingResult, elementsPerThread, reps);
+    // Warm up
+    constantL1ReadBandwidthKernel<<<1, numThreads, 0, stream>>>(d_dstArr, totalElements, WARMUP_REPS);
 
-    // Get the timings from the device
-    std::vector<uint64_t> timingResult = util::copyFromDevice<uint64_t>(d_timingResult, 1);
+    auto start = util::createHipEvent();
+    auto end = util::createHipEvent();
 
+    util::hipCheck(hipDeviceSynchronize());
+    util::hipCheck(hipEventRecord(start, stream));
+    constantL1ReadBandwidthKernel<<<1, numThreads, 0, stream>>>(d_dstArr, totalElements, reps);
+    util::hipCheck(hipEventRecord(end, stream));
+    util::hipCheck(hipDeviceSynchronize());
+
+    const double elapsedMs = util::getElapsedTimeMs(start, end);
+
+    util::hipCheck(hipEventDestroy(start));
+    util::hipCheck(hipEventDestroy(end));
     util::hipCheck(hipFree(d_dstArr));
-    util::hipCheck(hipFree(d_timingResult));
 
-    // Constant working sets are small, so integer division can leave bytes untouched.
-    // Use the bytes actually read rather than the requested array size.
-    double gpuClockHz = util::getClockRateKHz() * 1000.0;
-    double dataGiB = (double) (elementsPerThread * numThreads * sizeof(uint32_t)) * reps / (1 * GiB);
-    double timeS = (double) timingResult[0] / gpuClockHz;
+    // Bytes delivered to the threads, every thread receives the whole working set per rep.
+    const double timeS = elapsedMs / MS_PER_SECOND;
+    const double dataGiB = (double) (totalElements * numThreads * sizeof(uint2)) * reps / (1 * GiB);
 
-    // return (cycles, time in seconds, measured bandwidth)
-    return {timingResult[0], timeS, dataGiB / timeS};
-}
-
-
-// Constant memory is limited to 64 KiB and L1 is only a few KiB.
-// Cap size and threads so every thread reads at least one element.
-static size_t capConstantArraySize(size_t arraySizeBytes, const char* benchmarkName)
-{
-    if (arraySizeBytes > MAX_ALLOWED_SIZE) {
-        std::cerr << "WARNING: " << benchmarkName << " requested " << arraySizeBytes
-                  << " Bytes of constant data, capping to " << MAX_ALLOWED_SIZE << " Bytes" << std::endl;
-        arraySizeBytes = MAX_ALLOWED_SIZE;
-    }
-
-    return arraySizeBytes;
-}
-
-static uint32_t capNumThreads(size_t arraySizeBytes)
-{
-    size_t totalElements = arraySizeBytes / sizeof(uint32_t);
-    uint32_t maxNumThreads = util::getMaxThreadsPerBlock();
-
-    return static_cast<uint32_t>(std::min(static_cast<size_t>(maxNumThreads), totalElements));
+    return {timeS, dataGiB / timeS};
 }
 
 
@@ -163,34 +81,12 @@ namespace benchmark
 {
     namespace nvidia
     {
-        double measureConstantL1ReadBandwidth(size_t arraySizeBytes)
-        {
-            arraySizeBytes = capConstantArraySize(arraySizeBytes, "Constant L1 Read Bandwidth");
-
-            uint32_t maxNumThreads = capNumThreads(arraySizeBytes);
-            size_t maxReps = MAX_REPS;
-
-            if (maxNumThreads == 0) {
-                std::cerr << "WARNING: Constant L1 Read Bandwidth working set too small to benchmark, skipping" << std::endl;
-                return 0.0;
-            }
-
-            std::vector<double> results(ROUNDS);
-
-            for (uint32_t i = 0; i < ROUNDS; ++i)
-            {
-                results[i] = std::get<2>(constantL1ReadBandwidthLauncher(arraySizeBytes, maxNumThreads, maxReps));
-            }
-
-            return util::average(results);
-        }
-
         CacheBandwidthResult measureConstantL1ReadBandwidthSweep(size_t arraySizeBytes)
         {
-            arraySizeBytes = capConstantArraySize(arraySizeBytes, "Constant L1 Read Bandwidth");
+            auto stream = util::createStreamForCU(0);
 
             uint32_t minNumThreads = util::getWarpSize();
-            uint32_t maxNumThreads = capNumThreads(arraySizeBytes);
+            uint32_t maxNumThreads = util::getMaxThreadsPerBlock();
             size_t minReps = MIN_REPS;
             size_t maxReps = MAX_REPS;
 
@@ -202,11 +98,6 @@ namespace benchmark
             result.numThreads = 0;
             result.numBlocks = 1;
             result.numReps = 0;
-
-            if (maxNumThreads < minNumThreads) {
-                std::cerr << "WARNING: Constant L1 Read Bandwidth working set too small for a full warp, skipping" << std::endl;
-                return result;
-            }
 
             for (uint32_t numThreads = minNumThreads; numThreads <= maxNumThreads; numThreads *= 2)
             {
@@ -221,14 +112,13 @@ namespace benchmark
                         result.repsTested.push_back(reps);
                     }
 
-                    auto [cycles, timeS, bandwidth] = constantL1ReadBandwidthLauncher(arraySizeBytes, numThreads, reps);
+                    auto [timeS, bandwidth] = constantL1ReadBandwidthLauncher(arraySizeBytes, numThreads, reps, stream);
 
                     bandwidthResults.push_back(bandwidth);
 
                     if (bandwidth > result.measuredBandwidth)
                     {
                         result.measuredBandwidth = bandwidth;
-                        result.cycles = cycles;
                         result.time = timeS;
                         result.numThreads = numThreads;
                         result.numReps = reps;
@@ -237,6 +127,8 @@ namespace benchmark
 
                 result.bandwidthGridGiBs.push_back(bandwidthResults);
             }
+
+            util::hipCheck(hipStreamDestroy(stream));
 
             return result;
         }
