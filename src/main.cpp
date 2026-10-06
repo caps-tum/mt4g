@@ -586,15 +586,8 @@ int main(int argc, char* argv[]) {
         size_t constantL15BandwidthBytes = constantL15Size.confidence > VALIDITY_THRESHOLD
             ? constantL15Size.size / 2
             : 32 * KiB;
-        // Stride by one fetch granularity per load so each access hits a fresh cache line.
-        // This avoids L1 reuse and isolates L1.5 bandwidth, matching the Constant L1.5
-        // Size and Latency benchmarks.
-        size_t constantL15BandwidthStride = constantL15FetchGranularity.confidence > VALIDITY_THRESHOLD
-            ? constantL15FetchGranularity.size
-            : MIN_EXPECTED_LINE_SIZE;
-
         std::cout << "[Constant] L1.5 Read Bandwidth per CU / MultiProcessor" << std::endl;
-        CacheBandwidthResult constantL15ReadBandwidth = timed("nvidia_constantL15ReadBandwidth", [&] { return benchmark::nvidia::measureConstantL15ReadBandwidthSweep(constantL15BandwidthBytes, constantL15BandwidthStride); });
+        CacheBandwidthResult constantL15ReadBandwidth = timed("nvidia_constantL15ReadBandwidth", [&] { return benchmark::nvidia::measureConstantL15ReadBandwidthSweep(constantL15BandwidthBytes); });
         result["memory"]["constant"]["l1.5"]["readBandwidthPerCU"] = constantL15ReadBandwidth;
 
         if (opts.rawData || opts.graphs)

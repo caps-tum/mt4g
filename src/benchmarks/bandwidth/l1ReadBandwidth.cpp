@@ -9,9 +9,6 @@ static constexpr auto MS_PER_SECOND = 1000.0; // ms
 static constexpr uint32_t NUM_BLOCKS = 1;
 
 static constexpr size_t LOADS_PER_GROUP = 8;
-static_assert(WARMUP_REPS % LOADS_PER_GROUP == 0 && MIN_REPS % LOADS_PER_GROUP == 0,
-              "rep counts must be multiples of LOADS_PER_GROUP");
-
 static constexpr size_t GROUP_LOAD_STRIDE = 0;
 
 #ifdef __HIP_PLATFORM_NVIDIA__
