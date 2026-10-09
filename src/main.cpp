@@ -320,51 +320,34 @@ int main(int argc, char* argv[]) {
 
         if (l1Size.confidence > VALIDITY_THRESHOLD) {
             
-            if (opts.runOptimalSearch)
+            std::cout << "[L1] Read Bandwidth per CU / MultiProcessor with optimal search" << std::endl;
+            CacheBandwidthResult l1ReadBandwidth;
+            if (util::isAMD()) 
             {
-                std::cout << "[L1] Read Bandwidth per CU / MultiProcessor with optimal search" << std::endl;
-                CacheBandwidthResult l1ReadBandwidth;
-                if (util::isAMD()) 
-                {
-                    l1ReadBandwidth = timed("amd_l1ReadBandwidthBlocksweep", [&] { return benchmark::amd::measureL1ReadBandwidthBlockSweep(l1Size.size / 2); });
-                } else {
-                    l1ReadBandwidth = timed("l1ReadBandwidth", [&] { return benchmark::measureL1ReadBandwidthSweep(l1Size.size / 2); });
-                }
-                result["memory"]["l1"]["readBandwidthPerCU"] = l1ReadBandwidth;
-
-                std::cout << "[L1] Write Bandwidth per CU / MultiProcessor with optimal search" << std::endl;
-                CacheBandwidthResult l1WriteBandwidth;
-                if (util::isAMD())
-                {
-                    l1WriteBandwidth = timed("amd_l1WriteBandwidthBlocksweep", [&] { return benchmark::amd::measureL1WriteBandwidthBlockSweep(l1Size.size / 2); });
-                } else {
-                    l1WriteBandwidth = timed("l1WriteBandwidth", [&] { return benchmark::measureL1WriteBandwidthSweep(l1Size.size / 2); });
-                }
-                result["memory"]["l1"]["writeBandwidthPerCU"] = l1WriteBandwidth;
-
-                if (opts.rawData || opts.graphs)
-                {
-                    // vL1d on AMD (vector L1d); plain L1 on NVIDIA. The grid CSV
-                    // backs the block-sweep figure: blocks->subplot, threads->line,
-                    // reps->x, bandwidth->y.
-                    const std::string l1Label = util::isAMD() ? "vL1d" : "L1";
-                    util::writeBandwidthGridToCSV(l1ReadBandwidth, (graphDir / util::bandwidthGridFileName(fancyFileName, l1Label, "Read")).string());
-                    util::writeBandwidthGridToCSV(l1WriteBandwidth, (graphDir / util::bandwidthGridFileName(fancyFileName, l1Label, "Write")).string());
-                }
+                l1ReadBandwidth = timed("amd_l1ReadBandwidth", [&] { return benchmark::amd::measureL1ReadBandwidthSweep(l1Size.size / 2); });
+            } else {
+                l1ReadBandwidth = timed("l1ReadBandwidth", [&] { return benchmark::measureL1ReadBandwidthSweep(l1Size.size / 2); });
             }
-            else
-            {
-                std::cout << "[L1] Read Bandwidth per CU / MultiProcessor" << std::endl;
-                result["memory"]["l1"]["readBandwidthPerCU"] = {
-                    {"value", timed("l1ReadBandwidth", [&] { return benchmark::measureL1ReadBandwidth(l1Size.size / 2); })},
-                    {"unit", "GiB/s"}
-                };
+            result["memory"]["l1"]["readBandwidthPerCU"] = l1ReadBandwidth;
 
-                std::cout << "[L1] Write Bandwidth per CU / MultiProcessor" << std::endl;
-                result["memory"]["l1"]["writeBandwidthPerCU"] = {
-                    {"value", timed("l1WriteBandwidth", [&] { return benchmark::measureL1WriteBandwidth(l1Size.size / 2); })},
-                    {"unit", "GiB/s"}
-                };
+            std::cout << "[L1] Write Bandwidth per CU / MultiProcessor with optimal search" << std::endl;
+            CacheBandwidthResult l1WriteBandwidth;
+            if (util::isAMD())
+            {
+                l1WriteBandwidth = timed("amd_l1WriteBandwidth", [&] { return benchmark::amd::measureL1WriteBandwidthSweep(l1Size.size / 2); });
+            } else {
+                l1WriteBandwidth = timed("l1WriteBandwidth", [&] { return benchmark::measureL1WriteBandwidthSweep(l1Size.size / 2); });
+            }
+            result["memory"]["l1"]["writeBandwidthPerCU"] = l1WriteBandwidth;
+
+            if (opts.rawData || opts.graphs)
+            {
+                // vL1d on AMD (vector L1d); plain L1 on NVIDIA. The grid CSV
+                // backs the block-sweep figure: blocks->subplot, threads->line,
+                // reps->x, bandwidth->y.
+                const std::string l1Label = util::isAMD() ? "vL1d" : "L1";
+                util::writeBandwidthGridToCSV(l1ReadBandwidth, (graphDir / util::bandwidthGridFileName(fancyFileName, l1Label, "Read")).string());
+                util::writeBandwidthGridToCSV(l1WriteBandwidth, (graphDir / util::bandwidthGridFileName(fancyFileName, l1Label, "Write")).string());
             }
         } else {
             std::cout << "Could not measure valid L1 Size, skipping L1 Bandwidth benchmarks." << std::endl;
