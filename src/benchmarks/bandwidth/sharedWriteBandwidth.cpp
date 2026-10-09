@@ -5,7 +5,6 @@
 #include <numeric>
 
 
-static constexpr auto ROUNDS = DEFAULT_ROUNDS;// rounds
 
 __global__ void sharedWriteBandwidthKernel(uint64_t* __restrict__ timings, uint32_t elementsPerThread, size_t reps) 
 {
@@ -146,21 +145,6 @@ static std::tuple<uint64_t, double, double> sharedWriteBandwidthLauncher(uint32_
 }
 
 namespace benchmark {
-    double measureSharedWriteBandwidth(uint32_t arraySizeBytes)
-    {
-        std::vector<double> results(ROUNDS);
-
-        uint32_t maxNumThreads = util::getMaxThreadsPerBlock();
-        size_t maxReps = MAX_REPS;
-
-        for (uint32_t i = 0; i < ROUNDS; ++i) 
-        {
-            results[i] = std::get<2>(sharedWriteBandwidthLauncher(arraySizeBytes, maxNumThreads, maxReps));
-        }
-
-        return util::average(results);
-    }
-
     CacheBandwidthResult measureSharedWriteBandwidthSweep(uint32_t arraySizeBytes) 
     {
         uint32_t minNumThreads = util::getWarpSize();
