@@ -14,9 +14,7 @@ __global__ void mainMemoryLatencyKernel(uint32_t *pChaseArray, uint32_t *timingR
     uint32_t index = 0;
     __shared__ uint64_t s_timings[SAMPLE_SIZE];
 
-    // Warm up the execution path, then continue from the resulting index. Do
-    // not reset to zero: the timed loads must visit nodes that were not read by
-    // this pointer chase during warm-up.
+    // Continue from the warm-up position to avoid immediately repeating its path.
     for (uint32_t i = 0; i < WARMUP_HOPS; ++i) {
         index = __forceBypassAllCacheReads(pChaseArray, index);
     }
@@ -34,8 +32,7 @@ __global__ void mainMemoryLatencyKernel(uint32_t *pChaseArray, uint32_t *timingR
         timingResults[i] = s_timings[i];
     }
 
-    // Keep the dependent pointer chase observable without modifying a timing
-    // sample. The launcher allocates one extra element for this sink.
+    // Keep the final pointer value observable without overwriting a sample.
     timingResults[SAMPLE_SIZE] = index;
 }
 
@@ -54,20 +51,14 @@ __global__ void mainMemoryLatencyScrubKernel(const uint32_t *source, size_t coun
     const size_t threadCount = gridDim.x * blockDim.x;
     uint32_t accumulator = 0;
 
-    // Across all threads, read one uint32_t every 64 bytes from the source.
-    // Assuming 64-byte cache lines, this touches every source cache line;
-    // a cache miss can fetch the entire line.
-    // These ordinary loads fill caches with source-buffer lines, aiming to
-    // evict measured-array lines left by initialization.
-    // This is not a guaranteed cache flush.
+    // Touch one word per assumed 64-byte cache line to create cache pressure.
+    // This may evict measured-array data, but is not a guaranteed cache flush.
     for (size_t index = threadIndex * wordsPerCacheLine;
          index < count;
          index += threadCount * wordsPerCacheLine) {
         accumulator ^= source[index];
     }
 
-    // Store each thread's accumulator separately so the loads have an
-    // observable result and threads do not overwrite each other's output.
     sink[threadIndex] = accumulator;
 }
 
@@ -75,27 +66,20 @@ std::vector<uint32_t> mainMemoryLatencyLauncher(size_t arraySizeBytes, size_t st
                                                 util::AllocatorType allocType) {
     util::hipDeviceReset(); 
 
-    // Initialize device Arrays
-    // The vector contains: 1 GiB / 4 bytes = 268,435,456 uint32_t elements
-    // The stride in elements is: 1 KiB / 4 bytes = 256 elements
-    // There are: 268,435,456 / 256 = 1,048,576 chain nodes
     std::vector<uint32_t> hostChaseArray = util::generateRandomizedPChaseArray(arraySizeBytes, strideBytes);
 
-    // Allocate the measured array: this creates the 1 GiB allocation whose latency we want to measure
     uint32_t *d_pChaseArray = util::allocateMemory<uint32_t>(hostChaseArray.size(), allocType);
 
-    // Allocate the temporary source
     uint32_t *d_initArray = util::allocateGPUMemory(hostChaseArray);
 
     uint32_t threads = util::min(util::getMaxThreadsPerBlock(), util::getWarpSize() * util::getSIMDsPerCU());
-    uint32_t blocks = util::getNumberOfComputeUnits() * util::getDeviceProperties().maxBlocksPerMultiProcessor;
+    uint32_t blocks = util::getNumberOfComputeUnits() * util::maxBlocksPerMultiProcessor();
 
     // Use the same GPU first-touch initialization path for every allocator.
     mainMemoryLatencyInitKernel<<<blocks, threads>>>(d_pChaseArray, d_initArray, hostChaseArray.size());
     util::hipCheck(hipDeviceSynchronize());
 
-    // Reuse the 1 GiB initialization source as a cache scrubber. Its active
-    // cache-line footprint is four times the 256 MiB MALL on MI300A.
+    // Apply cache pressure before measuring the pointer chase.
     const size_t scrubSinkSize = static_cast<size_t>(blocks) * threads;
     uint32_t *d_scrubSink = util::allocateGPUMemory(scrubSinkSize);
     mainMemoryLatencyScrubKernel<<<blocks, threads>>>(
