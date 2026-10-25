@@ -100,7 +100,7 @@ namespace benchmark {
             uint32_t maxThreads = util::getMaxThreadsPerBlock();
 
             uint32_t minBlocks = util::getNumberOfComputeUnits();
-            uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getMaxBlocksPerMultiProcessor;
+            uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getMaxBlocksPerMultiProcessor();
 
             size_t minReps = MIN_REPS;
             size_t maxReps = MAX_REPS;
