@@ -51,7 +51,7 @@ std::vector<uint32_t> l3LatencyLauncher(size_t arraySizeBytes, size_t strideByte
         uint32_t *d_initArray = util::allocateGPUMemory(hostChaseArray);
         uint32_t threads = util::min(
             util::getMaxThreadsPerBlock(), util::getWarpSize() * util::getSIMDsPerCU());
-        uint32_t blocks = util::getNumberOfComputeUnits() * util::maxBlocksPerMultiProcessor();
+        uint32_t blocks = util::getNumberOfComputeUnits() * util::getMaxBlocksPerMultiProcessor();
         l3LatencyInitKernel<<<blocks, threads>>>(
             d_pChaseArray, d_initArray, hostChaseArray.size());
         util::hipCheck(hipDeviceSynchronize());

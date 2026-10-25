@@ -73,7 +73,7 @@ std::vector<uint32_t> mainMemoryLatencyLauncher(size_t arraySizeBytes, size_t st
     uint32_t *d_initArray = util::allocateGPUMemory(hostChaseArray);
 
     uint32_t threads = util::min(util::getMaxThreadsPerBlock(), util::getWarpSize() * util::getSIMDsPerCU());
-    uint32_t blocks = util::getNumberOfComputeUnits() * util::maxBlocksPerMultiProcessor();
+    uint32_t blocks = util::getNumberOfComputeUnits() * util::getMaxBlocksPerMultiProcessor();
 
     // Use the same GPU first-touch initialization path for every allocator.
     mainMemoryLatencyInitKernel<<<blocks, threads>>>(d_pChaseArray, d_initArray, hostChaseArray.size());
