@@ -10,7 +10,6 @@
 static constexpr auto WARMUP_REPS = 128;
 
 
-static constexpr auto ROUNDS = DEFAULT_ROUNDS;// rounds
 
 __global__ void l1ReadBandwidthKernel(uint32v4* __restrict__ dst, uint32v4* __restrict__ src, uint64_t* __restrict__ timing_result, size_t elementsPerThread, size_t reps) 
 {
@@ -192,21 +191,6 @@ static std::tuple<uint64_t, double, double> l1ReadBandwidthLauncher(size_t array
 
 namespace benchmark 
 {
-    double measureL1ReadBandwidth(size_t arraySizeBytes)
-    {
-        std::vector<double> results(ROUNDS);
-
-        uint32_t maxNumThreads = util::getMaxThreadsPerBlock();
-        size_t maxReps = MAX_REPS;
-
-        for (uint32_t i = 0; i < ROUNDS; ++i) 
-        {
-            results[i] = std::get<2>(l1ReadBandwidthLauncher(arraySizeBytes, maxNumThreads, maxReps));
-        }
-
-        return util::average(results);
-    }
-
     CacheBandwidthResult measureL1ReadBandwidthSweep(size_t arraySizeBytes) 
     {
         uint32_t minNumThreads = util::getWarpSize();

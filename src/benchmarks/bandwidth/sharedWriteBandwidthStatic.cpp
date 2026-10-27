@@ -8,7 +8,6 @@ static constexpr auto SIZE = 32 * KiB;
 static constexpr auto NUM_ELEMENTS = SIZE / 16;
 
 
-static constexpr auto ROUNDS = DEFAULT_ROUNDS;// rounds
 
 __global__ void sharedWriteBandwidthStaticKernel(uint64_t* __restrict__ timings, uint32_t elementsPerThread, size_t reps) 
 {
@@ -16,6 +15,10 @@ __global__ void sharedWriteBandwidthStaticKernel(uint64_t* __restrict__ timings,
 
     __shared__ uint32v4 memory[NUM_ELEMENTS];
     (void)memory; // to avoid "unused variable" warning
+
+    #ifdef __HIP_PLATFORM_AMD__
+    __asm__ volatile("" :: "v"(memory) : "memory");
+    #endif
 
     #ifdef __HIP_PLATFORM_NVIDIA__
     uint64_t sharedBaseAddr;
@@ -149,21 +152,6 @@ static std::tuple<uint64_t, double, double> sharedWriteBandwidthStaticLauncher(u
 }
 
 namespace benchmark {
-    double measureSharedWriteBandwidthStatic()
-    {
-        std::vector<double> results(ROUNDS);
-
-        uint32_t maxNumThreads = util::getMaxThreadsPerBlock();
-        size_t maxReps = MAX_REPS;
-
-        for (uint32_t i = 0; i < ROUNDS; ++i) 
-        {
-            results[i] = std::get<2>(sharedWriteBandwidthStaticLauncher(maxNumThreads, maxReps));
-        }
-
-        return util::average(results);
-    }
-
     CacheBandwidthResult measureSharedWriteBandwidthStaticSweep() 
     {
         uint32_t minNumThreads = util::getWarpSize();

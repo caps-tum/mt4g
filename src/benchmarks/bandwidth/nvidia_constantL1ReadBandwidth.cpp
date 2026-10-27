@@ -10,7 +10,6 @@
 static constexpr auto WARMUP_REPS = 8;
 
 
-static constexpr auto ROUNDS = DEFAULT_ROUNDS;// rounds
 
 static constexpr auto MAX_ALLOWED_SIZE = MAX_ALLOWED_INDEX * sizeof(uint32_t);// 63 KiB of the 64 KiB constant array
 
@@ -163,28 +162,6 @@ namespace benchmark
 {
     namespace nvidia
     {
-        double measureConstantL1ReadBandwidth(size_t arraySizeBytes)
-        {
-            arraySizeBytes = capConstantArraySize(arraySizeBytes, "Constant L1 Read Bandwidth");
-
-            uint32_t maxNumThreads = capNumThreads(arraySizeBytes);
-            size_t maxReps = MAX_REPS;
-
-            if (maxNumThreads == 0) {
-                std::cerr << "WARNING: Constant L1 Read Bandwidth working set too small to benchmark, skipping" << std::endl;
-                return 0.0;
-            }
-
-            std::vector<double> results(ROUNDS);
-
-            for (uint32_t i = 0; i < ROUNDS; ++i)
-            {
-                results[i] = std::get<2>(constantL1ReadBandwidthLauncher(arraySizeBytes, maxNumThreads, maxReps));
-            }
-
-            return util::average(results);
-        }
-
         CacheBandwidthResult measureConstantL1ReadBandwidthSweep(size_t arraySizeBytes)
         {
             arraySizeBytes = capConstantArraySize(arraySizeBytes, "Constant L1 Read Bandwidth");

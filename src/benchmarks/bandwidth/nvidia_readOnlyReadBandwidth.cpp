@@ -8,7 +8,6 @@
 static constexpr auto WARMUP_REPS = 8;
 
 
-static constexpr auto ROUNDS = DEFAULT_ROUNDS;// rounds
 
 // Read-only cache bandwidth benchmark for a single SM. Mirrors the L1 benchmark
 // but uses the read-only load path (ld.global.nc) instead of normal global loads.
@@ -135,21 +134,6 @@ namespace benchmark
 {
     namespace nvidia
     {
-        double measureReadOnlyReadBandwidth(size_t arraySizeBytes)
-        {
-            std::vector<double> results(ROUNDS);
-
-            uint32_t maxNumThreads = util::getMaxThreadsPerBlock();
-            size_t maxReps = MAX_REPS;
-
-            for (uint32_t i = 0; i < ROUNDS; ++i)
-            {
-                results[i] = std::get<2>(readOnlyReadBandwidthLauncher(arraySizeBytes, maxNumThreads, maxReps));
-            }
-
-            return util::average(results);
-        }
-
         CacheBandwidthResult measureReadOnlyReadBandwidthSweep(size_t arraySizeBytes)
         {
             uint32_t minNumThreads = util::getWarpSize();
