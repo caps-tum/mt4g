@@ -567,7 +567,7 @@ def plot_bandwidth(gpus: list[Gpu], direction: str, outdir: Path, written: list[
     ax.set_ylabel("Measured bandwidth (GiB/s, log scale)")
     ax.set_xlabel("GPU")
     style_gpu_axis(ax, gpus)
-    ax.legend(handles=point_handles(series, drawn),
+    ax.legend(handles=point_handles(series, {sr.key for sr in series}),
               loc="upper left", bbox_to_anchor=(1.005, 1.0), frameon=False)
     ax.set_title(f"{direction.capitalize()} bandwidth by GPU and memory hierarchy level", loc="left", pad=24,
                  fontsize=16.5, fontweight="bold")
