@@ -7,10 +7,18 @@
 #include <optional>
 
 static constexpr auto SAMPLE_SIZE = 2048;// 2048 Loads should suffice to rule out random flukes
+static constexpr auto WARMUP_HOPS = SAMPLE_SIZE;
 
 __global__ void mainMemoryLatencyKernel(uint32_t *pChaseArray, uint32_t *timingResults) {
     uint32_t index = 0;
     __shared__ uint64_t s_timings[SAMPLE_SIZE];
+    
+    // Reach steady state before recording samples. Continue from the warmed
+    // index so the measured chase visits new nodes rather than replaying data
+    // accessed during warm-up.
+    for (uint32_t i = 0; i < WARMUP_HOPS; ++i) {
+        index = __forceBypassAllCacheReads(pChaseArray, index);
+    }
 
     // Do not load from caches
     for (uint32_t i = 0; i < SAMPLE_SIZE; ++i) {
