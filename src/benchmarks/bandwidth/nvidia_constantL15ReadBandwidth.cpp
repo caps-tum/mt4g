@@ -10,7 +10,6 @@
 static constexpr auto WARMUP_REPS = 8;
 
 
-static constexpr auto ROUNDS = DEFAULT_ROUNDS;// rounds
 
 static constexpr size_t MIN_EXPECTED_SIZE = 8192;// 8 * KiB, same assumption the Constant L1.5 Size benchmark makes
 static constexpr auto MAX_ALLOWED_SIZE = MAX_ALLOWED_INDEX * sizeof(uint32_t);// 63 KiB of the 64 KiB constant array
@@ -188,29 +187,6 @@ namespace benchmark
 {
     namespace nvidia
     {
-        double measureConstantL15ReadBandwidth(size_t arraySizeBytes, size_t constantFetchGranularityBytes)
-        {
-            arraySizeBytes = capConstantArraySize(arraySizeBytes);
-            size_t strideBytes = capStride(constantFetchGranularityBytes);
-
-            uint32_t maxNumThreads = capNumThreads(arraySizeBytes, strideBytes);
-            size_t maxReps = MAX_REPS;
-
-            if (maxNumThreads == 0) {
-                std::cerr << "WARNING: Constant L1.5 Read Bandwidth working set too small to benchmark, skipping" << std::endl;
-                return 0.0;
-            }
-
-            std::vector<double> results(ROUNDS);
-
-            for (uint32_t i = 0; i < ROUNDS; ++i)
-            {
-                results[i] = std::get<2>(constantL15ReadBandwidthLauncher(arraySizeBytes, maxNumThreads, maxReps, strideBytes));
-            }
-
-            return util::average(results);
-        }
-
         CacheBandwidthResult measureConstantL15ReadBandwidthSweep(size_t arraySizeBytes, size_t constantFetchGranularityBytes)
         {
             arraySizeBytes = capConstantArraySize(arraySizeBytes);

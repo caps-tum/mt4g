@@ -176,8 +176,6 @@ make all install -j $(nproc)
 | `--memory` | Run main memory benchmarks |
 | `--departuredelay` | Run departure delay benchmarks |
 | `--resourceshare` | Run resource sharing benchmarks |
-| `--optimal` | Run bandwidth benchmarks with optimal configuration (number of threads and blocks) search |
-| `--static` | Run shared memory bandwidth benchmark with statically allocated memory (32 KiB). (if not set, runs with dynamic allocation) |
 | `-v, --version` | Display the version of MT4G and exit |
 | `-h, --help` | Display a detailed help message and exit |
 
@@ -199,7 +197,6 @@ flag generates a `README.md` that embeds all graphs and links to the raw data.
 
 - L2 segment size measurements on AMD GPUs are currently unreliable due to the platform's complex cache behaviour.
 - Constant L1.5 Cache Size detection is capped at 64 KiB. Denoted by 64 KiB + 1 and confidence = 0. (> 64 KiB)
-- Bandwidths are not optimal because we currently do not use a (dynamically found) optimal number of blocks.
 - Cache Line Size detection uses a heuristical approach and is therefore not guaranteed to be correct.
 - Constant L1 shared with L1 is not too reliable. Hence, as a hotfix we repeat the measurements 10 times and on one unsuccessful run return not shared. We are working on a cleaner solution.
 - Incomplete support for CDNA3.
