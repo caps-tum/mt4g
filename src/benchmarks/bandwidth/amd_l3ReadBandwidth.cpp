@@ -38,9 +38,9 @@ __global__ void l3ReadBandwidthKernel(uint32v4* __restrict__ dst, uint32v4* __re
     dst[threadIdx.x] = dummy; // prevent dead code elimination
 }
 
-static std::tuple<double, double> l3ReadBandwidthLauncher(size_t arraySizeBytes, uint32_t numBlocks, uint32_t numThreads, size_t reps) 
+static std::tuple<double, double> l3ReadBandwidthLauncher(size_t arraySizeBytes, uint32_t numBlocks, uint32_t numThreads, size_t reps, util::AllocatorType allocType = util::AllocatorType::HipMalloc)
 {
-    uint32v4* d_srcArr = util::allocateGPUMemory<uint32v4>(arraySizeBytes / sizeof(uint32v4));
+    uint32v4* d_srcArr = util::allocateMemory<uint32v4>(arraySizeBytes / sizeof(uint32v4), allocType);
     uint32v4* d_dstArr = util::allocateGPUMemory<uint32v4>(numThreads);
 
     // warm up
@@ -60,7 +60,7 @@ static std::tuple<double, double> l3ReadBandwidthLauncher(size_t arraySizeBytes,
     util::hipCheck(hipEventDestroy(start));
     util::hipCheck(hipEventDestroy(end));
 
-    util::hipCheck(hipFree(d_srcArr));
+    util::freeMemory(d_srcArr, allocType);
     util::hipCheck(hipFree(d_dstArr));
 
     double dataGiB = (double) arraySizeBytes * reps / (1 * GiB); // Convert to GiB
@@ -71,7 +71,7 @@ static std::tuple<double, double> l3ReadBandwidthLauncher(size_t arraySizeBytes,
 
 namespace benchmark {
     namespace amd {
-        CacheBandwidthResult measureL3ReadBandwidthSweep(size_t l2SizeBytes, size_t l3SizeBytes) 
+        CacheBandwidthResult measureL3ReadBandwidthSweep(size_t l2SizeBytes, size_t l3SizeBytes, util::AllocatorType allocType)
         {
             util::hipDeviceReset();
 
@@ -139,7 +139,7 @@ namespace benchmark {
                     {
                         const size_t reps = result.repsTested[ri];
 
-                        auto [timeS, bandwidth] = l3ReadBandwidthLauncher(arraySizeBytes, numBlocks, numThreads, reps);
+                        auto [timeS, bandwidth] = l3ReadBandwidthLauncher(arraySizeBytes, numBlocks, numThreads, reps, allocType);
 
                         result.bandwidth3D[bi][ti][ri] = bandwidth;
 
