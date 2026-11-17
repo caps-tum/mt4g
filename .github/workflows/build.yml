@@ -1,0 +1,182 @@
+name: Build
+
+# Compile mt4g for AMD and NVIDIA the way the README describes, install it, and
+# check that the installed binary starts (`--help`, `--version`). The hosted
+# runners have no GPU; neither check needs one.
+#
+# Per vendor, two software stacks:
+#   - minimum: the oldest supported stack (README-tested versions), pinned in a
+#     vendor container, with an older GPU architecture.
+#   - latest:  no container; the Ubuntu 24.04 runner with the newest ROCm/CUDA
+#     from the vendors' apt repositories. The toolkit versions are not pinned, so
+#     this job breaks when a new ROCm/CUDA release breaks mt4g; that is intended.
+#
+# The OS is pinned to Ubuntu 24.04 (runner and containers). Bump it deliberately,
+# together with the container tags, once ROCm and CUDA support a newer release.
+#
+# Known constraints (as of 2026-11):
+#   - CUDA 13 needs HIP >= 7.2 (older HIP NVIDIA headers use CUDA APIs that
+#     CUDA 13 removed or changed) and dropped GPU architectures older than sm_75.
+#   - ROCm apt packages exist for Ubuntu 22.04/24.04 only.
+
+# Runs on every push to any branch of this repository and on pull requests from
+# forks (their commits are not pushed here). A PR from a branch of this repository
+# is not built twice: its push run already tests the same commit and shows on the PR.
+# Fork PRs run with a read-only token and no secrets; GitHub may ask a maintainer
+# to approve the first run of a new contributor.
+on:
+  workflow_dispatch:
+  push:
+  pull_request:
+
+# Every pushed commit gets its own result; only superseded PR runs are cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  CXXOPTS_VERSION: v3.2.0          # minimum required by CMakeLists.txt; Ubuntu 24.04 ships 3.1.1
+  DEBIAN_FRONTEND: noninteractive
+
+jobs:
+  amd:
+    name: AMD ${{ matrix.arch }} (ROCm ${{ matrix.rocm }})
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    container: ${{ matrix.container }}   # empty = run directly on the runner
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { rocm: "6.3.3",  arch: gfx90a, container: "rocm/dev-ubuntu-24.04:6.3.3" }  # minimum; gfx90a also compiles the gfx90a/gfx908-only code path
+          - { rocm: "latest", arch: gfx942, container: "" }                            # latest
+
+    steps:
+      # git is installed before checkout: without git, checkout downloads a tarball
+      # without .git, and `mt4g --version` loses the git version.
+      - name: Install build tools
+        run: |
+          SUDO=$(command -v sudo || true)
+          $SUDO apt-get update
+          $SUDO apt-get install -y --no-install-recommends git cmake make g++ pkg-config \
+            ca-certificates curl gnupg libdrm-dev nlohmann-json3-dev
+
+      - name: Add ROCm apt repository (latest)
+        if: matrix.container == ''
+        run: |
+          . /etc/os-release
+          sudo mkdir -p /etc/apt/keyrings
+          curl -fsSL https://repo.radeon.com/rocm/rocm.gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/rocm.gpg
+          echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/latest $VERSION_CODENAME main" \
+            | sudo tee /etc/apt/sources.list.d/rocm.list
+          printf 'Package: *\nPin: release o=repo.radeon.com\nPin-Priority: 600\n' | sudo tee /etc/apt/preferences.d/rocm-pin-600
+          sudo apt-get update
+
+      - name: Install ROCm and dependencies
+        run: |
+          SUDO=$(command -v sudo || true)
+          $SUDO apt-get install -y --no-install-recommends hip-dev hip-runtime-amd rocm-smi-lib hsa-rocr-dev
+          git clone --depth 1 --branch "$CXXOPTS_VERSION" https://github.com/jarro2783/cxxopts.git /tmp/cxxopts
+          cmake -S /tmp/cxxopts -B /tmp/cxxopts/build -DCXXOPTS_BUILD_EXAMPLES=OFF -DCXXOPTS_BUILD_TESTS=OFF
+          $SUDO cmake --install /tmp/cxxopts/build
+          echo "HIP_PATH=/opt/rocm" >> "$GITHUB_ENV"
+          echo "/opt/rocm/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0              # full history + tags, for `git describe` in --version
+          persist-credentials: false
+
+      - name: Build and install (as in the README)
+        run: |
+          mkdir build && cd build
+          cmake .. -DGPU_TARGET_ARCH=${{ matrix.arch }} -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/mt4g"
+          make all install -j "$(nproc)"
+
+      - name: Smoke test (no GPU needed)
+        run: |
+          "$RUNNER_TEMP/mt4g/bin/mt4g" --help
+          "$RUNNER_TEMP/mt4g/bin/mt4g" --version
+
+  nvidia:
+    name: NVIDIA ${{ matrix.arch }} (CUDA ${{ matrix.cuda }}, HIP ${{ matrix.hip }})
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    container: ${{ matrix.container }}   # empty = run directly on the runner
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { cuda: "12.8.1", hip: "6.3.3",  arch: sm_60, container: "nvidia/cuda:12.8.1-devel-ubuntu24.04" }  # minimum; Pascal, the oldest supported architecture
+          - { cuda: "latest", hip: "latest", arch: sm_90, container: "" }                                     # latest
+    env:
+      HIP_PLATFORM: nvidia
+
+    steps:
+      - name: Install build tools
+        run: |
+          SUDO=$(command -v sudo || true)
+          $SUDO apt-get update
+          $SUDO apt-get install -y --no-install-recommends git cmake make g++ \
+            ca-certificates curl gnupg nlohmann-json3-dev
+          git clone --depth 1 --branch "$CXXOPTS_VERSION" https://github.com/jarro2783/cxxopts.git /tmp/cxxopts
+          cmake -S /tmp/cxxopts -B /tmp/cxxopts/build -DCXXOPTS_BUILD_EXAMPLES=OFF -DCXXOPTS_BUILD_TESTS=OFF
+          $SUDO cmake --install /tmp/cxxopts/build
+
+      - name: Install CUDA (latest)
+        if: matrix.container == ''
+        run: |
+          . /etc/os-release
+          distro="ubuntu${VERSION_ID//./}"
+          curl -fsSLo /tmp/cuda-keyring.deb "https://developer.download.nvidia.com/compute/cuda/repos/$distro/x86_64/cuda-keyring_1.1-1_all.deb"
+          sudo dpkg -i /tmp/cuda-keyring.deb
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cuda-toolkit
+
+      # HIP for NVIDIA = HIP headers + CMake package (hip-dev) and hipcc (hipcc-nvidia).
+      # Installing them with apt would pull in the AMD runtime/LLVM (hip-dev) and the
+      # NVIDIA driver (hip-runtime-nvidia -> cuda), so only these two packages are
+      # downloaded from the signed ROCm repository and unpacked.
+      - name: Install HIP (NVIDIA platform)
+        run: |
+          SUDO=$(command -v sudo || true)
+          . /etc/os-release
+          $SUDO mkdir -p /etc/apt/keyrings
+          curl -fsSL https://repo.radeon.com/rocm/rocm.gpg.key | $SUDO gpg --dearmor -o /etc/apt/keyrings/rocm.gpg
+          echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/${{ matrix.hip }} $VERSION_CODENAME main" \
+            | $SUDO tee /etc/apt/sources.list.d/rocm.list
+          $SUDO apt-get update
+          cd /tmp && apt-get download hip-dev hipcc-nvidia
+          for deb in /tmp/hip-dev_*.deb /tmp/hipcc-nvidia_*.deb; do $SUDO dpkg-deb -x "$deb" /; done
+          ROCM_PATH=$(ls -d /opt/rocm-* | sort -V | tail -1)
+          echo "HIP_PATH=$ROCM_PATH" >> "$GITHUB_ENV"
+          echo "CUDA_PATH=/usr/local/cuda" >> "$GITHUB_ENV"
+          echo "$ROCM_PATH/bin" >> "$GITHUB_PATH"
+          echo "/usr/local/cuda/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0              # full history + tags, for `git describe` in --version
+          persist-credentials: false
+
+      - name: Build and install (as in the README)
+        run: |
+          mkdir build && cd build
+          cmake .. -DGPU_TARGET_ARCH=${{ matrix.arch }} -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/mt4g"
+          make all install -j "$(nproc)"
+
+      # mt4g links libcuda.so.1 (the driver), which a GPU-less runner lacks. The
+      # toolkit's stub library satisfies the loader; --help/--version exit before
+      # any CUDA call.
+      - name: Smoke test (no GPU needed)
+        run: |
+          mkdir -p /tmp/cuda-stub
+          ln -sf /usr/local/cuda/lib64/stubs/libcuda.so /tmp/cuda-stub/libcuda.so.1
+          export LD_LIBRARY_PATH=/tmp/cuda-stub:${LD_LIBRARY_PATH:-}
+          "$RUNNER_TEMP/mt4g/bin/mt4g" --help
+          "$RUNNER_TEMP/mt4g/bin/mt4g" --version
