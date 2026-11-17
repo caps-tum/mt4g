@@ -156,8 +156,10 @@ jobs:
           ROCM_PATH=$(ls -d /opt/rocm-* | sort -V | tail -1)
           echo "HIP_PATH=$ROCM_PATH" >> "$GITHUB_ENV"
           # hipcc < 7 from the ROCm apt repo does not pass the HIP include directory
-          # to nvcc on the NVIDIA platform (Spack patches this); add it explicitly.
-          echo "HIPCC_COMPILE_FLAGS_APPEND=-isystem $ROCM_PATH/include" >> "$GITHUB_ENV"
+          # to nvcc on the NVIDIA platform (Spack patches this). nvcc's host compiler
+          # reads CPLUS_INCLUDE_PATH; HIPCC_COMPILE_FLAGS_APPEND can't be used, as
+          # hipcc 6 and 7 both break its quoting on NVIDIA.
+          echo "CPLUS_INCLUDE_PATH=$ROCM_PATH/include" >> "$GITHUB_ENV"
           echo "CUDA_PATH=/usr/local/cuda" >> "$GITHUB_ENV"
           echo "$ROCM_PATH/bin" >> "$GITHUB_PATH"
           echo "/usr/local/cuda/bin" >> "$GITHUB_PATH"
