@@ -389,6 +389,10 @@ int main(int argc, char* argv[]) {
         std::cout << "[L1] Benchmarks finished" << std::endl;
     }
 
+    // L2 line size used by later benchmarks (e.g. the main-memory cache scrub).
+    // AMD: reported by KFD. NVIDIA: only known if the L2 line size benchmark below succeeds.
+    std::optional<size_t> l2LineSizeBytes = util::getL2LineSizeBytes();
+
     if (opts.runL2) {
         std::cout << "[L2] Starting Benchmarks" << std::endl;
         std::cout << "[L2] Latency" << std::endl;
@@ -434,6 +438,7 @@ int main(int argc, char* argv[]) {
             }
         }
         if (l2LineSizeValue.has_value()) {
+            l2LineSizeBytes = l2LineSizeValue;
             std::cout << "[L2] Miss Penalty" << std::endl;
             double l2MissPenalty = timed("l2MissPenalty", [&] { return benchmark::measureL2MissPenalty(deviceProperties.l2CacheSize, l2LineSizeValue.value(), l2Latency.mean); });
             result["memory"]["l2"]["missPenalty"] = {
@@ -920,7 +925,7 @@ int main(int argc, char* argv[]) {
         std::cout << "[Main Memory] Starting Benchmarks" << std::endl;
 
         std::cout << "[Main Memory] Latency" << std::endl;
-        CacheLatencyResult mainMemLatency = timed("mainMemoryLatency", [&] { return benchmark::measureMainMemoryLatency(opts.allocType); });
+        CacheLatencyResult mainMemLatency = timed("mainMemoryLatency", [&] { return benchmark::measureMainMemoryLatency(opts.allocType, l2LineSizeBytes); });
         result["memory"]["main"]["latency"] = mainMemLatency;
         result["memory"]["main"]["latency"]["allocator"] = allocatorName;
         if (opts.rawData) {

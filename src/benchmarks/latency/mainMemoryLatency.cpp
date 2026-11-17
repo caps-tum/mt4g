@@ -5,10 +5,10 @@
 #include <map>
 #include <numeric>
 #include <optional>
+#include <iostream>
 
 static constexpr auto SAMPLE_SIZE = 2048;// 2048 Loads should suffice to rule out random flukes
 static constexpr auto WARMUP_HOPS = SAMPLE_SIZE;
-static constexpr size_t SCRUB_STRIDE_BYTES = 64;
 
 __global__ void mainMemoryLatencyKernel(uint32_t *pChaseArray, uint32_t *timingResults) {
     uint32_t index = 0;
@@ -45,13 +45,12 @@ __global__ void mainMemoryLatencyInitKernel(uint32_t *destination, const uint32_
 }
 
 __global__ void mainMemoryLatencyScrubKernel(const uint32_t *source, size_t count,
-                                             uint32_t *sink) {
-    constexpr size_t wordsPerCacheLine = SCRUB_STRIDE_BYTES / sizeof(uint32_t);
+                                             size_t wordsPerCacheLine, uint32_t *sink) {
     const size_t threadIndex = blockIdx.x * blockDim.x + threadIdx.x;
     const size_t threadCount = gridDim.x * blockDim.x;
     uint32_t accumulator = 0;
 
-    // Touch one word per assumed 64-byte cache line to create cache pressure.
+    // Touch one word per L2 cache line (line size reported by mt4g) to create cache pressure.
     // This may evict measured-array data, but is not a guaranteed cache flush.
     for (size_t index = threadIndex * wordsPerCacheLine;
          index < count;
@@ -63,7 +62,8 @@ __global__ void mainMemoryLatencyScrubKernel(const uint32_t *source, size_t coun
 }
 
 std::vector<uint32_t> mainMemoryLatencyLauncher(size_t arraySizeBytes, size_t strideBytes,
-                                                util::AllocatorType allocType) {
+                                                util::AllocatorType allocType,
+                                                std::optional<size_t> l2LineSizeBytes) {
     util::hipDeviceReset(); 
 
     std::vector<uint32_t> hostChaseArray = util::generateRandomizedPChaseArray(arraySizeBytes, strideBytes);
@@ -80,10 +80,17 @@ std::vector<uint32_t> mainMemoryLatencyLauncher(size_t arraySizeBytes, size_t st
     util::hipCheck(hipDeviceSynchronize());
 
     // Apply cache pressure before measuring the pointer chase.
+    // Stride = one L2 line. If mt4g has no valid L2 line size, touch every word.
+    size_t scrubWordsPerLine = 1;
+    if (l2LineSizeBytes.has_value() && l2LineSizeBytes.value() >= sizeof(uint32_t)) {
+        scrubWordsPerLine = l2LineSizeBytes.value() / sizeof(uint32_t);
+    } else {
+        std::cout << "[Main Memory] L2 line size unknown, cache scrub touches every 32-bit word." << std::endl;
+    }
     const size_t scrubSinkSize = static_cast<size_t>(blocks) * threads;
     uint32_t *d_scrubSink = util::allocateGPUMemory(scrubSinkSize);
     mainMemoryLatencyScrubKernel<<<blocks, threads>>>(
-        d_initArray, hostChaseArray.size(), d_scrubSink);
+        d_initArray, hostChaseArray.size(), scrubWordsPerLine, d_scrubSink);
     util::hipCheck(hipDeviceSynchronize());
 
     util::hipCheck(hipFree(d_scrubSink));
@@ -101,9 +108,10 @@ std::vector<uint32_t> mainMemoryLatencyLauncher(size_t arraySizeBytes, size_t st
 }
 
 namespace benchmark {
-    CacheLatencyResult measureMainMemoryLatency(util::AllocatorType allocType) {
+    CacheLatencyResult measureMainMemoryLatency(util::AllocatorType allocType,
+                                                std::optional<size_t> l2LineSizeBytes) {
 
-        auto timings = mainMemoryLatencyLauncher(1 * GiB, 1 * KiB, allocType);
+        auto timings = mainMemoryLatencyLauncher(1 * GiB, 1 * KiB, allocType, l2LineSizeBytes);
 
         CacheLatencyResult result {
             timings,
