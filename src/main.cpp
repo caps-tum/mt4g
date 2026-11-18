@@ -272,13 +272,6 @@ int main(int argc, char* argv[]) {
     }
     #endif
 
-    #ifdef __HIP_PLATFORM_NVIDIA__
-    result["memory"]["l2"]["size"] = {
-        {"value", deviceProperties.l2CacheSize},
-        {"unit", "bytes"}
-    };
-    #endif
-
     // Timing instrumentation (-t/--timing). Times the full benchmark run here;
     // every individual benchmark is timed by wrapping its call in `timed`.
     BenchTimer timed{{}, opts.timing};
@@ -395,6 +388,10 @@ int main(int argc, char* argv[]) {
             std::cout << "[L2] Segment Size" << std::endl;
             CacheSizeResult l2SegmentSize = timed("l2SegmentSize", [&] { return benchmark::measureL2SegmentSize(deviceProperties.l2CacheSize, l2FetchGranularity.confidence > VALIDITY_THRESHOLD ? l2FetchGranularity.size : MIN_EXPECTED_LINE_SIZE); });
             result["memory"]["l2"]["segmentSize"] = l2SegmentSize;
+            if (l2SegmentSize.confidence > VALIDITY_THRESHOLD) {
+                // the segment size divides the full L2 size (see measureL2SegmentSize)
+                result["memory"]["l2"]["amount"] = deviceProperties.l2CacheSize / l2SegmentSize.size;
+            }
             if (opts.graphs) {
                 util::exportChartMinMaxAvgRed(l2SegmentSize.timings, fancyName + " - L2 Segment Size", {l2SegmentSize.size}, "Bytes", "Cycles", graphDir.string());
             }
@@ -924,7 +921,19 @@ int main(int argc, char* argv[]) {
             }
             cacheLineSize = util::max(cacheLineSize.value(), lineSize.value());
         }
-        std::optional<size_t> lastLevelCacheSize = util::getKnownSize(result, VALIDITY_THRESHOLD, "memory", hasL3 ? "l3" : "l2", "size");
+        // Last level cache: L3 if there is one, otherwise all L2 instances (segments on NVIDIA)
+        std::optional<size_t> lastLevelCacheSize;
+        if (hasL3) {
+            lastLevelCacheSize = util::getKnownSize(result, VALIDITY_THRESHOLD, "memory", "l3", "size");
+        } else {
+            auto l2Size = util::getKnownSize(result, VALIDITY_THRESHOLD, "memory", "l2", "size");
+            if (!l2Size.has_value()) {
+                l2Size = util::getKnownSize(result, VALIDITY_THRESHOLD, "memory", "l2", "segmentSize");
+            }
+            if (l2Size.has_value()) {
+                lastLevelCacheSize = l2Size.value() * util::getNumeric<size_t>(result, "memory", "l2", "amount").value_or(1);
+            }
+        }
         CacheLatencyResult mainMemLatency = timed("mainMemoryLatency", [&] { return benchmark::measureMainMemoryLatency(opts.allocType, cacheLineSize, lastLevelCacheSize); });
         result["memory"]["main"]["latency"] = mainMemLatency;
         result["memory"]["main"]["latency"]["allocator"] = allocatorName;

@@ -28,12 +28,14 @@ __global__ void l3LatencyKernel(uint32_t *pChaseArray, uint32_t *timingResults, 
     timingResults[0] += index >> util::min(index / 2, 32);
 }
 
-// TODO: align with mainMemoryLatency: final index in its own slot instead of overwriting sample 0, chain check
+// TODO: as in mainMemoryLatency, keep sample 0 (final index in an extra slot) and add the chain check
 std::vector<uint32_t> l3LatencyLauncher(size_t arraySizeBytes, size_t strideBytes,
                                         util::AllocatorType allocType) {
     util::hipDeviceReset();
 
-    uint32_t *d_pChaseArray = util::allocateMemory(util::generatePChaseArray(arraySizeBytes, strideBytes), allocType);
+    // p-chase from the host, written into the selected memory by the GPU (first touch)
+    std::vector<uint32_t> hostChaseArray = util::generatePChaseArray(arraySizeBytes, strideBytes);
+    uint32_t *d_pChaseArray = util::allocateMemory(hostChaseArray, allocType);
     uint32_t *d_timingResults = util::allocateGPUMemory(SAMPLE_SIZE);
 
     util::hipCheck(hipDeviceSynchronize());

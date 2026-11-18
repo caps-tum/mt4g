@@ -102,6 +102,7 @@ std::vector<uint32_t> mainMemoryLatencyLauncher(size_t arraySizeBytes, size_t st
         throw std::logic_error("Main memory latency: the p-chase array must be larger than one window");
     }
 
+    // written into the selected memory by the GPU (first touch)
     uint32_t *d_pChaseArray = util::allocateMemory(hostChaseArray, allocType);
 
     uint32_t threads = util::min(util::getMaxThreadsPerBlock(), util::getWarpSize() * util::getSIMDsPerCU());
