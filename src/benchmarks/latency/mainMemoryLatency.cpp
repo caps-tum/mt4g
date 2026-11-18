@@ -9,6 +9,9 @@
 
 static constexpr auto SAMPLE_SIZE = 2048;// 2048 Loads should suffice to rule out random flukes
 static constexpr auto WARMUP_HOPS = SAMPLE_SIZE;
+static constexpr auto MIN_ARRAY_SIZE = 512 * MiB;
+static constexpr auto LLC_SIZE_FACTOR = 4;// array size relative to the last level cache
+static constexpr auto DEFAULT_STRIDE = 256;// used if no cache line size is reported
 
 __global__ void mainMemoryLatencyKernel(uint32_t *pChaseArray, uint32_t *timingResults) {
     uint32_t index = 0;
@@ -44,26 +47,41 @@ __global__ void mainMemoryLatencyInitKernel(uint32_t *destination, const uint32_
     }
 }
 
-__global__ void mainMemoryLatencyScrubKernel(const uint32_t *source, size_t count,
-                                             size_t wordsPerCacheLine, uint32_t *sink) {
-    const size_t threadIndex = blockIdx.x * blockDim.x + threadIdx.x;
-    const size_t threadCount = gridDim.x * blockDim.x;
+// Loads (and thereby caches) the buffer, evicting older data from all cache levels
+__global__ void evictCachesKernel(const uint32_t *buffer, size_t count, uint32_t *sink) {
+    size_t index = blockIdx.x * blockDim.x + threadIdx.x;
+    size_t stride = gridDim.x * blockDim.x;
     uint32_t accumulator = 0;
-
-    // Touch one word per L2 cache line (line size reported by mt4g) to create cache pressure.
-    // This may evict measured-array data, but is not a guaranteed cache flush.
-    for (size_t index = threadIndex * wordsPerCacheLine;
-         index < count;
-         index += threadCount * wordsPerCacheLine) {
-        accumulator ^= source[index];
+    for (size_t i = index; i < count; i += stride) {
+        accumulator ^= buffer[i];
     }
+    sink[index] = accumulator;
+}
 
-    sink[threadIndex] = accumulator;
+// Largest line size of the regular caches (L1, L2, L3), so every hop loads a new line in all of them
+static size_t chaseStrideBytes(std::optional<size_t> l1LineSizeBytes) {
+    if (!l1LineSizeBytes.has_value()) {
+        l1LineSizeBytes = util::getL1LineSizeBytes();
+    }
+    size_t stride = 0;
+    for (auto lineSize : {l1LineSizeBytes, util::getL2LineSizeBytes(), util::getL3LineSizeBytes()}) {
+        stride = util::max(stride, lineSize.value_or(0));
+    }
+    if (stride == 0) {
+        std::cout << "[Main Memory] No cache line size available, using the default p-chase stride of " << DEFAULT_STRIDE << " bytes" << std::endl;
+        return DEFAULT_STRIDE;
+    }
+    return stride;
+}
+
+static size_t chaseArraySizeBytes() {
+    size_t lastLevelCacheBytes = util::max(util::getL3SizeBytes().value_or(0),
+                                           static_cast<size_t>(util::getDeviceProperties().l2CacheSize));
+    return util::max(MIN_ARRAY_SIZE, LLC_SIZE_FACTOR * lastLevelCacheBytes);
 }
 
 std::vector<uint32_t> mainMemoryLatencyLauncher(size_t arraySizeBytes, size_t strideBytes,
-                                                util::AllocatorType allocType,
-                                                std::optional<size_t> l2LineSizeBytes) {
+                                                util::AllocatorType allocType) {
     util::hipDeviceReset(); 
 
     std::vector<uint32_t> hostChaseArray = util::generateRandomizedPChaseArray(arraySizeBytes, strideBytes);
@@ -79,21 +97,13 @@ std::vector<uint32_t> mainMemoryLatencyLauncher(size_t arraySizeBytes, size_t st
     mainMemoryLatencyInitKernel<<<blocks, threads>>>(d_pChaseArray, d_initArray, hostChaseArray.size());
     util::hipCheck(hipDeviceSynchronize());
 
-    // Apply cache pressure before measuring the pointer chase.
-    // Stride = one L2 line. If mt4g has no valid L2 line size, touch every word.
-    size_t scrubWordsPerLine = 1;
-    if (l2LineSizeBytes.has_value() && l2LineSizeBytes.value() >= sizeof(uint32_t)) {
-        scrubWordsPerLine = l2LineSizeBytes.value() / sizeof(uint32_t);
-    } else {
-        std::cout << "[Main Memory] L2 line size unknown, cache scrub touches every 32-bit word." << std::endl;
-    }
-    const size_t scrubSinkSize = static_cast<size_t>(blocks) * threads;
-    uint32_t *d_scrubSink = util::allocateGPUMemory(scrubSinkSize);
-    mainMemoryLatencyScrubKernel<<<blocks, threads>>>(
-        d_initArray, hostChaseArray.size(), scrubWordsPerLine, d_scrubSink);
+    // The initialization left parts of the p-chase array in the caches. d_initArray has the
+    // same size and is no longer needed, so loading it evicts them.
+    uint32_t *d_evictionSink = util::allocateGPUMemory(static_cast<size_t>(blocks) * threads);
+    evictCachesKernel<<<blocks, threads>>>(d_initArray, hostChaseArray.size(), d_evictionSink);
     util::hipCheck(hipDeviceSynchronize());
 
-    util::hipCheck(hipFree(d_scrubSink));
+    util::hipCheck(hipFree(d_evictionSink));
     util::hipCheck(hipFree(d_initArray));
     uint32_t *d_timingResults = util::allocateGPUMemory(SAMPLE_SIZE + 1);
 
@@ -108,10 +118,9 @@ std::vector<uint32_t> mainMemoryLatencyLauncher(size_t arraySizeBytes, size_t st
 }
 
 namespace benchmark {
-    CacheLatencyResult measureMainMemoryLatency(util::AllocatorType allocType,
-                                                std::optional<size_t> l2LineSizeBytes) {
+    CacheLatencyResult measureMainMemoryLatency(util::AllocatorType allocType, std::optional<size_t> l1LineSizeBytes) {
 
-        auto timings = mainMemoryLatencyLauncher(1 * GiB, 1 * KiB, allocType, l2LineSizeBytes);
+        auto timings = mainMemoryLatencyLauncher(chaseArraySizeBytes(), chaseStrideBytes(l1LineSizeBytes), allocType);
 
         CacheLatencyResult result {
             timings,
