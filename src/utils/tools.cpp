@@ -30,7 +30,7 @@ static uint32_t prevPowerOfTwo(uint32_t v) {
 }
 
 namespace util {   
-    std::vector<uint32_t> generateRandomizedPChaseArray(size_t arraySizeBytes, size_t strideBytes) {
+    std::vector<uint32_t> generateRandomizedPChaseArray(size_t arraySizeBytes, size_t strideBytes, size_t windowBytes) {
         if (strideBytes < sizeof(uint32_t) || strideBytes % sizeof(uint32_t) != 0) {
             throw std::invalid_argument("p-chase stride must be a positive multiple of 4 bytes");
         }
@@ -45,21 +45,32 @@ namespace util {
         if (Nwords > std::numeric_limits<uint32_t>::max()) {
             throw std::invalid_argument("p-chase array too large for 32-bit indices");
         }
+        const size_t jumpsPerWindow = windowBytes > 0 ? util::max(windowBytes / strideBytes, static_cast<size_t>(1)) : numJumps;
+        const size_t numWindows = (numJumps + jumpsPerWindow - 1) / jumpsPerWindow;
 
         // allocate exactly Nwords entries, zero‐initialized
         std::vector<uint32_t> arr(Nwords, 0);
 
-        // build index list [0,1,2,...,numJumps-1]
-        std::vector<uint32_t> idx(numJumps);
-        std::iota(idx.begin(), idx.end(), 0);
-
-        // Fisher–Yates shuffle, keep idx[0]==0 if you want a fixed start:
         std::random_device rd;
         std::mt19937 gen(rd());
-        for (size_t i = numJumps - 1; i > 0; --i) {
-            std::uniform_int_distribution<size_t> dist(1, i);
-            size_t j = dist(gen);
-            std::swap(idx[i], idx[j]);
+
+        // window visiting order, the window of element 0 stays first
+        std::vector<size_t> windows(numWindows);
+        std::iota(windows.begin(), windows.end(), 0);
+        std::shuffle(windows.begin() + 1, windows.end(), gen);
+
+        // element visiting order: all elements of a window in random order, then the next window
+        std::vector<uint32_t> idx;
+        idx.reserve(numJumps);
+        for (size_t window : windows) {
+            const size_t windowStart = idx.size();
+            const size_t first = window * jumpsPerWindow;
+            const size_t last = util::min(first + jumpsPerWindow, numJumps);
+            for (size_t i = first; i < last; ++i) {
+                idx.push_back(i);
+            }
+            // element 0 stays first, the chase starts there
+            std::shuffle(idx.begin() + windowStart + (window == 0 ? 1 : 0), idx.end(), gen);
         }
 
         // link each shuffled block to the next (wrapping at end)
