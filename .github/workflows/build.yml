@@ -25,7 +25,7 @@ env:
   DEBIAN_FRONTEND: noninteractive
 jobs:
   amd:
-    name: amd-rocm${{ matrix.rocm }}-${{ matrix.gpu }}-${{ matrix.arch }}
+    name: AMD ${{ matrix.uarch }} (${{ matrix.arch }}, ROCm ${{ matrix.rocm }})
     # PRs from branches of this repository are already built by their push
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-24.04
@@ -35,8 +35,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { rocm: "6.3.3",  gpu: mi200, arch: gfx90a, container: "rocm/dev-ubuntu-24.04:6.3.3" }  # gfx90a also covers the gfx90a/gfx908-only code
-          - { rocm: "latest", gpu: mi300, arch: gfx942, container: "" }
+          - { rocm: "6.3.3",  uarch: CDNA2, arch: gfx90a, container: "rocm/dev-ubuntu-24.04:6.3.3" }  # gfx90a also covers the gfx90a/gfx908-only code
+          - { rocm: "latest", uarch: CDNA3, arch: gfx942, container: "" }
     steps:
       # git before checkout, otherwise there is no .git and --version has no git version
       - name: Get build tools
@@ -82,7 +82,7 @@ jobs:
           "$RUNNER_TEMP/mt4g/bin/mt4g" --version
 
   nvidia:
-    name: nvidia-cuda${{ matrix.cuda }}-hip${{ matrix.hip }}-${{ matrix.gpu }}-${{ matrix.arch }}
+    name: NVIDIA ${{ matrix.uarch }} (${{ matrix.arch }}, CUDA ${{ matrix.cuda }}, HIP ${{ matrix.hip }})
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -91,8 +91,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { cuda: "12.8.1", hip: "6.3.3",  gpu: pascal, arch: sm_60, container: "nvidia/cuda:12.8.1-devel-ubuntu24.04" }  # oldest supported
-          - { cuda: "latest", hip: "latest", gpu: hopper, arch: sm_90, container: "" }
+          - { cuda: "12.8.1", hip: "6.3.3",  uarch: Pascal, arch: sm_60, container: "nvidia/cuda:12.8.1-devel-ubuntu24.04" }  # oldest supported
+          - { cuda: "latest", hip: "latest", uarch: Hopper, arch: sm_90, container: "" }
     env:
       HIP_PLATFORM: nvidia
     steps:
