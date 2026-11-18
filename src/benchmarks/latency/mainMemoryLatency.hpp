@@ -9,10 +9,12 @@ namespace benchmark {
     /**
      * @brief Measure the latency of main memory accesses.
      *
-     * @param allocType       Allocator used for the pointer-chase array.
-     * @param l1LineSizeBytes L1 line size measured by mt4g, otherwise the reported one is used.
+     * @param allocType               Allocator used for the pointer-chase array.
+     * @param cacheLineSizeBytes      Largest line size of all caches (L1, L2, L3), if all are known; the p-chase stride.
+     * @param lastLevelCacheSizeBytes Size of the last level cache, sets the p-chase array size.
      * @return Average latency in cycles.
      */
     CacheLatencyResult measureMainMemoryLatency(util::AllocatorType allocType = util::AllocatorType::HipMalloc,
-                                                std::optional<size_t> l1LineSizeBytes = std::nullopt);
+                                                std::optional<size_t> cacheLineSizeBytes = std::nullopt,
+                                                std::optional<size_t> lastLevelCacheSizeBytes = std::nullopt);
 }

@@ -272,12 +272,17 @@ int main(int argc, char* argv[]) {
     }
     #endif
 
+    #ifdef __HIP_PLATFORM_NVIDIA__
+    result["memory"]["l2"]["size"] = {
+        {"value", deviceProperties.l2CacheSize},
+        {"unit", "bytes"}
+    };
+    #endif
+
     // Timing instrumentation (-t/--timing). Times the full benchmark run here;
     // every individual benchmark is timed by wrapping its call in `timed`.
     BenchTimer timed{{}, opts.timing};
     auto totalStart = std::chrono::steady_clock::now();
-
-    std::optional<size_t> l1LineSizeBytes; // measured, only known if the L1 benchmarks ran
 
     if (opts.runL1) {
         std::cout << "[L1] Starting Benchmarks" << std::endl;
@@ -305,7 +310,6 @@ int main(int argc, char* argv[]) {
             }
 
             if (l1LineSize.confidence > VALIDITY_THRESHOLD) {
-                l1LineSizeBytes = l1LineSize.size;
                 std::cout << "[L1] Miss Penalty" << std::endl;
                 double l1MissPenalty = timed("l1MissPenalty", [&] { return benchmark::measureL1MissPenalty(l1Size.size, l1LineSize.size, l1Latency.mean); });
                 result["memory"]["l1"]["missPenalty"] = {
@@ -906,7 +910,22 @@ int main(int argc, char* argv[]) {
         std::cout << "[Main Memory] Starting Benchmarks" << std::endl;
 
         std::cout << "[Main Memory] Latency" << std::endl;
-        CacheLatencyResult mainMemLatency = timed("mainMemoryLatency", [&] { return benchmark::measureMainMemoryLatency(opts.allocType, l1LineSizeBytes); });
+        // Largest line size of L1, L2 and L3 (if there is one), unknown as soon as one of them is unknown
+        const bool hasL3 = result["memory"].contains("l3");
+        std::optional<size_t> cacheLineSize = 0;
+        for (const std::string cache : {"l1", "l2", "l3"}) {
+            if (cache == "l3" && !hasL3) {
+                continue;
+            }
+            auto lineSize = util::getKnownSize(result, VALIDITY_THRESHOLD, "memory", cache, "lineSize");
+            if (!lineSize.has_value()) {
+                cacheLineSize.reset();
+                break;
+            }
+            cacheLineSize = util::max(cacheLineSize.value(), lineSize.value());
+        }
+        std::optional<size_t> lastLevelCacheSize = util::getKnownSize(result, VALIDITY_THRESHOLD, "memory", hasL3 ? "l3" : "l2", "size");
+        CacheLatencyResult mainMemLatency = timed("mainMemoryLatency", [&] { return benchmark::measureMainMemoryLatency(opts.allocType, cacheLineSize, lastLevelCacheSize); });
         result["memory"]["main"]["latency"] = mainMemLatency;
         result["memory"]["main"]["latency"]["allocator"] = allocatorName;
         if (opts.rawData) {

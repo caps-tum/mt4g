@@ -53,28 +53,12 @@ __global__ void evictCachesKernel(const uint32_t *buffer, size_t count, uint32_t
     sink[index] = accumulator;
 }
 
-__global__ void mainMemoryLatencyInitKernel(uint32_t *destination, const uint32_t *source, size_t count) {
-    size_t index = blockIdx.x * blockDim.x + threadIdx.x;
-    size_t stride = gridDim.x * blockDim.x;
-    for (; index < count; index += stride) {
-        destination[index] = source[index];
+// With the largest cache line size as stride, every hop loads a new line in all caches
+static size_t chaseStrideBytes(std::optional<size_t> cacheLineSizeBytes) {
+    if (!cacheLineSizeBytes.has_value()) {
+        std::cout << "[Main Memory] Not all cache line sizes are known, using the default p-chase stride of " << DEFAULT_STRIDE << " bytes" << std::endl;
     }
-}
-
-// Largest line size of the regular caches (L1, L2, L3), so every hop loads a new line in all of them
-static size_t chaseStrideBytes(std::optional<size_t> l1LineSizeBytes) {
-    if (!l1LineSizeBytes.has_value()) {
-        l1LineSizeBytes = util::getL1LineSizeBytes();
-    }
-    size_t stride = 0;
-    for (auto lineSize : {l1LineSizeBytes, util::getL2LineSizeBytes(), util::getL3LineSizeBytes()}) {
-        stride = util::max(stride, lineSize.value_or(0));
-    }
-    if (stride == 0) {
-        std::cout << "[Main Memory] No cache line size available, using the default p-chase stride of " << DEFAULT_STRIDE << " bytes" << std::endl;
-        return DEFAULT_STRIDE;
-    }
-    return stride;
+    return cacheLineSizeBytes.value_or(DEFAULT_STRIDE);
 }
 
 // Order in which the chain visits the windows, starting with the window of element 0
@@ -100,10 +84,11 @@ static uint32_t expectedFinalIndex(const std::vector<uint32_t> &chaseArray, size
     return index;
 }
 
-static size_t chaseArraySizeBytes() {
-    size_t lastLevelCacheBytes = util::max(util::getL3SizeBytes().value_or(0),
-                                           static_cast<size_t>(util::getDeviceProperties().l2CacheSize));
-    return util::max(MIN_ARRAY_SIZE, LLC_SIZE_FACTOR * lastLevelCacheBytes);
+static size_t chaseArraySizeBytes(std::optional<size_t> lastLevelCacheSizeBytes) {
+    if (!lastLevelCacheSizeBytes.has_value()) {
+        std::cout << "[Main Memory] No last level cache size known, using the minimum p-chase array size of " << MIN_ARRAY_SIZE / MiB << " MiB" << std::endl;
+    }
+    return util::max(MIN_ARRAY_SIZE, LLC_SIZE_FACTOR * lastLevelCacheSizeBytes.value_or(0));
 }
 
 std::vector<uint32_t> mainMemoryLatencyLauncher(size_t arraySizeBytes, size_t strideBytes,
@@ -117,18 +102,10 @@ std::vector<uint32_t> mainMemoryLatencyLauncher(size_t arraySizeBytes, size_t st
         throw std::logic_error("Main memory latency: the p-chase array must be larger than one window");
     }
 
-    uint32_t *d_pChaseArray = util::allocateMemory<uint32_t>(hostChaseArray.size(), allocType);
-
-    uint32_t *d_initArray = util::allocateGPUMemory(hostChaseArray);
+    uint32_t *d_pChaseArray = util::allocateMemory(hostChaseArray, allocType);
 
     uint32_t threads = util::min(util::getMaxThreadsPerBlock(), util::getWarpSize() * util::getSIMDsPerCU());
     uint32_t blocks = util::getNumberOfComputeUnits() * util::getMaxBlocksPerMultiProcessor();
-
-    // Use the same GPU first-touch initialization path for every allocator.
-    mainMemoryLatencyInitKernel<<<blocks, threads>>>(d_pChaseArray, d_initArray, hostChaseArray.size());
-    util::hipCheck(hipDeviceSynchronize());
-
-    util::hipCheck(hipFree(d_initArray));
 
     // Evict: load the windows in the chain's visiting order, one kernel per window (kernels in a stream run in order).
     // The windows of the measured hops are loaded first, so they are the oldest data in all caches.
@@ -161,9 +138,10 @@ std::vector<uint32_t> mainMemoryLatencyLauncher(size_t arraySizeBytes, size_t st
 
 namespace benchmark {
     // TODO: report the array size, stride and window size in the result
-    CacheLatencyResult measureMainMemoryLatency(util::AllocatorType allocType, std::optional<size_t> l1LineSizeBytes) {
+    CacheLatencyResult measureMainMemoryLatency(util::AllocatorType allocType, std::optional<size_t> cacheLineSizeBytes,
+                                                std::optional<size_t> lastLevelCacheSizeBytes) {
 
-        auto timings = mainMemoryLatencyLauncher(chaseArraySizeBytes(), chaseStrideBytes(l1LineSizeBytes), allocType);
+        auto timings = mainMemoryLatencyLauncher(chaseArraySizeBytes(lastLevelCacheSizeBytes), chaseStrideBytes(cacheLineSizeBytes), allocType);
 
         CacheLatencyResult result {
             timings,

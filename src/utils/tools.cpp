@@ -30,6 +30,9 @@ static uint32_t prevPowerOfTwo(uint32_t v) {
 }
 
 namespace util {   
+    // First builds the visiting order (windows in random order, starting with the window of element 0, and the
+    // elements of each window in random order), then links each element to the next one in that order and the
+    // last one back to element 0. So the chain is always one cycle over all elements, whatever the shuffles do.
     std::vector<uint32_t> generateRandomizedPChaseArray(size_t arraySizeBytes, size_t strideBytes, size_t windowBytes) {
         if (strideBytes < sizeof(uint32_t) || strideBytes % sizeof(uint32_t) != 0) {
             throw std::invalid_argument("p-chase stride must be a positive multiple of 4 bytes");
