@@ -19,7 +19,7 @@ elseif(GPU_TARGET_ARCH MATCHES "^sm_")
     endif()
 endif()
 
-project(mt4g VERSION 1.2.0 LANGUAGES ${MT4G_LANGUAGES})
+project(mt4g VERSION 2.0.0 LANGUAGES ${MT4G_LANGUAGES})
 
 # MT4G is always built optimized; FORCE also overrides a command-line build type.
 set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type (forced by MT4G)" FORCE)
