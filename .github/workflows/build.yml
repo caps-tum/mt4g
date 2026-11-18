@@ -26,8 +26,6 @@ env:
 jobs:
   amd:
     name: AMD ${{ matrix.uarch }} (${{ matrix.arch }}, ROCm ${{ matrix.rocm }})
-    # PRs from branches of this repository are already built by their push
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     container: ${{ matrix.container }}
@@ -83,7 +81,6 @@ jobs:
 
   nvidia:
     name: NVIDIA ${{ matrix.uarch }} (${{ matrix.arch }}, CUDA ${{ matrix.cuda }}, HIP ${{ matrix.hip }})
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     container: ${{ matrix.container }}
