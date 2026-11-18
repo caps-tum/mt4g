@@ -6,6 +6,7 @@
 #include <numeric>
 #include <optional>
 #include <iostream>
+#include <stdexcept>
 
 static constexpr auto SAMPLE_SIZE = 2048;// 2048 Loads should suffice to rule out random flukes
 static constexpr auto WARMUP_HOPS = SAMPLE_SIZE;
@@ -35,7 +36,7 @@ __global__ void mainMemoryLatencyKernel(uint32_t *pChaseArray, uint32_t *timingR
         timingResults[i] = s_timings[i];
     }
 
-    // Keep the final pointer value observable without overwriting a sample.
+    // final index, checked on the host
     timingResults[SAMPLE_SIZE] = index;
 }
 
@@ -74,6 +75,15 @@ static size_t chaseStrideBytes(std::optional<size_t> l1LineSizeBytes) {
     return stride;
 }
 
+// The node the chase must end on after the given number of hops from node 0
+static uint32_t expectedFinalIndex(const std::vector<uint32_t> &chaseArray, size_t hops) {
+    uint32_t index = 0;
+    for (size_t i = 0; i < hops; ++i) {
+        index = chaseArray[index];
+    }
+    return index;
+}
+
 static size_t chaseArraySizeBytes() {
     size_t lastLevelCacheBytes = util::max(util::getL3SizeBytes().value_or(0),
                                            static_cast<size_t>(util::getDeviceProperties().l2CacheSize));
@@ -110,7 +120,14 @@ std::vector<uint32_t> mainMemoryLatencyLauncher(size_t arraySizeBytes, size_t st
     util::hipCheck(hipDeviceSynchronize());
     mainMemoryLatencyKernel<<<1, 1>>>(d_pChaseArray, d_timingResults);
 
-    std::vector<uint32_t> timingResultBuffer = util::copyFromDevice(d_timingResults, SAMPLE_SIZE);
+    std::vector<uint32_t> timingResultBuffer = util::copyFromDevice(d_timingResults, SAMPLE_SIZE + 1);
+
+    // A wrong final index means the GPU did not see the generated chain (e.g. a broken allocation)
+    const uint32_t finalIndex = timingResultBuffer.back();
+    timingResultBuffer.pop_back();
+    if (finalIndex != expectedFinalIndex(hostChaseArray, WARMUP_HOPS + SAMPLE_SIZE)) {
+        throw std::runtime_error("Main memory latency: the GPU did not follow the p-chase chain, the measurement is invalid");
+    }
 
     util::freeMemory(d_pChaseArray, allocType);
     util::hipCheck(hipFree(d_timingResults));
