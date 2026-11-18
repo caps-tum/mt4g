@@ -12,11 +12,10 @@ namespace util {
      * @brief Allocator selector for L3/main-memory latency and bandwidth sweeps.
      */
     enum class AllocatorType {
-        HipMalloc,         // hipMalloc — baseline device memory
-        HipMallocManaged,  // hipMallocManaged — demand-paged unified memory
-        HipHostMalloc,     // hipHostMalloc — pinned host memory accessible from GPU
-        Malloc             // ::malloc — CPU heap accessible from GPU via HMM on MI300A;
-                           // requires XNACK=1
+        HipMalloc,         // device memory
+        HipMallocManaged,  // managed (unified) memory
+        HipHostMalloc,     // pinned host memory
+        Malloc             // pageable host memory, needs XNACK (e.g. MI300A)
     };
 
     /**
