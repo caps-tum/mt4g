@@ -13,12 +13,14 @@ static constexpr auto WARMUP_HOPS = SAMPLE_SIZE;
 static constexpr auto MIN_ARRAY_SIZE = 512 * MiB;
 static constexpr auto LLC_SIZE_FACTOR = 4;// array size relative to the last level cache
 static constexpr auto DEFAULT_STRIDE = 256;// used if no cache line size is reported
+// The chain stays in a window of this size before moving on: few pages for the TLB, but still many DRAM rows per bank
+static constexpr auto CHASE_WINDOW_SIZE = 8 * MiB;
 
 __global__ void mainMemoryLatencyKernel(uint32_t *pChaseArray, uint32_t *timingResults) {
     uint32_t index = 0;
     __shared__ uint64_t s_timings[SAMPLE_SIZE];
 
-    // Continue from the warm-up position to avoid immediately repeating its path.
+    // Warm-up: warms the TLB, the measured hops then load other lines of the same pages
     for (uint32_t i = 0; i < WARMUP_HOPS; ++i) {
         index = __forceBypassAllCacheReads(pChaseArray, index);
     }
@@ -40,14 +42,6 @@ __global__ void mainMemoryLatencyKernel(uint32_t *pChaseArray, uint32_t *timingR
     timingResults[SAMPLE_SIZE] = index;
 }
 
-__global__ void mainMemoryLatencyInitKernel(uint32_t *destination, const uint32_t *source, size_t count) {
-    size_t index = blockIdx.x * blockDim.x + threadIdx.x;
-    size_t stride = gridDim.x * blockDim.x;
-    for (; index < count; index += stride) {
-        destination[index] = source[index];
-    }
-}
-
 // Loads (and thereby caches) the buffer, evicting older data from all cache levels
 __global__ void evictCachesKernel(const uint32_t *buffer, size_t count, uint32_t *sink) {
     size_t index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -57,6 +51,14 @@ __global__ void evictCachesKernel(const uint32_t *buffer, size_t count, uint32_t
         accumulator ^= buffer[i];
     }
     sink[index] = accumulator;
+}
+
+__global__ void mainMemoryLatencyInitKernel(uint32_t *destination, const uint32_t *source, size_t count) {
+    size_t index = blockIdx.x * blockDim.x + threadIdx.x;
+    size_t stride = gridDim.x * blockDim.x;
+    for (; index < count; index += stride) {
+        destination[index] = source[index];
+    }
 }
 
 // Largest line size of the regular caches (L1, L2, L3), so every hop loads a new line in all of them
@@ -73,6 +75,20 @@ static size_t chaseStrideBytes(std::optional<size_t> l1LineSizeBytes) {
         return DEFAULT_STRIDE;
     }
     return stride;
+}
+
+// Order in which the chain visits the windows, starting with the window of element 0
+static std::vector<size_t> windowVisitOrder(const std::vector<uint32_t> &chaseArray, size_t windowWords) {
+    std::vector<size_t> order;
+    uint32_t index = 0;
+    do {
+        const size_t window = index / windowWords;
+        if (order.empty() || order.back() != window) {
+            order.push_back(window);
+        }
+        index = chaseArray[index];
+    } while (index != 0);
+    return order;
 }
 
 // The node the chase must end on after the given number of hops from node 0
@@ -94,7 +110,12 @@ std::vector<uint32_t> mainMemoryLatencyLauncher(size_t arraySizeBytes, size_t st
                                                 util::AllocatorType allocType) {
     util::hipDeviceReset(); 
 
-    std::vector<uint32_t> hostChaseArray = util::generateRandomizedPChaseArray(arraySizeBytes, strideBytes);
+    std::vector<uint32_t> hostChaseArray = util::generateRandomizedPChaseArray(arraySizeBytes, strideBytes, CHASE_WINDOW_SIZE);
+    const size_t windowWords = util::max(CHASE_WINDOW_SIZE / strideBytes, static_cast<size_t>(1)) * strideBytes / sizeof(uint32_t);
+    const std::vector<size_t> windowOrder = windowVisitOrder(hostChaseArray, windowWords);
+    if (windowOrder.size() < 2) {
+        throw std::logic_error("Main memory latency: the p-chase array must be larger than one window");
+    }
 
     uint32_t *d_pChaseArray = util::allocateMemory<uint32_t>(hostChaseArray.size(), allocType);
 
@@ -107,14 +128,18 @@ std::vector<uint32_t> mainMemoryLatencyLauncher(size_t arraySizeBytes, size_t st
     mainMemoryLatencyInitKernel<<<blocks, threads>>>(d_pChaseArray, d_initArray, hostChaseArray.size());
     util::hipCheck(hipDeviceSynchronize());
 
-    // The initialization left parts of the p-chase array in the caches. d_initArray has the
-    // same size and is no longer needed, so loading it evicts them.
-    uint32_t *d_evictionSink = util::allocateGPUMemory(static_cast<size_t>(blocks) * threads);
-    evictCachesKernel<<<blocks, threads>>>(d_initArray, hostChaseArray.size(), d_evictionSink);
-    util::hipCheck(hipDeviceSynchronize());
-
-    util::hipCheck(hipFree(d_evictionSink));
     util::hipCheck(hipFree(d_initArray));
+
+    // Evict: load the windows in the chain's visiting order, one kernel per window (kernels in a stream run in order).
+    // The windows of the measured hops are loaded first, so they are the oldest data in all caches.
+    uint32_t *d_evictionSink = util::allocateGPUMemory(static_cast<size_t>(blocks) * threads);
+    for (size_t window : windowOrder) {
+        const size_t firstWord = window * windowWords;
+        evictCachesKernel<<<blocks, threads>>>(d_pChaseArray + firstWord, util::min(windowWords, hostChaseArray.size() - firstWord), d_evictionSink);
+    }
+    util::hipCheck(hipDeviceSynchronize());
+    util::hipCheck(hipFree(d_evictionSink));
+
     uint32_t *d_timingResults = util::allocateGPUMemory(SAMPLE_SIZE + 1);
 
     util::hipCheck(hipDeviceSynchronize());
