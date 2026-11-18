@@ -36,6 +36,8 @@ __global__ void l3LatencyInitKernel(uint32_t *destination, const uint32_t *sourc
     }
 }
 
+// TODO: align with mainMemoryLatency: final index in its own slot instead of overwriting sample 0,
+// chain check, the same GPU initialization for all allocators
 std::vector<uint32_t> l3LatencyLauncher(size_t arraySizeBytes, size_t strideBytes,
                                         util::AllocatorType allocType) {
     util::hipDeviceReset();

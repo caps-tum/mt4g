@@ -160,6 +160,7 @@ std::vector<uint32_t> mainMemoryLatencyLauncher(size_t arraySizeBytes, size_t st
 }
 
 namespace benchmark {
+    // TODO: report the array size, stride and window size in the result
     CacheLatencyResult measureMainMemoryLatency(util::AllocatorType allocType, std::optional<size_t> l1LineSizeBytes) {
 
         auto timings = mainMemoryLatencyLauncher(chaseArraySizeBytes(), chaseStrideBytes(l1LineSizeBytes), allocType);

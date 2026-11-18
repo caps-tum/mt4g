@@ -21,6 +21,8 @@ namespace util {
     /**
      * @brief Allocate uninitialised memory using the selected allocator.
      */
+    // TODO: check that the device can access the memory (managed memory, pageable memory with XNACK)
+    // and record the XNACK mode in the results
     template <typename T = uint32_t> T* allocateMemory(size_t numElems, AllocatorType type) {
         T* ptr = nullptr;
         size_t bytes = numElems * sizeof(T);
