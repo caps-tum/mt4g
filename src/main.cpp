@@ -909,6 +909,17 @@ int main(int argc, char* argv[]) {
         CacheLatencyResult mainMemLatency = timed("mainMemoryLatency", [&] { return benchmark::measureMainMemoryLatency(opts.allocType, l1LineSizeBytes); });
         result["memory"]["main"]["latency"] = mainMemLatency;
         result["memory"]["main"]["latency"]["allocator"] = allocatorName;
+        if (mainMemLatency.clockMHz > 0) {
+            // converted with the clock measured during the benchmark, not the peak clock
+            const double cyclesPerNs = mainMemLatency.clockMHz / 1000.0;
+            result["memory"]["main"]["latency"]["clockMHz"] = mainMemLatency.clockMHz;
+            result["memory"]["main"]["latency"]["ns"] = {
+                {"mean", mainMemLatency.mean / cyclesPerNs},
+                {"p50", mainMemLatency.p50 / cyclesPerNs},
+                {"p95", mainMemLatency.p95 / cyclesPerNs},
+                {"stdev", mainMemLatency.stdev / cyclesPerNs}
+            };
+        }
         if (opts.rawData) {
             util::writeVectorToFile(mainMemLatency.timings, (graphDir / (fancyFileName + "__Main_Memory_Latency.txt")).string());
         }
