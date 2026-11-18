@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <random>
 #include <algorithm>
+#include <limits>
+#include <stdexcept>
 #include <cstdint>
 #include <hip/hip_runtime.h>
 
@@ -29,10 +31,20 @@ static uint32_t prevPowerOfTwo(uint32_t v) {
 
 namespace util {   
     std::vector<uint32_t> generateRandomizedPChaseArray(size_t arraySizeBytes, size_t strideBytes) {
-        // number of 32-bit words total, and words per stride
-        const size_t Nwords = arraySizeBytes / sizeof(uint32_t) - (arraySizeBytes % strideBytes);
+        if (strideBytes < sizeof(uint32_t) || strideBytes % sizeof(uint32_t) != 0) {
+            throw std::invalid_argument("p-chase stride must be a positive multiple of 4 bytes");
+        }
+
+        // number of 32-bit words in whole strides, and words per stride
+        const size_t Nwords = (arraySizeBytes - arraySizeBytes % strideBytes) / sizeof(uint32_t);
         const size_t step   = strideBytes / sizeof(uint32_t);
         const size_t numJumps = Nwords / step;
+        if (numJumps == 0) {
+            throw std::invalid_argument("p-chase array must be at least one stride large");
+        }
+        if (Nwords > std::numeric_limits<uint32_t>::max()) {
+            throw std::invalid_argument("p-chase array too large for 32-bit indices");
+        }
 
         // allocate exactly Nwords entries, zero‐initialized
         std::vector<uint32_t> arr(Nwords, 0);

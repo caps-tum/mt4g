@@ -175,6 +175,7 @@ namespace util {
      * @param arraySizeBytes Size of the array in bytes.
      * @param strideBytes    Stride between elements in bytes.
      * @return Vector describing the pointer chasing sequence.
+     * @throws std::invalid_argument for a stride that is no multiple of 4, an array smaller than one stride or over 2^32 words.
      */
     std::vector<uint32_t> generateRandomizedPChaseArray(size_t arraySizeBytes, size_t strideBytes);
 
