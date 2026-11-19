@@ -342,9 +342,7 @@ int main(int argc, char* argv[]) {
 
             if (opts.rawData || opts.graphs)
             {
-                // vL1d on AMD (vector L1d); plain L1 on NVIDIA. The grid CSV
-                // backs the block-sweep figure: blocks->subplot, threads->line,
-                // reps->x, bandwidth->y.
+                // vL1d on AMD (vector L1d); plain L1 on NVIDIA. Both sweep threads on a single block.
                 const std::string l1Label = util::isAMD() ? "vL1d" : "L1";
                 util::writeBandwidthGridToCSV(l1ReadBandwidth, (graphDir / util::bandwidthGridFileName(fancyFileName, l1Label, "Read")).string());
                 util::writeBandwidthGridToCSV(l1WriteBandwidth, (graphDir / util::bandwidthGridFileName(fancyFileName, l1Label, "Write")).string());
