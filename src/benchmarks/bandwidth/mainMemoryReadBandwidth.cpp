@@ -52,8 +52,8 @@ __global__ void mainMemoryReadBandwidthSweepKernel(uint32v4* __restrict__ dst, u
     dst[tid % blockDim.x] = dummy; // prevent dead code elimination
 }
 
-static std::tuple<double, double> mainMemoryReadBandwidthSweepLauncher(size_t arraySizeBytes, uint32_t numBlocks, uint32_t numThreads, size_t reps) {
-    uint32v4* d_srcArr = util::allocateGPUMemory<uint32v4>(arraySizeBytes / sizeof(uint32v4));
+static std::tuple<double, double> mainMemoryReadBandwidthSweepLauncher(size_t arraySizeBytes, uint32_t numBlocks, uint32_t numThreads, size_t reps, util::AllocatorType allocType) {
+    uint32v4* d_srcArr = util::allocateMemory<uint32v4>(arraySizeBytes / sizeof(uint32v4), allocType);
     uint32v4* d_dstArr = util::allocateGPUMemory<uint32v4>(numThreads);
 
     mainMemoryReadBandwidthSweepKernel<<<numBlocks, numThreads>>>(d_dstArr, d_srcArr, arraySizeBytes / sizeof(uint32v4), WARMUP_REPS);
@@ -71,7 +71,7 @@ static std::tuple<double, double> mainMemoryReadBandwidthSweepLauncher(size_t ar
 
     util::hipCheck(hipEventDestroy(start));
     util::hipCheck(hipEventDestroy(end));
-    util::hipCheck(hipFree(d_srcArr));
+    util::freeMemory(d_srcArr, allocType);
     util::hipCheck(hipFree(d_dstArr));
 
     const double dataGiB = (double) arraySizeBytes * reps / (1 * GiB);
@@ -81,7 +81,7 @@ static std::tuple<double, double> mainMemoryReadBandwidthSweepLauncher(size_t ar
 }
 
 namespace benchmark {
-    CacheBandwidthResult measureMainMemoryReadBandwidthSweep(size_t mainMemorySizeBytes) {
+    CacheBandwidthResult measureMainMemoryReadBandwidthSweep(size_t mainMemorySizeBytes, util::AllocatorType allocType) {
         util::hipDeviceReset();
 
         // Main memory bandwidth must be measured with a SINGLE streaming pass over a
@@ -140,7 +140,7 @@ namespace benchmark {
             {
                 const uint32_t numThreads = result.threadsTested[ti];
 
-                auto [timeS, bandwidth] = mainMemoryReadBandwidthSweepLauncher(arraySizeBytes, numBlocks, numThreads, 1);
+                auto [timeS, bandwidth] = mainMemoryReadBandwidthSweepLauncher(arraySizeBytes, numBlocks, numThreads, 1, allocType);
 
                 result.bandwidth3D[bi][ti][0] = bandwidth;
 

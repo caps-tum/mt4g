@@ -66,6 +66,12 @@ int main(int argc, char* argv[]) {
     util::hipCheck(hipSetDevice(opts.deviceId));
     auto deviceProperties = util::getDeviceProperties();
 
+    const char* allocatorName =
+        opts.allocType == util::AllocatorType::HipMalloc        ? "hipmalloc" :
+        opts.allocType == util::AllocatorType::HipMallocManaged ? "hipmallocmanaged" :
+        opts.allocType == util::AllocatorType::HipHostMalloc    ? "hiphostmalloc" :
+                                                                  "malloc";
+
     std::string fancyName = deviceProperties.name;
 
     std::cout << "[mt4g] Starting Benchmarks on " << fancyName << std::endl;
@@ -382,6 +388,10 @@ int main(int argc, char* argv[]) {
             std::cout << "[L2] Segment Size" << std::endl;
             CacheSizeResult l2SegmentSize = timed("l2SegmentSize", [&] { return benchmark::measureL2SegmentSize(deviceProperties.l2CacheSize, l2FetchGranularity.confidence > VALIDITY_THRESHOLD ? l2FetchGranularity.size : MIN_EXPECTED_LINE_SIZE); });
             result["memory"]["l2"]["segmentSize"] = l2SegmentSize;
+            if (l2SegmentSize.confidence > VALIDITY_THRESHOLD) {
+                // the segment size divides the full L2 size (see measureL2SegmentSize)
+                result["memory"]["l2"]["amount"] = deviceProperties.l2CacheSize / l2SegmentSize.size;
+            }
             if (opts.graphs) {
                 util::exportChartMinMaxAvgRed(l2SegmentSize.timings, fancyName + " - L2 Segment Size", {l2SegmentSize.size}, "Bytes", "Cycles", graphDir.string());
             }
@@ -457,8 +467,9 @@ int main(int argc, char* argv[]) {
             };
 
             std::cout << "[L3] Latency" << std::endl;
-            CacheLatencyResult l3Latency = timed("amd_l3Latency", [&] { return benchmark::amd::measureL3Latency(deviceProperties.l2CacheSize, 128); });
+            CacheLatencyResult l3Latency = timed("amd_l3Latency", [&] { return benchmark::amd::measureL3Latency(deviceProperties.l2CacheSize, 128, opts.allocType); });
             result["memory"]["l3"]["latency"] = l3Latency;
+            result["memory"]["l3"]["latency"]["allocator"] = allocatorName;
 
             /* Not working yet
             std::cout << "[L3] Fetch Granularity" << std::endl;
@@ -473,12 +484,14 @@ int main(int argc, char* argv[]) {
                 std::cout << "Could not determine L3 Line Size, L3 Line Size will not be part of the output + skipping Miss Penalty benchmarks." << std::endl;
             }
 
+            result["memory"]["l3"]["bandwidthAllocator"] = allocatorName;
+
             std::cout << "[L3] Read Bandwidth" << std::endl;
-            CacheBandwidthResult l3ReadBandwidth = timed("amd_l3ReadBandwidth", [&] { return benchmark::amd::measureL3ReadBandwidthSweep(deviceProperties.l2CacheSize, l3Size.value()); });
+            CacheBandwidthResult l3ReadBandwidth = timed("amd_l3ReadBandwidth", [&] { return benchmark::amd::measureL3ReadBandwidthSweep(deviceProperties.l2CacheSize, l3Size.value(), opts.allocType); });
             result["memory"]["l3"]["readBandwidth"] = l3ReadBandwidth;
 
             std::cout << "[L3] Write Bandwidth" << std::endl;
-            CacheBandwidthResult l3WriteBandwidth = timed("amd_l3WriteBandwidth", [&] { return benchmark::amd::measureL3WriteBandwidthSweep(deviceProperties.l2CacheSize, l3Size.value()); });
+            CacheBandwidthResult l3WriteBandwidth = timed("amd_l3WriteBandwidth", [&] { return benchmark::amd::measureL3WriteBandwidthSweep(deviceProperties.l2CacheSize, l3Size.value(), opts.allocType); });
             result["memory"]["l3"]["writeBandwidth"] = l3WriteBandwidth;
 
             if (opts.rawData || opts.graphs)
@@ -894,18 +907,50 @@ int main(int argc, char* argv[]) {
         std::cout << "[Main Memory] Starting Benchmarks" << std::endl;
 
         std::cout << "[Main Memory] Latency" << std::endl;
-        CacheLatencyResult mainMemLatency = timed("mainMemoryLatency", [&] { return benchmark::measureMainMemoryLatency(); });
+        // Largest line size of L1, L2 and L3 (if there is one), unknown as soon as one of them is unknown
+        const bool hasL3 = result["memory"].contains("l3");
+        std::optional<size_t> cacheLineSize = 0;
+        for (const std::string cache : {"l1", "l2", "l3"}) {
+            if (cache == "l3" && !hasL3) {
+                continue;
+            }
+            auto lineSize = util::getKnownSize(result, VALIDITY_THRESHOLD, "memory", cache, "lineSize");
+            if (!lineSize.has_value()) {
+                cacheLineSize.reset();
+                break;
+            }
+            cacheLineSize = util::max(cacheLineSize.value(), lineSize.value());
+        }
+        // Last level cache: L3 if there is one, otherwise all L2 instances (segments on NVIDIA)
+        std::optional<size_t> lastLevelCacheSize;
+        if (hasL3) {
+            lastLevelCacheSize = util::getKnownSize(result, VALIDITY_THRESHOLD, "memory", "l3", "size");
+        } else {
+            // TODO: l2.size is per instance on AMD but the total on NVIDIA (driver value), so this gives 2x the L2 there;
+            // fix when unifying the JSON size semantics
+            auto l2Size = util::getKnownSize(result, VALIDITY_THRESHOLD, "memory", "l2", "size");
+            if (!l2Size.has_value()) {
+                l2Size = util::getKnownSize(result, VALIDITY_THRESHOLD, "memory", "l2", "segmentSize");
+            }
+            if (l2Size.has_value()) {
+                lastLevelCacheSize = l2Size.value() * util::getNumeric<size_t>(result, "memory", "l2", "amount").value_or(1);
+            }
+        }
+        CacheLatencyResult mainMemLatency = timed("mainMemoryLatency", [&] { return benchmark::measureMainMemoryLatency(opts.allocType, cacheLineSize, lastLevelCacheSize); });
         result["memory"]["main"]["latency"] = mainMemLatency;
+        result["memory"]["main"]["latency"]["allocator"] = allocatorName;
         if (opts.rawData) {
             util::writeVectorToFile(mainMemLatency.timings, (graphDir / (fancyFileName + "__Main_Memory_Latency.txt")).string());
         }
 
+        result["memory"]["main"]["bandwidthAllocator"] = allocatorName;
+
         std::cout << "[Main Memory] Read Bandwidth" << std::endl;
-        CacheBandwidthResult mainMemReadBandwidth = timed("mainMemoryReadBandwidth", [&] { return benchmark::measureMainMemoryReadBandwidthSweep(deviceProperties.totalGlobalMem); });
+        CacheBandwidthResult mainMemReadBandwidth = timed("mainMemoryReadBandwidth", [&] { return benchmark::measureMainMemoryReadBandwidthSweep(deviceProperties.totalGlobalMem, opts.allocType); });
         result["memory"]["main"]["readBandwidth"] = mainMemReadBandwidth;
 
         std::cout << "[Main Memory] Write Bandwidth" << std::endl;
-        CacheBandwidthResult mainMemWriteBandwidth = timed("mainMemoryWriteBandwidth", [&] { return benchmark::measureMainMemoryWriteBandwidthSweep(deviceProperties.totalGlobalMem); });
+        CacheBandwidthResult mainMemWriteBandwidth = timed("mainMemoryWriteBandwidth", [&] { return benchmark::measureMainMemoryWriteBandwidthSweep(deviceProperties.totalGlobalMem, opts.allocType); });
         result["memory"]["main"]["writeBandwidth"] = mainMemWriteBandwidth;
 
         if (opts.rawData || opts.graphs)

@@ -48,8 +48,8 @@ __global__ void mainMemoryWriteBandwidthSweepKernel(uint32v4* __restrict__ dst, 
     }
 }
 
-static std::tuple<double, double> mainMemoryWriteBandwidthSweepLauncher(size_t arraySizeBytes, uint32_t numBlocks, uint32_t numThreads, size_t reps) {
-    uint32v4* d_dstArr = util::allocateGPUMemory<uint32v4>(arraySizeBytes / sizeof(uint32v4));
+static std::tuple<double, double> mainMemoryWriteBandwidthSweepLauncher(size_t arraySizeBytes, uint32_t numBlocks, uint32_t numThreads, size_t reps, util::AllocatorType allocType) {
+    uint32v4* d_dstArr = util::allocateMemory<uint32v4>(arraySizeBytes / sizeof(uint32v4), allocType);
 
     mainMemoryWriteBandwidthSweepKernel<<<numBlocks, numThreads>>>(d_dstArr, arraySizeBytes / sizeof(uint32v4), WARMUP_REPS);
 
@@ -66,7 +66,7 @@ static std::tuple<double, double> mainMemoryWriteBandwidthSweepLauncher(size_t a
 
     util::hipCheck(hipEventDestroy(start));
     util::hipCheck(hipEventDestroy(end));
-    util::hipCheck(hipFree(d_dstArr));
+    util::freeMemory(d_dstArr, allocType);
 
     const double dataGiB = (double) arraySizeBytes * reps / (1 * GiB);
     const double timeS = elapsedMs / MS_PER_SECOND;
@@ -75,7 +75,7 @@ static std::tuple<double, double> mainMemoryWriteBandwidthSweepLauncher(size_t a
 }
 
 namespace benchmark {
-    CacheBandwidthResult measureMainMemoryWriteBandwidthSweep(size_t mainMemorySizeBytes) {
+    CacheBandwidthResult measureMainMemoryWriteBandwidthSweep(size_t mainMemorySizeBytes, util::AllocatorType allocType) {
         util::hipDeviceReset();
 
         // Main memory bandwidth must be measured with a SINGLE streaming pass over a
@@ -134,7 +134,7 @@ namespace benchmark {
             {
                 const uint32_t numThreads = result.threadsTested[ti];
 
-                auto [timeS, bandwidth] = mainMemoryWriteBandwidthSweepLauncher(arraySizeBytes, numBlocks, numThreads, 1);
+                auto [timeS, bandwidth] = mainMemoryWriteBandwidthSweepLauncher(arraySizeBytes, numBlocks, numThreads, 1, allocType);
 
                 result.bandwidth3D[bi][ti][0] = bandwidth;
 
