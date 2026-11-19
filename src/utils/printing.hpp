@@ -101,6 +101,20 @@ namespace util {
         }
     }
 
+    // A size at the given keys (e.g. "memory", "l2", "lineSize") if it is known: either given as {"value": ...}
+    // or measured with a confidence above minConfidence as {"size": ..., "confidence": ...}
+    template <typename... Keys>
+    std::optional<size_t> getKnownSize(const nlohmann::json& j, double minConfidence, const Keys&... keys) {
+        if (auto value = getNumeric<size_t>(j, keys..., "value")) {
+            return value;
+        }
+        auto confidence = getNumeric<double>(j, keys..., "confidence");
+        if (confidence.has_value() && confidence.value() > minConfidence) {
+            return getNumeric<size_t>(j, keys..., "size");
+        }
+        return std::nullopt;
+    }
+
     template <typename MeasureFunc>
     void sharedHelper(nlohmann::json& cache1, nlohmann::json& cache2, const std::string& name1, const std::string& name2, MeasureFunc measureFunction) {
         constexpr double validityThreshold = 0.0; // anpassen wie gebraucht

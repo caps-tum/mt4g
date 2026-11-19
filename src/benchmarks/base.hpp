@@ -25,15 +25,10 @@
    */
 
   /*
-   * MT4G_CDNA2_OR_OLDER is defined when building for AMD CDNA (gfx908, MI100)
-   * or CDNA-2 (gfx90a, MI210/MI250/MI250X). All other AMD targets, i.e. CDNA-3
-   * (gfx940/941/942), CDNA-4 (gfx950) and newer, leave it undefined.
-   * Use this macro for every CDNA-generation check.
+   * MT4G_CDNA2_OR_OLDER is defined by CMakeLists.txt for CDNA (gfx908, MI100) and
+   * CDNA-2 (gfx90a, MI210/MI250/MI250X), in host and device code (__gfx90a__ etc.
+   * exist only in device code). Use it for every CDNA-generation check.
    */
-    #if defined(__gfx90a__) || defined(__gfx908__)
-        #define MT4G_CDNA2_OR_OLDER
-    #endif
-
     #ifdef MT4G_CDNA2_OR_OLDER
         #define GLC     "glc"
         #define GLC_SLC "glc slc"

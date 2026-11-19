@@ -109,13 +109,16 @@ inline std::optional<size_t> getKfdCachelineBytesForLevel(uint32_t level) {
         std::ifstream f(prop);
         if (!f) continue;
         int lvl = -1;
+        int type = 0;
         long long cls = -1;
         std::string key; std::string val;
         while (f >> key >> val) {
             if (key == "level")            lvl = std::stoi(val);
+            else if (key == "type")        type = std::stoi(val);
             else if (key == "cache_line_size") cls = std::stoll(val);
         }
-        if (lvl == static_cast<int>(level) && cls > 0) {
+        // data caches only (bit 0 of the KFD cache type)
+        if (lvl == static_cast<int>(level) && (type & 1) && cls > 0) {
             if (static_cast<size_t>(cls) > best) best = static_cast<size_t>(cls);
         }
     }

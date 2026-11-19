@@ -15,11 +15,9 @@ __global__ void sL1WriteBandwidthKernel(uint32v4* __restrict__ dst, uint64_t* __
 
     uint32_t scalarWaveid = waveid;
     #ifdef __HIP_PLATFORM_AMD__
-    __asm__ volatile (
-        "v_readfirstlane_b32 %0, %1" 
-        : "=s"(scalarWaveid) 
-        : "v"(waveid)
-    );
+    // unlike inline asm, the builtin marks the result wave-uniform, so dummy stays in
+    // SGPRs as s_store_dwordx4 requires (ROCm < 7 put it into VGPRs)
+    scalarWaveid = __builtin_amdgcn_readfirstlane(waveid);
     #endif
 
     const uint32_t base = scalarWaveid * elementsPerWave;
