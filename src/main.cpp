@@ -926,6 +926,8 @@ int main(int argc, char* argv[]) {
         if (hasL3) {
             lastLevelCacheSize = util::getKnownSize(result, VALIDITY_THRESHOLD, "memory", "l3", "size");
         } else {
+            // TODO: l2.size is per instance on AMD but the total on NVIDIA (driver value), so this gives 2x the L2 there;
+            // fix when unifying the JSON size semantics
             auto l2Size = util::getKnownSize(result, VALIDITY_THRESHOLD, "memory", "l2", "size");
             if (!l2Size.has_value()) {
                 l2Size = util::getKnownSize(result, VALIDITY_THRESHOLD, "memory", "l2", "segmentSize");
