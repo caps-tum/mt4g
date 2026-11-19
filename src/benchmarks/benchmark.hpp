@@ -56,8 +56,6 @@
 #include "benchmarks/bandwidth/amd_l3WriteBandwidth.hpp"
 #include "benchmarks/bandwidth/amd_sL1ReadBandwidth.hpp"
 #include "benchmarks/bandwidth/amd_sL1WriteBandwidth.hpp"
-#include "benchmarks/bandwidth/amd_l1ReadBandwidthBlocksweep.hpp"
-#include "benchmarks/bandwidth/amd_l1WriteBandwidthBlocksweep.hpp"
 
 #include "benchmarks/size/fetchGranularity/amd_scalarL1FetchGranularity.hpp"
 #include "benchmarks/size/cacheSize/amd_scalarL1CacheSize.hpp"

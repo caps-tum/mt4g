@@ -330,7 +330,7 @@ int main(int argc, char* argv[]) {
             CacheBandwidthResult l1ReadBandwidth;
             if (util::isAMD()) 
             {
-                l1ReadBandwidth = timed("amd_l1ReadBandwidthBlocksweep", [&] { return benchmark::amd::measureL1ReadBandwidthBlockSweep(l1Size.size / 2); });
+                l1ReadBandwidth = timed("amd_l1ReadBandwidth", [&] { return benchmark::amd::measureL1ReadBandwidthSweep(l1Size.size / 2); });
             } else {
                 l1ReadBandwidth = timed("l1ReadBandwidth", [&] { return benchmark::measureL1ReadBandwidthSweep(l1Size.size / 2); });
             }
@@ -340,7 +340,7 @@ int main(int argc, char* argv[]) {
             CacheBandwidthResult l1WriteBandwidth;
             if (util::isAMD())
             {
-                l1WriteBandwidth = timed("amd_l1WriteBandwidthBlocksweep", [&] { return benchmark::amd::measureL1WriteBandwidthBlockSweep(l1Size.size / 2); });
+                l1WriteBandwidth = timed("amd_l1WriteBandwidth", [&] { return benchmark::amd::measureL1WriteBandwidthSweep(l1Size.size / 2); });
             } else {
                 l1WriteBandwidth = timed("l1WriteBandwidth", [&] { return benchmark::measureL1WriteBandwidthSweep(l1Size.size / 2); });
             }
@@ -348,9 +348,7 @@ int main(int argc, char* argv[]) {
 
             if (opts.rawData || opts.graphs)
             {
-                // vL1d on AMD (vector L1d); plain L1 on NVIDIA. The grid CSV
-                // backs the block-sweep figure: blocks->subplot, threads->line,
-                // reps->x, bandwidth->y.
+                // vL1d on AMD (vector L1d); plain L1 on NVIDIA. Both sweep threads on a single block.
                 const std::string l1Label = util::isAMD() ? "vL1d" : "L1";
                 util::writeBandwidthGridToCSV(l1ReadBandwidth, (graphDir / util::bandwidthGridFileName(fancyFileName, l1Label, "Read")).string());
                 util::writeBandwidthGridToCSV(l1WriteBandwidth, (graphDir / util::bandwidthGridFileName(fancyFileName, l1Label, "Write")).string());
