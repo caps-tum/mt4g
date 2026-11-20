@@ -327,13 +327,7 @@ int main(int argc, char* argv[]) {
         if (l1Size.confidence > VALIDITY_THRESHOLD) {
             
             std::cout << "[L1] Read Bandwidth per CU / MultiProcessor" << std::endl;
-            CacheBandwidthResult l1ReadBandwidth;
-            if (util::isAMD()) 
-            {
-                l1ReadBandwidth = timed("amd_l1ReadBandwidth", [&] { return benchmark::amd::measureL1ReadBandwidthSweep(l1Size.size / 2); });
-            } else {
-                l1ReadBandwidth = timed("l1ReadBandwidth", [&] { return benchmark::measureL1ReadBandwidthSweep(l1Size.size / 2); });
-            }
+            CacheBandwidthResult l1ReadBandwidth = timed("l1ReadBandwidth", [&] { return benchmark::measureL1ReadBandwidthSweep(l1Size.size / 2); });
             result["memory"]["l1"]["readBandwidthPerCU"] = l1ReadBandwidth;
 
             std::cout << "[L1] Write Bandwidth per CU / MultiProcessor" << std::endl;
