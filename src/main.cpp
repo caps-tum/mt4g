@@ -277,8 +277,6 @@ int main(int argc, char* argv[]) {
     BenchTimer timed{{}, opts.timing};
     auto totalStart = std::chrono::steady_clock::now();
 
-    std::optional<size_t> l1LineSizeBytes; // measured, only known if the L1 benchmarks ran
-
     if (opts.runL1) {
         std::cout << "[L1] Starting Benchmarks" << std::endl;
         std::cout << "[L1] Latency" << std::endl;
@@ -305,7 +303,6 @@ int main(int argc, char* argv[]) {
             }
 
             if (l1LineSize.confidence > VALIDITY_THRESHOLD) {
-                l1LineSizeBytes = l1LineSize.size;
                 std::cout << "[L1] Miss Penalty" << std::endl;
                 double l1MissPenalty = timed("l1MissPenalty", [&] { return benchmark::measureL1MissPenalty(l1Size.size, l1LineSize.size, l1Latency.mean); });
                 result["memory"]["l1"]["missPenalty"] = {
@@ -333,7 +330,7 @@ int main(int argc, char* argv[]) {
             CacheBandwidthResult l1ReadBandwidth;
             if (util::isAMD()) 
             {
-                l1ReadBandwidth = timed("amd_l1ReadBandwidthBlocksweep", [&] { return benchmark::amd::measureL1ReadBandwidthBlockSweep(l1Size.size / 2); });
+                l1ReadBandwidth = timed("amd_l1ReadBandwidth", [&] { return benchmark::amd::measureL1ReadBandwidthSweep(l1Size.size / 2); });
             } else {
                 l1ReadBandwidth = timed("l1ReadBandwidth", [&] { return benchmark::measureL1ReadBandwidthSweep(l1Size.size / 2); });
             }
@@ -343,7 +340,7 @@ int main(int argc, char* argv[]) {
             CacheBandwidthResult l1WriteBandwidth;
             if (util::isAMD())
             {
-                l1WriteBandwidth = timed("amd_l1WriteBandwidthBlocksweep", [&] { return benchmark::amd::measureL1WriteBandwidthBlockSweep(l1Size.size / 2); });
+                l1WriteBandwidth = timed("amd_l1WriteBandwidth", [&] { return benchmark::amd::measureL1WriteBandwidthSweep(l1Size.size / 2); });
             } else {
                 l1WriteBandwidth = timed("l1WriteBandwidth", [&] { return benchmark::measureL1WriteBandwidthSweep(l1Size.size / 2); });
             }
@@ -351,9 +348,7 @@ int main(int argc, char* argv[]) {
 
             if (opts.rawData || opts.graphs)
             {
-                // vL1d on AMD (vector L1d); plain L1 on NVIDIA. The grid CSV
-                // backs the block-sweep figure: blocks->subplot, threads->line,
-                // reps->x, bandwidth->y.
+                // vL1d on AMD (vector L1d); plain L1 on NVIDIA. Both sweep threads on a single block.
                 const std::string l1Label = util::isAMD() ? "vL1d" : "L1";
                 util::writeBandwidthGridToCSV(l1ReadBandwidth, (graphDir / util::bandwidthGridFileName(fancyFileName, l1Label, "Read")).string());
                 util::writeBandwidthGridToCSV(l1WriteBandwidth, (graphDir / util::bandwidthGridFileName(fancyFileName, l1Label, "Write")).string());
@@ -391,6 +386,10 @@ int main(int argc, char* argv[]) {
             std::cout << "[L2] Segment Size" << std::endl;
             CacheSizeResult l2SegmentSize = timed("l2SegmentSize", [&] { return benchmark::measureL2SegmentSize(deviceProperties.l2CacheSize, l2FetchGranularity.confidence > VALIDITY_THRESHOLD ? l2FetchGranularity.size : MIN_EXPECTED_LINE_SIZE); });
             result["memory"]["l2"]["segmentSize"] = l2SegmentSize;
+            if (l2SegmentSize.confidence > VALIDITY_THRESHOLD) {
+                // the segment size divides the full L2 size (see measureL2SegmentSize)
+                result["memory"]["l2"]["amount"] = deviceProperties.l2CacheSize / l2SegmentSize.size;
+            }
             if (opts.graphs) {
                 util::exportChartMinMaxAvgRed(l2SegmentSize.timings, fancyName + " - L2 Segment Size", {l2SegmentSize.size}, "Bytes", "Cycles", graphDir.string());
             }
@@ -906,7 +905,36 @@ int main(int argc, char* argv[]) {
         std::cout << "[Main Memory] Starting Benchmarks" << std::endl;
 
         std::cout << "[Main Memory] Latency" << std::endl;
-        CacheLatencyResult mainMemLatency = timed("mainMemoryLatency", [&] { return benchmark::measureMainMemoryLatency(opts.allocType, l1LineSizeBytes); });
+        // Largest line size of L1, L2 and L3 (if there is one), unknown as soon as one of them is unknown
+        const bool hasL3 = result["memory"].contains("l3");
+        std::optional<size_t> cacheLineSize = 0;
+        for (const std::string cache : {"l1", "l2", "l3"}) {
+            if (cache == "l3" && !hasL3) {
+                continue;
+            }
+            auto lineSize = util::getKnownSize(result, VALIDITY_THRESHOLD, "memory", cache, "lineSize");
+            if (!lineSize.has_value()) {
+                cacheLineSize.reset();
+                break;
+            }
+            cacheLineSize = util::max(cacheLineSize.value(), lineSize.value());
+        }
+        // Last level cache: L3 if there is one, otherwise all L2 instances (segments on NVIDIA)
+        std::optional<size_t> lastLevelCacheSize;
+        if (hasL3) {
+            lastLevelCacheSize = util::getKnownSize(result, VALIDITY_THRESHOLD, "memory", "l3", "size");
+        } else {
+            // TODO: l2.size is per instance on AMD but the total on NVIDIA (driver value), so this gives 2x the L2 there;
+            // fix when unifying the JSON size semantics
+            auto l2Size = util::getKnownSize(result, VALIDITY_THRESHOLD, "memory", "l2", "size");
+            if (!l2Size.has_value()) {
+                l2Size = util::getKnownSize(result, VALIDITY_THRESHOLD, "memory", "l2", "segmentSize");
+            }
+            if (l2Size.has_value()) {
+                lastLevelCacheSize = l2Size.value() * util::getNumeric<size_t>(result, "memory", "l2", "amount").value_or(1);
+            }
+        }
+        CacheLatencyResult mainMemLatency = timed("mainMemoryLatency", [&] { return benchmark::measureMainMemoryLatency(opts.allocType, cacheLineSize, lastLevelCacheSize); });
         result["memory"]["main"]["latency"] = mainMemLatency;
         result["memory"]["main"]["latency"]["allocator"] = allocatorName;
         if (mainMemLatency.clockMHz > 0) {

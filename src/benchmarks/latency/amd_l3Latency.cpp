@@ -28,37 +28,14 @@ __global__ void l3LatencyKernel(uint32_t *pChaseArray, uint32_t *timingResults, 
     timingResults[0] += index >> util::min(index / 2, 32);
 }
 
-__global__ void l3LatencyInitKernel(uint32_t *destination, const uint32_t *source, size_t count) {
-    size_t index = blockIdx.x * blockDim.x + threadIdx.x;
-    size_t stride = gridDim.x * blockDim.x;
-    for (; index < count; index += stride) {
-        destination[index] = source[index];
-    }
-}
-
-// TODO: align with mainMemoryLatency: final index in its own slot instead of overwriting sample 0,
-// chain check, the same GPU initialization for all allocators
+// TODO: as in mainMemoryLatency, keep sample 0 (final index in an extra slot) and add the chain check
 std::vector<uint32_t> l3LatencyLauncher(size_t arraySizeBytes, size_t strideBytes,
                                         util::AllocatorType allocType) {
     util::hipDeviceReset();
 
+    // p-chase from the host, written into the selected memory by the GPU (first touch)
     std::vector<uint32_t> hostChaseArray = util::generatePChaseArray(arraySizeBytes, strideBytes);
-    uint32_t *d_pChaseArray = nullptr;
-    if (allocType == util::AllocatorType::HipMalloc) {
-        d_pChaseArray = util::allocateGPUMemory(hostChaseArray);
-    } else {
-        d_pChaseArray = util::allocateMemory<uint32_t>(hostChaseArray.size(), allocType);
-
-        // Initialize from the GPU before the existing L3 warm-up traversal.
-        uint32_t *d_initArray = util::allocateGPUMemory(hostChaseArray);
-        uint32_t threads = util::min(
-            util::getMaxThreadsPerBlock(), util::getWarpSize() * util::getSIMDsPerCU());
-        uint32_t blocks = util::getNumberOfComputeUnits() * util::getMaxBlocksPerMultiProcessor();
-        l3LatencyInitKernel<<<blocks, threads>>>(
-            d_pChaseArray, d_initArray, hostChaseArray.size());
-        util::hipCheck(hipDeviceSynchronize());
-        util::hipCheck(hipFree(d_initArray));
-    }
+    uint32_t *d_pChaseArray = util::allocateMemory(hostChaseArray, allocType);
     uint32_t *d_timingResults = util::allocateGPUMemory(SAMPLE_SIZE);
 
     util::hipCheck(hipDeviceSynchronize());

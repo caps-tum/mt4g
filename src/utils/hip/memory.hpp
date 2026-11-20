@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <algorithm>
 #include <cstdlib>
 #include <new>
 #include <hip/hip_runtime.h>
@@ -140,6 +141,32 @@ namespace util {
         if (count == 0 || devicePtr == nullptr) return hostVec;
         util::hipCheck(hipMemcpy(hostVec.data(), devicePtr, count * sizeof(T), hipMemcpyDeviceToHost));
         return hostVec;
+    }
+
+    template <typename T> __global__ void copyMemoryKernel(T* destination, const T* source, size_t count) {
+        for (size_t i = blockIdx.x * blockDim.x + threadIdx.x; i < count; i += gridDim.x * blockDim.x) {
+            destination[i] = source[i];
+        }
+    }
+
+    /**
+     * @brief Allocate memory with the selected allocator and copy @p data into it from the GPU.
+     *
+     * The data goes through a temporary device buffer and a copy kernel, so that for every
+     * allocator the GPU is the first to touch the memory.
+     */
+    template <typename T> T* allocateMemory(const std::vector<T>& data, AllocatorType type) {
+        T* ptr = allocateMemory<T>(data.size(), type);
+        T* staging = allocateGPUMemory(data);
+
+        constexpr uint32_t threads = 256;
+        const uint32_t blocks = static_cast<uint32_t>(std::min<size_t>((data.size() + threads - 1) / threads, 65535));
+        copyMemoryKernel<<<blocks, threads>>>(ptr, staging, data.size());
+        util::hipCheck(hipGetLastError());
+        util::hipCheck(hipDeviceSynchronize());
+
+        util::hipCheck(hipFree(staging));
+        return ptr;
     }
 
 } // namespace util
