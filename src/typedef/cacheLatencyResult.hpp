@@ -18,6 +18,9 @@ typedef struct CacheLatencyResult {
     size_t sampleSize;
     enum MeasureUnit unit;
     enum BenchmarkMethod method;
+    // Core clock during the measurement, 0 if not measured. Not part of the generic JSON below, main.cpp adds it.
+    // TODO: measure it in the other latency and miss penalty benchmarks too
+    double clockMHz = 0.0;
     
     NLOHMANN_DEFINE_TYPE_INTRUSIVE(
         CacheLatencyResult,

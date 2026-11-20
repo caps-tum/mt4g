@@ -14,16 +14,27 @@ typedef struct CacheBandwidthResult {
     uint32_t numThreads;
     uint32_t numBlocks;
     size_t numReps;
-    
+    uint32_t loadsPerBatch = 0; // only set by benchmarks that sweep it
+
     // Raw grid data for visualization (NOT serialized into JSON)
     std::vector<uint32_t> threadsTested;
     std::vector<size_t> repsTested;
     std::vector<uint32_t> blocksTested;
     std::vector<std::vector<double>> bandwidthGridGiBs;
     std::vector<std::vector<std::vector<double>>> bandwidth3D;
-    
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE(
-        CacheBandwidthResult,
-        measuredBandwidth, dataBytes, cycles, time, numReps, numThreads, numBlocks
-    )
 } CacheBandwidthResult;
+
+inline void to_json(nlohmann::json& j, const CacheBandwidthResult& result) {
+    j = {
+        {"measuredBandwidth", result.measuredBandwidth},
+        {"dataBytes", result.dataBytes},
+        {"cycles", result.cycles},
+        {"time", result.time},
+        {"numReps", result.numReps},
+        {"numThreads", result.numThreads},
+        {"numBlocks", result.numBlocks}
+    };
+    if (result.loadsPerBatch > 0) {
+        j["loadsPerBatch"] = result.loadsPerBatch;
+    }
+}

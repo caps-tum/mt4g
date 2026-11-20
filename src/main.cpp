@@ -327,13 +327,7 @@ int main(int argc, char* argv[]) {
         if (l1Size.confidence > VALIDITY_THRESHOLD) {
             
             std::cout << "[L1] Read Bandwidth per CU / MultiProcessor" << std::endl;
-            CacheBandwidthResult l1ReadBandwidth;
-            if (util::isAMD()) 
-            {
-                l1ReadBandwidth = timed("amd_l1ReadBandwidth", [&] { return benchmark::amd::measureL1ReadBandwidthSweep(l1Size.size / 2); });
-            } else {
-                l1ReadBandwidth = timed("l1ReadBandwidth", [&] { return benchmark::measureL1ReadBandwidthSweep(l1Size.size / 2); });
-            }
+            CacheBandwidthResult l1ReadBandwidth = timed("l1ReadBandwidth", [&] { return benchmark::measureL1ReadBandwidthSweep(l1Size.size / 2); });
             result["memory"]["l1"]["readBandwidthPerCU"] = l1ReadBandwidth;
 
             std::cout << "[L1] Write Bandwidth per CU / MultiProcessor" << std::endl;
@@ -937,6 +931,17 @@ int main(int argc, char* argv[]) {
         CacheLatencyResult mainMemLatency = timed("mainMemoryLatency", [&] { return benchmark::measureMainMemoryLatency(opts.allocType, cacheLineSize, lastLevelCacheSize); });
         result["memory"]["main"]["latency"] = mainMemLatency;
         result["memory"]["main"]["latency"]["allocator"] = allocatorName;
+        if (mainMemLatency.clockMHz > 0) {
+            // converted with the clock measured during the benchmark, not the peak clock
+            const double cyclesPerNs = mainMemLatency.clockMHz / 1000.0;
+            result["memory"]["main"]["latency"]["clockMHz"] = mainMemLatency.clockMHz;
+            result["memory"]["main"]["latency"]["ns"] = {
+                {"mean", mainMemLatency.mean / cyclesPerNs},
+                {"p50", mainMemLatency.p50 / cyclesPerNs},
+                {"p95", mainMemLatency.p95 / cyclesPerNs},
+                {"stdev", mainMemLatency.stdev / cyclesPerNs}
+            };
+        }
         if (opts.rawData) {
             util::writeVectorToFile(mainMemLatency.timings, (graphDir / (fancyFileName + "__Main_Memory_Latency.txt")).string());
         }

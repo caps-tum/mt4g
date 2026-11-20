@@ -491,12 +491,13 @@ def run_auto(indir: Path, outdir: Path, dpi: int) -> int:
         gpu = _gpu_from_name(csv.name)
         category, token = _benchmark_category(csv.name)
 
-        if category == "block_sweep" or (category == "unknown" and _is_block_sweep(header)):
+        # The header decides the layout: a single-block sweep (e.g. vL1d, sL1d) is written as a 2D grid
+        if _is_block_sweep(header):
             grid = load_block_sweep(csv)
             title = f"{gpu}: {token} {direction} peak bandwidth per block"
             plot_block_peak(grid, title, outdir, _slug(f"{gpu} - {token} {direction} bandwidth"), dpi)
             n_figs += 1
-        elif category == "single_line":
+        elif category in ("block_sweep", "single_line"):
             grid = load_config_grid(csv)
             title = f"{gpu}: {token} {direction} bandwidth"
             plot_single_line(grid, title, outdir, _slug(f"{gpu} - {token} {direction} bandwidth"), dpi)

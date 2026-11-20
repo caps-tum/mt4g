@@ -276,9 +276,35 @@ namespace util {
      * Queried as a device attribute for the same reason as
      * getMemoryClockRateKHz(): CUDA 13 removed cudaDeviceProp::clockRate.
      */
+    // TODO: the bandwidth benchmarks convert cycles to seconds with this peak clock, but the GPU can run
+    // slower. Measure the clock during the benchmark with measuredClockMHz() instead.
     inline uint32_t getClockRateKHz() {
         static uint32_t rateKHz = static_cast<uint32_t>(getDeviceAttribute(hipDeviceAttributeClockRate));
         return rateKHz;
+    }
+
+    /**
+     * @brief Frequency of the constant-rate timer read by __globaltimer() in kHz.
+     */
+    inline uint32_t getWallClockRateKHz() {
+        #ifdef __HIP_PLATFORM_NVIDIA__
+        return 1000000; // %globaltimer counts nanoseconds
+        #endif
+        #ifdef __HIP_PLATFORM_AMD__
+        static uint32_t rateKHz = static_cast<uint32_t>(getDeviceAttribute(hipDeviceAttributeWallClockRate));
+        return rateKHz;
+        #endif
+    }
+
+    /**
+     * @brief Core clock during a measurement, from the cycles (__timer()) and the constant-rate
+     *        timer ticks (__globaltimer()) counted over the same interval.
+     *
+     * @return Clock in MHz, 0 if no timer ticks were counted.
+     */
+    inline double measuredClockMHz(uint64_t cycles, uint64_t wallClockTicks) {
+        if (wallClockTicks == 0) return 0.0;
+        return static_cast<double>(cycles) * getWallClockRateKHz() / wallClockTicks / 1000.0;
     }
 
     /**
