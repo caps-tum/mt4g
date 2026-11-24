@@ -1,12 +1,9 @@
 #include "benchmarks/benchmark.hpp"
+#include "benchmarks/bandwidth/loadBatch.hpp"
 #include "utils/util.hpp"
 
 #include <vector>
-#include <map>
-#include <numeric>
-#include <optional>
 #include <tuple>
-#include <limits>
 
 static constexpr auto SIZE_DOWN = DEFAULT_SIZE_DOWN_FACTOR;// Factor
 static constexpr auto MS_PER_SECOND = 1000.0;// ms
@@ -16,8 +13,10 @@ static constexpr auto WARMUP_REPS = 4;// warmup passes for the sweep (large work
 // the last level cache `reps` times so the traffic reaches main memory, while
 // varying the block and thread count.
 __global__ void mainMemoryWriteBandwidthSweepKernel(uint32v4* __restrict__ dst, size_t n, size_t reps) {
-    uint32_t tid = static_cast<uint32_t>(blockIdx.x * blockDim.x + threadIdx.x);
-    uint32_t stride = static_cast<uint32_t>(gridDim.x * blockDim.x);
+    // read once, the "memory" clobber of the asm would reload them in every iteration
+    const uint32_t blockStride = blockDim.x;
+    const uint32_t stride = static_cast<uint32_t>(gridDim.x) * blockStride;
+    uint32_t tid = static_cast<uint32_t>(blockIdx.x * blockStride + threadIdx.x);
 
     uint32v4 dummy = { tid, tid + 1, tid + 2, tid + 3 };
 
@@ -52,6 +51,7 @@ static std::tuple<double, double> mainMemoryWriteBandwidthSweepLauncher(size_t a
     uint32v4* d_dstArr = util::allocateMemory<uint32v4>(arraySizeBytes / sizeof(uint32v4), allocType);
 
     mainMemoryWriteBandwidthSweepKernel<<<numBlocks, numThreads>>>(d_dstArr, arraySizeBytes / sizeof(uint32v4), WARMUP_REPS);
+    util::hipCheck(hipGetLastError());
 
     auto start = util::createHipEvent();
     auto end = util::createHipEvent();
@@ -59,6 +59,7 @@ static std::tuple<double, double> mainMemoryWriteBandwidthSweepLauncher(size_t a
     util::hipCheck(hipDeviceSynchronize());
     util::hipCheck(hipEventRecord(start));
     mainMemoryWriteBandwidthSweepKernel<<<numBlocks, numThreads>>>(d_dstArr, arraySizeBytes / sizeof(uint32v4), reps);
+    util::hipCheck(hipGetLastError());
     util::hipCheck(hipEventRecord(end));
     util::hipCheck(hipDeviceSynchronize());
 
@@ -84,85 +85,8 @@ namespace benchmark {
         // over-reports bandwidth, so main memory uses one pass over a ~1 GiB set.
         size_t arraySizeBytes = util::min(mainMemorySizeBytes / SIZE_DOWN, static_cast<size_t>(1) * 1024 * 1024 * 1024);
 
-        uint32_t minThreads = util::getWarpSize();
-        uint32_t maxThreads = util::getMaxThreadsPerBlock();
-
-        uint32_t minBlocks = util::getNumberOfComputeUnits();
-        uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getMaxBlocksPerMultiProcessor();
-
-        CacheBandwidthResult result{};
-        result.measuredBandwidth = 0.0;
-        result.dataBytes = arraySizeBytes;
-        result.cycles = 0;
-        result.time = 0.0;
-        result.numThreads = 0;
-        result.numBlocks = 0;
-        result.numReps = 0;
-
-        // Precompute full block/thread/rep axes for CSV alignment.
-        // Sweep runs descending; axes remain ascending for unchanged grid layout.
-        for (uint32_t numBlocks = minBlocks; numBlocks <= maxBlocks; numBlocks *= 2)
-        {
-            result.blocksTested.push_back(numBlocks);
-        }
-        for (uint32_t numThreads = minThreads; numThreads <= maxThreads; numThreads *= 2)
-        {
-            result.threadsTested.push_back(numThreads);
-        }
-        result.repsTested.push_back(1); // single streaming pass (see note above)
-
-        const size_t numBlockSteps = result.blocksTested.size();
-        const size_t numThreadSteps = result.threadsTested.size();
-        // NaN marks configurations skipped by early termination, distinguishing them from
-        // genuine 0 GiB/s measurements.
-        const double UNMEASURED = std::numeric_limits<double>::quiet_NaN();
-
-        result.bandwidth3D.assign(numBlockSteps, std::vector<std::vector<double>>(
-            numThreadSteps, std::vector<double>(1, UNMEASURED)));
-
-        // Lowest thread count worth measuring; used as an index into threadsTested.
-        // Once a thread sweep terminates, this and lower counts are skipped for lower blocks.
-        size_t lowestThreadIndex = 0;
-
-        // Search block counts and thread counts from highest to lowest.
-        for (size_t bi = numBlockSteps; bi-- > 0; )
-        {
-            const uint32_t numBlocks = result.blocksTested[bi];
-            double maxBandwidthThisBlock = 0.0;
-
-            for (size_t ti = numThreadSteps; ti-- > lowestThreadIndex; )
-            {
-                const uint32_t numThreads = result.threadsTested[ti];
-
-                auto [timeS, bandwidth] = mainMemoryWriteBandwidthSweepLauncher(arraySizeBytes, numBlocks, numThreads, 1, allocType);
-
-                result.bandwidth3D[bi][ti][0] = bandwidth;
-
-                if (bandwidth > result.measuredBandwidth)
-                {
-                    result.measuredBandwidth = bandwidth;
-                    result.time = timeS;
-                    result.numThreads = numThreads;
-                    result.numBlocks = numBlocks;
-                    result.numReps = 1;
-                }
-
-                // A >=25% drop from the best BW ends this thread sweep
-                // and skips this and lower thread counts for remaining blocks.
-                if (maxBandwidthThisBlock > 0.0 &&
-                    bandwidth <= BANDWIDTH_EARLY_TERMINATION_FACTOR * maxBandwidthThisBlock)
-                {
-                    lowestThreadIndex = ti + 1;
-                    break;
-                }
-
-                if (bandwidth > maxBandwidthThisBlock)
-                {
-                    maxBandwidthThisBlock = bandwidth;
-                }
-            }
-        }
-
-        return result;
+        return sweepMultiBlockBandwidth(arraySizeBytes, {1}, [&](uint32_t numBlocks, uint32_t numThreads, uint32_t, size_t reps) {
+            return mainMemoryWriteBandwidthSweepLauncher(arraySizeBytes, numBlocks, numThreads, reps, allocType);
+        }, 1);
     }
 }

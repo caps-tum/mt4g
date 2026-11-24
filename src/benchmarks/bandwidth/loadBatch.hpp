@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <stdexcept>
 #include <type_traits>
+#include <limits>
 
 // Single-block read bandwidth benchmarks issue a batch of N independent loads to a small array before waiting for them.
 // N is swept as powers of two up to this, beyond what the hardware keeps in flight, to see the plateau.
@@ -22,6 +23,9 @@ static constexpr uint32_t MAX_LOADS_PER_BATCH = 128;
 // (AMD vector memory uses k % 32, as the offset field of the instruction has 12 bits). The array needs this much padding.
 static constexpr size_t BATCH_STRIDE_BYTES = 128;
 static constexpr size_t BATCH_PADDING_BYTES = MAX_LOADS_PER_BATCH * BATCH_STRIDE_BYTES;
+
+// Multi-block read bandwidth benchmarks sweep fewer loads per batch (2-4 suffice today, the rest is headroom)
+static constexpr uint32_t MAX_MULTI_BLOCK_LOADS_PER_BATCH = 16;
 
 // Calls f(std::integral_constant<uint32_t, N>) for the N known only at run time, e.g. to pick a kernel template instance:
 // withLoadsPerBatch(n, [](auto n) { return kernel<decltype(n)::value>; }). Only N up to MaxLoadsPerBatch are instantiated.
@@ -192,3 +196,205 @@ __device__ __forceinline__ uint32_t nvidiaSharedLoadBatch(uint64_t address)
     return dummy;
 }
 #endif
+
+
+// Multi-block batches: load k reads element i + k * gridStride, so every element is still read once per rep.
+// (The single-block layout would let neighbouring threads load the same lines within a batch, served by a closer cache.)
+#ifdef __HIP_PLATFORM_AMD__
+// AMD_INDEXED_<N>(LOAD) is the asm text of N loads, LOAD(k) gives the load of address operand k
+#define AMD_INDEXED_1(LOAD)  LOAD(0)
+#define AMD_INDEXED_2(LOAD)  AMD_INDEXED_1(LOAD) LOAD(1)
+#define AMD_INDEXED_4(LOAD)  AMD_INDEXED_2(LOAD) LOAD(2) LOAD(3)
+#define AMD_INDEXED_8(LOAD)  AMD_INDEXED_4(LOAD) LOAD(4) LOAD(5) LOAD(6) LOAD(7)
+#define AMD_INDEXED_16(LOAD) AMD_INDEXED_8(LOAD) LOAD(8) LOAD(9) LOAD(10) LOAD(11) LOAD(12) LOAD(13) LOAD(14) LOAD(15)
+
+#define AMD_ADDRESSES_1(a)  "v"(a[0])
+#define AMD_ADDRESSES_2(a)  AMD_ADDRESSES_1(a), "v"(a[1])
+#define AMD_ADDRESSES_4(a)  AMD_ADDRESSES_2(a), "v"(a[2]), "v"(a[3])
+#define AMD_ADDRESSES_8(a)  AMD_ADDRESSES_4(a), "v"(a[4]), "v"(a[5]), "v"(a[6]), "v"(a[7])
+#define AMD_ADDRESSES_16(a) AMD_ADDRESSES_8(a), "v"(a[8]), "v"(a[9]), "v"(a[10]), "v"(a[11]), "v"(a[12]), "v"(a[13]), "v"(a[14]), "v"(a[15])
+
+#define AMD_GRID_LOAD(k)     "flat_load_dwordx4 v[20:23], %" #k "\n\t"
+#define AMD_GRID_LOAD_GLC(k) "flat_load_dwordx4 v[20:23], %" #k " " GLC "\n\t"
+
+#define AMD_GRID_BATCH(N, LOAD, a) \
+    if constexpr ((N) == 1)  { __asm__ volatile (AMD_INDEXED_1(LOAD) "s_waitcnt vmcnt(0)\n\t" : : AMD_ADDRESSES_1(a) : "memory", "v20", "v21", "v22", "v23"); } \
+    if constexpr ((N) == 2)  { __asm__ volatile (AMD_INDEXED_2(LOAD) "s_waitcnt vmcnt(0)\n\t" : : AMD_ADDRESSES_2(a) : "memory", "v20", "v21", "v22", "v23"); } \
+    if constexpr ((N) == 4)  { __asm__ volatile (AMD_INDEXED_4(LOAD) "s_waitcnt vmcnt(0)\n\t" : : AMD_ADDRESSES_4(a) : "memory", "v20", "v21", "v22", "v23"); } \
+    if constexpr ((N) == 8)  { __asm__ volatile (AMD_INDEXED_8(LOAD) "s_waitcnt vmcnt(0)\n\t" : : AMD_ADDRESSES_8(a) : "memory", "v20", "v21", "v22", "v23"); } \
+    if constexpr ((N) == 16) { __asm__ volatile (AMD_INDEXED_16(LOAD) "s_waitcnt vmcnt(0)\n\t" : : AMD_ADDRESSES_16(a) : "memory", "v20", "v21", "v22", "v23"); }
+
+// All loads write v20-v23 (the data is not used); BypassL1 adds the GLC bit (L2 benchmark)
+template <uint32_t LoadsPerBatch, bool BypassL1>
+__device__ __forceinline__ void amdGridLoadBatch(const uint32v4 *src, size_t gridStride)
+{
+    uint64_t addresses[LoadsPerBatch];
+    for (uint32_t k = 0; k < LoadsPerBatch; ++k) { addresses[k] = reinterpret_cast<uint64_t>(src + k * gridStride); }
+
+    if constexpr (BypassL1) { AMD_GRID_BATCH(LoadsPerBatch, AMD_GRID_LOAD_GLC, addresses) }
+    else                    { AMD_GRID_BATCH(LoadsPerBatch, AMD_GRID_LOAD, addresses) }
+}
+#endif
+
+#ifdef __HIP_PLATFORM_NVIDIA__
+// All four words are used, otherwise the compiler narrows the loads; BypassL1 uses ld.global.cg (L2 benchmark)
+template <uint32_t LoadsPerBatch, bool BypassL1>
+__device__ __forceinline__ uint32_t nvidiaGridLoadBatch(const uint32v4 *src, size_t gridStride)
+{
+    uint32_t dummy = 0;
+
+    #pragma unroll
+    for (uint32_t k = 0; k < LoadsPerBatch; ++k)
+    {
+        uint32_t x, y, z, w;
+        if constexpr (BypassL1)
+        {
+            asm volatile ("ld.global.cg.v4.u32 {%0,%1,%2,%3}, [%4];" : "=r"(x), "=r"(y), "=r"(z), "=r"(w) : "l"(src + k * gridStride) : "memory");
+        }
+        else
+        {
+            asm volatile ("ld.global.v4.u32 {%0,%1,%2,%3}, [%4];" : "=r"(x), "=r"(y), "=r"(z), "=r"(w) : "l"(src + k * gridStride) : "memory");
+        }
+        dummy ^= x ^ y ^ z ^ w;
+    }
+
+    return dummy;
+}
+#endif
+
+// Reads every element of src[0..n) once per rep with batches of N loads along the grid-stride loop, single loads for the tail
+template <uint32_t LoadsPerBatch, bool BypassL1>
+__device__ __forceinline__ uint32_t gridReadPass(const uint32v4 *src, size_t first, size_t n, size_t gridStride)
+{
+    uint32_t dummy = 0;
+    size_t i = first;
+
+    for (; i + (LoadsPerBatch - 1) * gridStride < n; i += LoadsPerBatch * gridStride)
+    {
+        #ifdef __HIP_PLATFORM_AMD__
+        amdGridLoadBatch<LoadsPerBatch, BypassL1>(src + i, gridStride);
+        #endif
+
+        #ifdef __HIP_PLATFORM_NVIDIA__
+        dummy ^= nvidiaGridLoadBatch<LoadsPerBatch, BypassL1>(src + i, gridStride);
+        #endif
+    }
+
+    for (; i < n; i += gridStride)
+    {
+        #ifdef __HIP_PLATFORM_AMD__
+        amdGridLoadBatch<1, BypassL1>(src + i, gridStride);
+        #endif
+
+        #ifdef __HIP_PLATFORM_NVIDIA__
+        dummy ^= nvidiaGridLoadBatch<1, BypassL1>(src + i, gridStride);
+        #endif
+    }
+
+    return dummy;
+}
+
+
+// Sweeps blocks x threads x reps x loads per batch. measure(numBlocks, numThreads, loadsPerBatch, reps) returns
+// {time in seconds, bandwidth in GiB/s}; each grid cell keeps the best number of loads per batch.
+// Block and thread counts are searched from highest to lowest: a >= 25 % drop from the best bandwidth of a block count
+// ends its thread sweep and skips this and lower thread counts for the remaining block counts.
+// Write benchmarks pass maxLoadsPerBatch = 1, as stores do not wait for each other.
+template <typename Measure>
+CacheBandwidthResult sweepMultiBlockBandwidth(size_t dataBytes, const std::vector<size_t> &repsTested, Measure measure, uint32_t maxLoadsPerBatch = MAX_MULTI_BLOCK_LOADS_PER_BATCH)
+{
+    uint32_t minThreads = util::getWarpSize();
+    uint32_t maxThreads = util::getMaxThreadsPerBlock();
+
+    uint32_t minBlocks = util::getNumberOfComputeUnits();
+    uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getMaxBlocksPerMultiProcessor();
+
+    CacheBandwidthResult result{};
+    result.measuredBandwidth = 0.0;
+    result.dataBytes = dataBytes;
+    result.cycles = 0;
+    result.time = 0.0;
+    result.numThreads = 0;
+    result.numBlocks = 0;
+    result.numReps = 0;
+
+    // Full block/thread/rep axes for CSV alignment; the sweep runs descending, the axes stay ascending
+    for (uint32_t numBlocks = minBlocks; numBlocks <= maxBlocks; numBlocks *= 2)
+    {
+        result.blocksTested.push_back(numBlocks);
+    }
+    for (uint32_t numThreads = minThreads; numThreads <= maxThreads; numThreads *= 2)
+    {
+        result.threadsTested.push_back(numThreads);
+    }
+    result.repsTested = repsTested;
+
+    const size_t numBlockSteps = result.blocksTested.size();
+    const size_t numThreadSteps = result.threadsTested.size();
+    const size_t numRepSteps = result.repsTested.size();
+
+    // NaN marks configurations skipped by early termination, distinguishing them from genuine 0 GiB/s measurements
+    const double UNMEASURED = std::numeric_limits<double>::quiet_NaN();
+
+    result.bandwidth3D.assign(numBlockSteps, std::vector<std::vector<double>>(
+        numThreadSteps, std::vector<double>(numRepSteps, UNMEASURED)));
+
+    // Lowest thread count worth measuring (index into threadsTested)
+    size_t lowestThreadIndex = 0;
+
+    for (size_t bi = numBlockSteps; bi-- > 0; )
+    {
+        const uint32_t numBlocks = result.blocksTested[bi];
+        double maxBandwidthThisBlock = 0.0;
+
+        for (size_t ti = numThreadSteps; ti-- > lowestThreadIndex; )
+        {
+            const uint32_t numThreads = result.threadsTested[ti];
+            double bestThisThread = 0.0;
+
+            for (size_t ri = 0; ri < numRepSteps; ++ri)
+            {
+                const size_t reps = result.repsTested[ri];
+                double bestThisCell = 0.0;
+
+                for (uint32_t loadsPerBatch = 1; loadsPerBatch <= maxLoadsPerBatch; loadsPerBatch *= 2)
+                {
+                    auto [timeS, bandwidth] = measure(numBlocks, numThreads, loadsPerBatch, reps);
+
+                    bestThisCell = std::max(bestThisCell, bandwidth);
+
+                    if (bandwidth > result.measuredBandwidth)
+                    {
+                        result.measuredBandwidth = bandwidth;
+                        result.time = timeS;
+                        result.numThreads = numThreads;
+                        result.numBlocks = numBlocks;
+                        result.numReps = reps;
+                        result.loadsPerBatch = maxLoadsPerBatch > 1 ? loadsPerBatch : 0;
+                    }
+                }
+
+                result.bandwidth3D[bi][ti][ri] = bestThisCell;
+                bestThisThread = std::max(bestThisThread, bestThisCell);
+            }
+
+            if (maxBandwidthThisBlock > 0.0 && bestThisThread <= BANDWIDTH_EARLY_TERMINATION_FACTOR * maxBandwidthThisBlock)
+            {
+                lowestThreadIndex = ti + 1;
+                break;
+            }
+
+            maxBandwidthThisBlock = std::max(maxBandwidthThisBlock, bestThisThread);
+        }
+    }
+
+    return result;
+}
+
+// The repetitions swept by the cache bandwidth benchmarks (main memory uses a single pass instead)
+inline std::vector<size_t> cacheBandwidthReps()
+{
+    std::vector<size_t> reps;
+    for (size_t r = MIN_REPS; r <= MAX_REPS; r *= 2) { reps.push_back(r); }
+    return reps;
+}
