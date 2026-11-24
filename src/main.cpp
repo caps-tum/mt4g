@@ -331,13 +331,7 @@ int main(int argc, char* argv[]) {
             result["memory"]["l1"]["readBandwidthPerCU"] = l1ReadBandwidth;
 
             std::cout << "[L1] Write Bandwidth per CU / MultiProcessor" << std::endl;
-            CacheBandwidthResult l1WriteBandwidth;
-            if (util::isAMD())
-            {
-                l1WriteBandwidth = timed("amd_l1WriteBandwidth", [&] { return benchmark::amd::measureL1WriteBandwidthSweep(l1Size.size / 2); });
-            } else {
-                l1WriteBandwidth = timed("l1WriteBandwidth", [&] { return benchmark::measureL1WriteBandwidthSweep(l1Size.size / 2); });
-            }
+            CacheBandwidthResult l1WriteBandwidth = timed("l1WriteBandwidth", [&] { return benchmark::measureL1WriteBandwidthSweep(l1Size.size / 2); });
             result["memory"]["l1"]["writeBandwidthPerCU"] = l1WriteBandwidth;
 
             if (opts.rawData || opts.graphs)

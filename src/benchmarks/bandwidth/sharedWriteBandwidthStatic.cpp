@@ -1,93 +1,51 @@
 #include "benchmarks/benchmark.hpp"
+#include "benchmarks/bandwidth/loadBatch.hpp"
 #include "utils/util.hpp"
 
 #include <vector>
-#include <numeric>
 
 static constexpr auto SIZE = 32 * KiB;
-static constexpr auto NUM_ELEMENTS = SIZE / 16;
+static constexpr auto NUM_ELEMENTS = SIZE / sizeof(uint32v4);
+static constexpr auto WARMUP_REPS = 128;
 
 
-
-__global__ void sharedWriteBandwidthStaticKernel(uint64_t* __restrict__ timings, uint32_t elementsPerThread, size_t reps) 
+// Same as the dynamic shared write kernel, but with a statically sized array
+__global__ void sharedWriteBandwidthStaticKernel(uint64_t* __restrict__ timingResult, size_t reps)
 {
     const uint32_t tid = threadIdx.x;
+    const uint32v4 data = {tid, tid + 1, tid + 2, tid + 3};
+    const uint32_t blockStride = blockDim.x; // read once, the "memory" clobber of the asm would reload it in every iteration
 
     __shared__ uint32v4 memory[NUM_ELEMENTS];
-    (void)memory; // to avoid "unused variable" warning
 
     #ifdef __HIP_PLATFORM_AMD__
-    __asm__ volatile("" :: "v"(memory) : "memory");
+    const uint32_t base = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(memory)); // byte address in the LDS
     #endif
 
     #ifdef __HIP_PLATFORM_NVIDIA__
-    uint64_t sharedBaseAddr;
-    asm volatile(
-        "cvta.to.shared.u64 %0, %1;\n\t"
-        : "=l"(sharedBaseAddr)
-        : "l"(memory)
-        : "memory"
-    );
+    uint64_t base;
+    asm volatile ("cvta.to.shared.u64 %0, %1;" : "=l"(base) : "l"(memory));
     #endif
 
-    const uint32_t base = tid * elementsPerThread * 16u;
-
-    uint32v4 dummy = {tid, tid + 1, tid + 2, tid + 3};
-
-    uint64_t start, end;
+    uint64_t start = 0;
 
     __syncthreads();
-
-    if (tid == 0) 
-    {
-        #ifdef __HIP_PLATFORM_AMD__
-        __asm__ volatile (
-            "s_waitcnt lgkmcnt(0)\n\t"
-            "s_memtime %0\n\t"
-            "s_waitcnt lgkmcnt(0)\n\t"
-            : "=s"(start)
-            :
-            : "memory"
-        );
-        #endif
-
-        #ifdef __HIP_PLATFORM_NVIDIA__
-        __asm__ volatile(
-            "mov.u64 %0, %%clock64;\n\t"
-            : "=l"(start)
-            :
-            : "memory"
-        );
-        #endif
-    }
-
+    if (tid == 0) { start = __globaltimer(); }
     __syncthreads();
 
-    for (size_t rep = 0; rep < reps; ++rep) 
+    for (size_t rep = 0; rep < reps; ++rep)
     {
-        for (uint32_t i = 0; i < elementsPerThread; ++i)
+        for (uint32_t i = tid; i < NUM_ELEMENTS; i += blockStride)
         {
-            const uint32_t offset = base + i * 16u;
-
             #ifdef __HIP_PLATFORM_AMD__
-            __asm__ volatile (
-                "ds_write_b128 %0, %1\n\t"
-                :
-                : "v"(offset), "v"(dummy)
-                : "memory"
-            );
+            __asm__ volatile ("ds_write_b128 %0, %1\n\t" : : "v"(base + i * 16u), "v"(data) : "memory");
             #endif
 
             #ifdef __HIP_PLATFORM_NVIDIA__
-            const uint64_t addr = sharedBaseAddr + static_cast<uint64_t>(offset);
-            __asm__ volatile(
+            __asm__ volatile (
                 "st.shared.v4.u32 [%0], {%1,%2,%3,%4};\n\t"
                 :
-                : "l"(addr)
-                , "r"(dummy.x)
-                , "r"(dummy.y)
-                , "r"(dummy.z)
-                , "r"(dummy.w)
+                : "l"(base + i * 16u), "r"(data.x), "r"(data.y), "r"(data.z), "r"(data.w)
                 : "memory"
             );
             #endif
@@ -95,109 +53,37 @@ __global__ void sharedWriteBandwidthStaticKernel(uint64_t* __restrict__ timings,
     }
 
     #ifdef __HIP_PLATFORM_AMD__
-    __asm__ volatile (
-        "s_waitcnt lgkmcnt(0)\n\t" 
-        :
-        :
-        : "memory"
-    );
+    __asm__ volatile ("s_waitcnt lgkmcnt(0)\n\t" : : : "memory"); // the compiler does not track the asm stores
     #endif
-    
+
     __syncthreads();
-
-    if (tid == 0) 
-    {
-        #ifdef __HIP_PLATFORM_AMD__
-        __asm__ volatile (
-            "s_waitcnt lgkmcnt(0)\n\t"
-            "s_memtime %0\n\t"
-            "s_waitcnt lgkmcnt(0)\n\t"
-            : "=s"(end)
-            :
-            : "memory"
-        );
-        *timings = end - start;
-        #endif
-
-        #ifdef __HIP_PLATFORM_NVIDIA__
-        __asm__ volatile(
-            "mov.u64 %0, %%clock64;\n\t"
-            : "=l"(end)
-            :
-            : "memory"
-        );
-        *timings = end - start;
-        #endif
-    }
+    if (tid == 0) { *timingResult = __globaltimer() - start; }
 }
 
-static std::tuple<uint64_t, double, double> sharedWriteBandwidthStaticLauncher(uint32_t numThreads, size_t reps) 
+
+// One block, timed inside the kernel with the constant-rate timer, so the launch overhead is not measured
+static std::tuple<double, double> sharedWriteBandwidthStaticLauncher(uint32_t numThreads, size_t reps)
 {
-    uint32_t elementsPerThread = NUM_ELEMENTS / numThreads;
+    uint64_t *d_timingResult = util::allocateGPUMemory<uint64_t>(1);
 
-    uint64_t* d_timings = util::allocateGPUMemory<uint64_t>(1);
+    const double timeS = timeSingleBlockKernel(d_timingResult, WARMUP_REPS, reps, 0, [&](size_t r) {
+        sharedWriteBandwidthStaticKernel<<<1, numThreads>>>(d_timingResult, r);
+    });
 
-    // dynamic memory allocation
-    sharedWriteBandwidthStaticKernel<<<1, numThreads>>>(d_timings, elementsPerThread, reps);
+    util::hipCheck(hipFree(d_timingResult));
 
-    std::vector<uint64_t> t = util::copyFromDevice<uint64_t>(d_timings, 1);
+    const double dataGiB = (double) SIZE * reps / (1 * GiB);
 
-    uint64_t cycles = t[0];
-
-    double gpuClockHz = util::getClockRateKHz() * 1000.0;
-    double timeS = (double) cycles / gpuClockHz;
-    double dataGiB = (double) SIZE  * reps / (1 * GiB);
- 
-    return {cycles, timeS, dataGiB / timeS};
+    return {timeS, timeS > 0.0 ? dataGiB / timeS : 0.0};
 }
 
-namespace benchmark {
-    CacheBandwidthResult measureSharedWriteBandwidthStaticSweep() 
+
+namespace benchmark
+{
+    CacheBandwidthResult measureSharedWriteBandwidthStaticSweep()
     {
-        uint32_t minNumThreads = util::getWarpSize();
-        uint32_t maxNumThreads = util::getMaxThreadsPerBlock();
-        size_t minReps = MIN_REPS;
-        size_t maxReps = MAX_REPS;
-
-        CacheBandwidthResult result{};
-        result.measuredBandwidth = 0.0;
-        result.dataBytes = SIZE;
-        result.cycles = 0;
-        result.time = 0.0;
-        result.numThreads = 0;
-        result.numBlocks = 1;
-        result.numReps = 0;
-
-        for (uint32_t numThreads = minNumThreads; numThreads <= maxNumThreads; numThreads *= 2)
-        {
-            std::vector<double> bandwidthResults;
-
-            result.threadsTested.push_back(numThreads);
-
-            for (size_t reps = minReps; reps <= maxReps; reps *= 2)
-            {
-                if (numThreads == minNumThreads)
-                {
-                    result.repsTested.push_back(reps);
-                }
-
-                auto [cycles, timeS, bandwidth] = sharedWriteBandwidthStaticLauncher(numThreads, reps);
-                
-                bandwidthResults.push_back(bandwidth);
-
-                if (bandwidth > result.measuredBandwidth)
-                {
-                    result.measuredBandwidth = bandwidth;
-                    result.cycles = cycles;
-                    result.time = timeS;
-                    result.numThreads = numThreads;
-                    result.numReps = reps;
-                }
-            }
-
-            result.bandwidthGridGiBs.push_back(bandwidthResults);
-        }
-
-        return result;
+        return sweepSingleBlockBandwidth(SIZE, [&](uint32_t numThreads, uint32_t, size_t reps) {
+            return sharedWriteBandwidthStaticLauncher(numThreads, reps);
+        }, 1);
     }
 }
