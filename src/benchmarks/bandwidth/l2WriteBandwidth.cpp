@@ -5,65 +5,51 @@
 #include <vector>
 
 static constexpr auto WARMUP_REPS = 512;
+static constexpr auto MS_PER_SECOND = 1000.0; // ms
 
 
-static constexpr auto MS_PER_SECOND = 1000.0;// ms
+// Writes the array with all blocks; every rep starts at the data of the next block
+__global__ void l2WriteBandwidthKernel(uint32v4* __restrict__ dst, size_t n, size_t reps)
+{
+    // read once, on AMD the "memory" clobber of the asm would reload them in every iteration
+    const size_t blockStride = blockDim.x;
+    const size_t gridStride = static_cast<size_t>(gridDim.x) * blockStride;
+    const uint32_t tid = static_cast<uint32_t>(blockIdx.x * blockStride + threadIdx.x);
+    const uint32v4 data = {tid, tid + 1, tid + 2, tid + 3};
 
-__global__ void l2WriteBandwidthKernel(uint32v4* __restrict__ dst, size_t n, size_t reps) {
-    // read once, the "memory" clobber of the asm would reload them in every iteration
-    const uint32_t blockStride = blockDim.x;
-    const uint32_t stride = static_cast<uint32_t>(gridDim.x) * blockStride;
-    uint32_t tid = static_cast<uint32_t>(blockIdx.x * blockStride + threadIdx.x);
+    for (size_t j = 0; j < reps; ++j)
+    {
+        const size_t first = ((blockIdx.x + j) * blockStride + threadIdx.x) % gridStride;
 
-    uint32v4 dummy = { tid, tid + 1, tid + 2, tid + 3 }; 
-
-    for (size_t j = 0; j < reps; ++j) {
-        tid = (((blockIdx.x + j) * blockStride) + threadIdx.x) % stride;
-        
-        for (size_t i = tid; i < n; i += stride) {
+        for (size_t i = first; i < n; i += gridStride)
+        {
+            #ifdef __HIP_PLATFORM_AMD__
+            __asm__ volatile ("flat_store_dwordx4 %0, %1\n\t" : : "v"(dst + i), "v"(data) : "memory");
+            #endif
 
             #ifdef __HIP_PLATFORM_NVIDIA__
-            asm volatile(
-                "st.global.v4.u32 [%0], {%1,%2,%3,%4};\n"
-                :
-                : "l"(dst + i) // uint32v4*
-                , "r"(dummy.x) // int
-                , "r"(dummy.y) // int
-                , "r"(dummy.z) // int
-                , "r"(dummy.w) // int
-            );
+            __asm__ volatile ("st.global.v4.u32 [%0], {%1,%2,%3,%4};\n\t" : : "l"(dst + i), "r"(data.x), "r"(data.y), "r"(data.z), "r"(data.w) : "memory");
             #endif
-
-            #ifdef __HIP_PLATFORM_AMD__
-            asm volatile(
-                "flat_store_dwordx4 %0, %1\n"
-                :
-                : "v"(dst + i) // uint32v4*
-                , "v"(dummy) // uint32v4
-                : "memory"
-            );
-            #endif
-
         }
     }
 }
 
+static std::tuple<double, double> l2WriteBandwidthLauncher(size_t arraySizeBytes, uint32_t numBlocks, uint32_t numThreads, size_t reps)
+{
+    const size_t numElements = arraySizeBytes / sizeof(uint32v4);
 
-static std::tuple<double, double> l2WriteBandwidthLauncher(size_t arraySizeBytes, uint32_t numBlocks, uint32_t numThreads, size_t reps) 
-{ 
-    uint32v4 *d_dstArr = util::allocateGPUMemory<uint32v4>(arraySizeBytes / sizeof(uint32v4));
+    uint32v4 *d_dstArr = util::allocateGPUMemory<uint32v4>(numElements);
 
     // warm up L2
-    l2WriteBandwidthKernel<<<numBlocks, numThreads>>>(d_dstArr, arraySizeBytes / sizeof(uint32v4), WARMUP_REPS);
+    l2WriteBandwidthKernel<<<numBlocks, numThreads>>>(d_dstArr, numElements, WARMUP_REPS);
     util::hipCheck(hipGetLastError());
-    
-    // Use events to measure timings
+
     auto start = util::createHipEvent();
     auto end = util::createHipEvent();
 
     util::hipCheck(hipDeviceSynchronize());
     util::hipCheck(hipEventRecord(start));
-    l2WriteBandwidthKernel<<<numBlocks, numThreads>>>(d_dstArr, arraySizeBytes / sizeof(uint32v4), reps);
+    l2WriteBandwidthKernel<<<numBlocks, numThreads>>>(d_dstArr, numElements, reps);
     util::hipCheck(hipGetLastError());
     util::hipCheck(hipEventRecord(end));
     util::hipCheck(hipDeviceSynchronize());
@@ -73,15 +59,16 @@ static std::tuple<double, double> l2WriteBandwidthLauncher(size_t arraySizeBytes
     util::hipCheck(hipEventDestroy(start));
     util::hipCheck(hipEventDestroy(end));
     util::hipCheck(hipFree(d_dstArr));
-    
-    double dataGiB = (double) arraySizeBytes * reps / (1 * GiB); // Convert to GiB
-    double timeS = elapsedMs / MS_PER_SECOND;
-    
+
+    const double dataGiB = (double) arraySizeBytes * reps / (1 * GiB);
+    const double timeS = elapsedMs / MS_PER_SECOND;
+
     return {timeS, dataGiB / timeS};
 }
 
+
 namespace benchmark {
-    CacheBandwidthResult measureL2WriteBandwidthSweep(size_t l2SizeBytes) 
+    CacheBandwidthResult measureL2WriteBandwidthSweep(size_t l2SizeBytes)
     {
         util::hipDeviceReset();
 

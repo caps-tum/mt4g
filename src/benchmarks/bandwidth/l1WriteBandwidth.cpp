@@ -11,7 +11,7 @@ __global__ void l1WriteBandwidthKernel(uint32v4* __restrict__ dst, uint64_t* __r
 {
     const uint32_t tid = threadIdx.x;
     const uint32v4 data = {tid, tid + 1, tid + 2, tid + 3};
-    const uint32_t blockStride = blockDim.x; // read once, the "memory" clobber of the asm would reload it in every iteration
+    const uint32_t blockStride = blockDim.x; // read once, on AMD the "memory" clobber of the asm would reload it in every iteration
 
     uint64_t start = 0;
 

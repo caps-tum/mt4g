@@ -4,9 +4,9 @@
 
 #include <vector>
 
-static constexpr auto SIZE_DOWN = DEFAULT_SIZE_DOWN_FACTOR;// Factor
-static constexpr auto MS_PER_SECOND = 1000.0;// ms
-static constexpr auto WARMUP_REPS = 4;// warmup passes for the sweep (large working set)
+static constexpr auto SIZE_DOWN = DEFAULT_SIZE_DOWN_FACTOR; // Factor
+static constexpr auto MS_PER_SECOND = 1000.0; // ms
+static constexpr auto WARMUP_REPS = 4; // warmup passes for the sweep (large working set)
 
 // Mirrors the L2 bandwidth sweep: reads a working set that is much larger
 // than the last level cache, so the traffic is served from main memory,
@@ -16,7 +16,7 @@ __global__ void mainMemoryReadBandwidthSweepKernel(uint32_t* __restrict__ dst, c
 {
     LOADS_PER_BATCH_CHECK(LoadsPerBatch, MAX_MULTI_BLOCK_LOADS_PER_BATCH);
 
-    // read once, the "memory" clobber of the asm would reload them in every iteration
+    // read once, on AMD the "memory" clobber of the asm would reload them in every iteration
     const size_t blockStride = blockDim.x;
     const size_t gridStride = static_cast<size_t>(gridDim.x) * blockStride;
     const size_t first = blockIdx.x * blockStride + threadIdx.x;

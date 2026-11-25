@@ -14,7 +14,7 @@ __global__ void l2ReadBandwidthKernel(uint32_t* __restrict__ dst, const uint32v4
 {
     LOADS_PER_BATCH_CHECK(LoadsPerBatch, MAX_MULTI_BLOCK_LOADS_PER_BATCH);
 
-    // read once, the "memory" clobber of the asm would reload them in every iteration
+    // read once, on AMD the "memory" clobber of the asm would reload them in every iteration
     const size_t blockStride = blockDim.x;
     const size_t gridStride = static_cast<size_t>(gridDim.x) * blockStride;
 

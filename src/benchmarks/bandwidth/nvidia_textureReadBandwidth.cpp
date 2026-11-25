@@ -32,7 +32,7 @@ template <uint32_t LoadsPerBatch>
 __global__ void textureReadBandwidthKernel([[maybe_unused]] hipTextureObject_t tex, uint32_t* __restrict__ dst, uint64_t* __restrict__ timingResult, size_t numElements, size_t reps)
 {
     LOADS_PER_BATCH_CHECK(LoadsPerBatch, MAX_LOADS_PER_BATCH);
-    const uint32_t blockStride = blockDim.x; // read once, the "memory" clobber of the asm would reload it in every iteration
+    const uint32_t blockStride = blockDim.x;
 
     uint32_t dummy = 0;
     uint64_t start = 0;

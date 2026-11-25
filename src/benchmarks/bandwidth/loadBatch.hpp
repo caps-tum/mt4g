@@ -229,6 +229,8 @@ template <uint32_t LoadsPerBatch, bool BypassL1>
 __device__ __forceinline__ void amdGridLoadBatch(const uint32v4 *src, size_t gridStride)
 {
     uint64_t addresses[LoadsPerBatch];
+
+    #pragma unroll
     for (uint32_t k = 0; k < LoadsPerBatch; ++k) { addresses[k] = reinterpret_cast<uint64_t>(src + k * gridStride); }
 
     if constexpr (BypassL1) { AMD_GRID_BATCH(LoadsPerBatch, AMD_GRID_LOAD_GLC, addresses) }

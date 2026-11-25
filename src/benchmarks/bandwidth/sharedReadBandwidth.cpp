@@ -12,7 +12,7 @@ template <uint32_t LoadsPerBatch>
 __global__ void sharedReadBandwidthKernel(uint32_t* __restrict__ dst, uint64_t* __restrict__ timingResult, uint32_t numElements, size_t reps)
 {
     LOADS_PER_BATCH_CHECK(LoadsPerBatch, MAX_LOADS_PER_BATCH);
-    const uint32_t blockStride = blockDim.x; // read once, the "memory" clobber of the asm would reload it in every iteration
+    const uint32_t blockStride = blockDim.x; // read once, on AMD the "memory" clobber of the asm would reload it in every iteration
 
     extern __shared__ uint32v4 memory[];
 
