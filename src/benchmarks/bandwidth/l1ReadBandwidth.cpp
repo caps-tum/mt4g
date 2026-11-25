@@ -5,7 +5,7 @@
 #include <vector>
 
 static constexpr auto WARMUP_REPS = 128;
-static_assert(MIN_REPS % MAX_LOADS_PER_BATCH == 0 && WARMUP_REPS % MAX_LOADS_PER_BATCH == 0, "loads per batch must divide the repetitions");
+static_assert(MIN_REPS % MAX_LOADS_PER_BATCH_SINGLE_BLOCK == 0 && WARMUP_REPS % MAX_LOADS_PER_BATCH_SINGLE_BLOCK == 0, "loads per batch must divide the repetitions");
 
 
 #ifdef __HIP_PLATFORM_AMD__
@@ -15,8 +15,7 @@ static_assert(MIN_REPS % MAX_LOADS_PER_BATCH == 0 && WARMUP_REPS % MAX_LOADS_PER
 template <uint32_t LoadsPerBatch>
 __device__ __forceinline__ void amdL1LoadBatch(const uint32v4 *src)
 {
-    const uint64_t addr = reinterpret_cast<uint64_t>(src);
-    AMD_LOAD_BATCH(LoadsPerBatch, AMD_L1_LOAD, "s_waitcnt vmcnt(0)\n\t", : : "v"(addr) : "memory", "v20", "v21", "v22", "v23")
+    AMD_SINGLE_BLOCK_BATCH(LoadsPerBatch, AMD_L1_LOAD, "s_waitcnt vmcnt(0)\n\t", "v"(src), "v20", "v21", "v22", "v23")
 }
 #endif
 
@@ -50,7 +49,7 @@ __device__ __forceinline__ uint32_t nvidiaL1LoadBatch(const uint32v4 *src)
 template <uint32_t LoadsPerBatch>
 __global__ void l1ReadBandwidthKernel(uint32_t* __restrict__ dst, const uint32v4* __restrict__ src, uint64_t* __restrict__ timingResult, size_t numElements, size_t reps)
 {
-    LOADS_PER_BATCH_CHECK(LoadsPerBatch, MAX_LOADS_PER_BATCH);
+    CHECK_LOADS_PER_BATCH(LoadsPerBatch, MAX_LOADS_PER_BATCH_SINGLE_BLOCK);
     const uint32_t blockStride = blockDim.x; // read once, on AMD the "memory" clobber of the asm would reload it in every iteration
 
     uint32_t dummy = 0;
@@ -81,11 +80,29 @@ __global__ void l1ReadBandwidthKernel(uint32_t* __restrict__ dst, const uint32v4
 }
 
 
+// The kernel instance for a number of loads per batch
+static auto l1ReadBandwidthKernelFor(uint32_t loadsPerBatch)
+{
+    switch (loadsPerBatch)
+    {
+        case 1:    return l1ReadBandwidthKernel<1>;
+        case 2:    return l1ReadBandwidthKernel<2>;
+        case 4:    return l1ReadBandwidthKernel<4>;
+        case 8:    return l1ReadBandwidthKernel<8>;
+        case 16:   return l1ReadBandwidthKernel<16>;
+        case 32:   return l1ReadBandwidthKernel<32>;
+        case 64:   return l1ReadBandwidthKernel<64>;
+        case 128:  return l1ReadBandwidthKernel<128>;
+    }
+    throw std::invalid_argument("Unsupported number of loads per batch: " + std::to_string(loadsPerBatch));
+}
+
+
 // One block, timed inside the kernel with the constant-rate timer, so the launch overhead is not measured
 static std::tuple<double, double> l1ReadBandwidthLauncher(size_t arraySizeBytes, uint32_t numThreads, uint32_t loadsPerBatch, size_t reps, hipStream_t stream)
 {
     const size_t numElements = arraySizeBytes / sizeof(uint32v4);
-    const auto kernel = withLoadsPerBatch(loadsPerBatch, [](auto n) { return l1ReadBandwidthKernel<decltype(n)::value>; });
+    const auto kernel = l1ReadBandwidthKernelFor(loadsPerBatch);
 
     uint32v4 *d_srcArr = util::allocateGPUMemory<uint32v4>((arraySizeBytes + BATCH_PADDING_BYTES) / sizeof(uint32v4));
     uint32_t *d_dstArr = util::allocateGPUMemory<uint32_t>(numThreads);

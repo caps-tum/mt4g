@@ -5,7 +5,6 @@
 #include <vector>
 
 static constexpr auto SIZE_DOWN = DEFAULT_SIZE_DOWN_FACTOR; // Factor
-static constexpr auto MS_PER_SECOND = 1000.0; // ms
 static constexpr auto WARMUP_REPS = 4; // warmup passes for the sweep (large working set)
 
 // Mirrors the L2 bandwidth sweep: reads a working set that is much larger
@@ -14,7 +13,7 @@ static constexpr auto WARMUP_REPS = 4; // warmup passes for the sweep (large wor
 template <uint32_t LoadsPerBatch>
 __global__ void mainMemoryReadBandwidthSweepKernel(uint32_t* __restrict__ dst, const uint32v4* __restrict__ src, size_t n, size_t reps)
 {
-    LOADS_PER_BATCH_CHECK(LoadsPerBatch, MAX_MULTI_BLOCK_LOADS_PER_BATCH);
+    CHECK_LOADS_PER_BATCH(LoadsPerBatch, MAX_LOADS_PER_BATCH_MULTIPLE_BLOCKS);
 
     // read once, on AMD the "memory" clobber of the asm would reload them in every iteration
     const size_t blockStride = blockDim.x;
@@ -31,10 +30,25 @@ __global__ void mainMemoryReadBandwidthSweepKernel(uint32_t* __restrict__ dst, c
     dst[threadIdx.x] = dummy; // prevent dead code elimination
 }
 
+// The kernel instance for a number of loads per batch
+static auto mainMemoryReadBandwidthSweepKernelFor(uint32_t loadsPerBatch)
+{
+    switch (loadsPerBatch)
+    {
+        case 1:   return mainMemoryReadBandwidthSweepKernel<1>;
+        case 2:   return mainMemoryReadBandwidthSweepKernel<2>;
+        case 4:   return mainMemoryReadBandwidthSweepKernel<4>;
+        case 8:   return mainMemoryReadBandwidthSweepKernel<8>;
+        case 16:  return mainMemoryReadBandwidthSweepKernel<16>;
+    }
+    throw std::invalid_argument("Unsupported number of loads per batch: " + std::to_string(loadsPerBatch));
+}
+
+
 static std::tuple<double, double> mainMemoryReadBandwidthSweepLauncher(size_t arraySizeBytes, uint32_t numBlocks, uint32_t numThreads, uint32_t loadsPerBatch, size_t reps, util::AllocatorType allocType)
 {
     const size_t numElements = arraySizeBytes / sizeof(uint32v4);
-    const auto kernel = withLoadsPerBatch<MAX_MULTI_BLOCK_LOADS_PER_BATCH>(loadsPerBatch, [](auto n) { return mainMemoryReadBandwidthSweepKernel<decltype(n)::value>; });
+    const auto kernel = mainMemoryReadBandwidthSweepKernelFor(loadsPerBatch);
 
     uint32v4* d_srcArr = util::allocateMemory<uint32v4>(numElements, allocType);
     uint32_t* d_dstArr = util::allocateGPUMemory<uint32_t>(numThreads);

@@ -6,7 +6,6 @@
 #include <tuple>
 
 static constexpr auto SIZE_DOWN = DEFAULT_SIZE_DOWN_FACTOR; // Factor
-static constexpr auto MS_PER_SECOND = 1000.0; // ms
 static constexpr auto WARMUP_REPS = 4; // warmup passes for the sweep (large working set)
 
 // Mirrors the L2 bandwidth sweep: writes a working set that is much larger than

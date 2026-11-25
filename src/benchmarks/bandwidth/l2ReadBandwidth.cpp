@@ -5,14 +5,13 @@
 #include <vector>
 
 static constexpr auto WARMUP_REPS = 512;
-static constexpr auto MS_PER_SECOND = 1000.0; // ms
 
 
 // Reads the array with all blocks, bypassing L1; every rep starts at the data of the next block
 template <uint32_t LoadsPerBatch>
 __global__ void l2ReadBandwidthKernel(uint32_t* __restrict__ dst, const uint32v4* __restrict__ src, size_t n, size_t reps)
 {
-    LOADS_PER_BATCH_CHECK(LoadsPerBatch, MAX_MULTI_BLOCK_LOADS_PER_BATCH);
+    CHECK_LOADS_PER_BATCH(LoadsPerBatch, MAX_LOADS_PER_BATCH_MULTIPLE_BLOCKS);
 
     // read once, on AMD the "memory" clobber of the asm would reload them in every iteration
     const size_t blockStride = blockDim.x;
@@ -30,10 +29,25 @@ __global__ void l2ReadBandwidthKernel(uint32_t* __restrict__ dst, const uint32v4
 }
 
 
+// The kernel instance for a number of loads per batch
+static auto l2ReadBandwidthKernelFor(uint32_t loadsPerBatch)
+{
+    switch (loadsPerBatch)
+    {
+        case 1:   return l2ReadBandwidthKernel<1>;
+        case 2:   return l2ReadBandwidthKernel<2>;
+        case 4:   return l2ReadBandwidthKernel<4>;
+        case 8:   return l2ReadBandwidthKernel<8>;
+        case 16:  return l2ReadBandwidthKernel<16>;
+    }
+    throw std::invalid_argument("Unsupported number of loads per batch: " + std::to_string(loadsPerBatch));
+}
+
+
 static std::tuple<double, double> l2ReadBandwidthLauncher(size_t arraySizeBytes, uint32_t numBlocks, uint32_t numThreads, uint32_t loadsPerBatch, size_t reps)
 {
     const size_t numElements = arraySizeBytes / sizeof(uint32v4);
-    const auto kernel = withLoadsPerBatch<MAX_MULTI_BLOCK_LOADS_PER_BATCH>(loadsPerBatch, [](auto n) { return l2ReadBandwidthKernel<decltype(n)::value>; });
+    const auto kernel = l2ReadBandwidthKernelFor(loadsPerBatch);
 
     uint32v4 *d_srcArr = util::allocateGPUMemory<uint32v4>(numElements);
     uint32_t *d_dstArr = util::allocateGPUMemory<uint32_t>(numThreads);

@@ -6,15 +6,15 @@
 
 static constexpr auto SIZE = 32 * KiB;
 static constexpr auto NUM_ELEMENTS = SIZE / sizeof(uint32v4);
-static constexpr auto WARMUP_REPS = MAX_LOADS_PER_BATCH;
-static_assert(MIN_REPS % MAX_LOADS_PER_BATCH == 0, "loads per batch must divide the repetitions");
+static constexpr auto WARMUP_REPS = MAX_LOADS_PER_BATCH_SINGLE_BLOCK;
+static_assert(MIN_REPS % MAX_LOADS_PER_BATCH_SINGLE_BLOCK == 0, "loads per batch must divide the repetitions");
 
 
 // Same as the dynamic shared read kernel, but with a statically sized array
 template <uint32_t LoadsPerBatch>
 __global__ void sharedReadBandwidthStaticKernel(uint32_t* __restrict__ dst, uint64_t* __restrict__ timingResult, size_t reps)
 {
-    LOADS_PER_BATCH_CHECK(LoadsPerBatch, MAX_LOADS_PER_BATCH);
+    CHECK_LOADS_PER_BATCH(LoadsPerBatch, MAX_LOADS_PER_BATCH_SINGLE_BLOCK);
     const uint32_t blockStride = blockDim.x; // read once, on AMD the "memory" clobber of the asm would reload it in every iteration
 
     __shared__ uint32v4 memory[NUM_ELEMENTS + SHARED_BATCH_PADDING_BYTES / sizeof(uint32v4)];
@@ -61,10 +61,28 @@ __global__ void sharedReadBandwidthStaticKernel(uint32_t* __restrict__ dst, uint
 }
 
 
+// The kernel instance for a number of loads per batch
+static auto sharedReadBandwidthStaticKernelFor(uint32_t loadsPerBatch)
+{
+    switch (loadsPerBatch)
+    {
+        case 1:    return sharedReadBandwidthStaticKernel<1>;
+        case 2:    return sharedReadBandwidthStaticKernel<2>;
+        case 4:    return sharedReadBandwidthStaticKernel<4>;
+        case 8:    return sharedReadBandwidthStaticKernel<8>;
+        case 16:   return sharedReadBandwidthStaticKernel<16>;
+        case 32:   return sharedReadBandwidthStaticKernel<32>;
+        case 64:   return sharedReadBandwidthStaticKernel<64>;
+        case 128:  return sharedReadBandwidthStaticKernel<128>;
+    }
+    throw std::invalid_argument("Unsupported number of loads per batch: " + std::to_string(loadsPerBatch));
+}
+
+
 // One block, timed inside the kernel with the constant-rate timer, so the launch overhead is not measured
 static std::tuple<double, double> sharedReadBandwidthStaticLauncher(uint32_t numThreads, uint32_t loadsPerBatch, size_t reps)
 {
-    const auto kernel = withLoadsPerBatch(loadsPerBatch, [](auto n) { return sharedReadBandwidthStaticKernel<decltype(n)::value>; });
+    const auto kernel = sharedReadBandwidthStaticKernelFor(loadsPerBatch);
 
     uint32_t *d_dstArr = util::allocateGPUMemory<uint32_t>(numThreads);
     uint64_t *d_timingResult = util::allocateGPUMemory<uint64_t>(1);

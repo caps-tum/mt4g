@@ -5,14 +5,13 @@
 #include <vector>
 
 static constexpr auto WARMUP_REPS = 512;
-static constexpr auto MS_PER_SECOND = 1000.0; // ms
 
 
 // Reads the array with all blocks; every rep starts at the data of the next block
 template <uint32_t LoadsPerBatch>
 __global__ void l3ReadBandwidthKernel(uint32_t* __restrict__ dst, const uint32v4* __restrict__ src, size_t n, size_t reps)
 {
-    LOADS_PER_BATCH_CHECK(LoadsPerBatch, MAX_MULTI_BLOCK_LOADS_PER_BATCH);
+    CHECK_LOADS_PER_BATCH(LoadsPerBatch, MAX_LOADS_PER_BATCH_MULTIPLE_BLOCKS);
 
     // read once, the "memory" clobber of the asm would reload them in every iteration
     const size_t blockStride = blockDim.x;
@@ -29,10 +28,25 @@ __global__ void l3ReadBandwidthKernel(uint32_t* __restrict__ dst, const uint32v4
     dst[threadIdx.x] = dummy; // prevent dead code elimination
 }
 
+// The kernel instance for a number of loads per batch
+static auto l3ReadBandwidthKernelFor(uint32_t loadsPerBatch)
+{
+    switch (loadsPerBatch)
+    {
+        case 1:   return l3ReadBandwidthKernel<1>;
+        case 2:   return l3ReadBandwidthKernel<2>;
+        case 4:   return l3ReadBandwidthKernel<4>;
+        case 8:   return l3ReadBandwidthKernel<8>;
+        case 16:  return l3ReadBandwidthKernel<16>;
+    }
+    throw std::invalid_argument("Unsupported number of loads per batch: " + std::to_string(loadsPerBatch));
+}
+
+
 static std::tuple<double, double> l3ReadBandwidthLauncher(size_t arraySizeBytes, uint32_t numBlocks, uint32_t numThreads, uint32_t loadsPerBatch, size_t reps, util::AllocatorType allocType)
 {
     const size_t numElements = arraySizeBytes / sizeof(uint32v4);
-    const auto kernel = withLoadsPerBatch<MAX_MULTI_BLOCK_LOADS_PER_BATCH>(loadsPerBatch, [](auto n) { return l3ReadBandwidthKernel<decltype(n)::value>; });
+    const auto kernel = l3ReadBandwidthKernelFor(loadsPerBatch);
 
     uint32v4* d_srcArr = util::allocateMemory<uint32v4>(numElements, allocType);
     uint32_t* d_dstArr = util::allocateGPUMemory<uint32_t>(numThreads);

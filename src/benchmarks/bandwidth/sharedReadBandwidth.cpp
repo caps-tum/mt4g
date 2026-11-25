@@ -4,14 +4,14 @@
 
 #include <vector>
 
-static constexpr auto WARMUP_REPS = MAX_LOADS_PER_BATCH;
-static_assert(MIN_REPS % MAX_LOADS_PER_BATCH == 0, "loads per batch must divide the repetitions");
+static constexpr auto WARMUP_REPS = MAX_LOADS_PER_BATCH_SINGLE_BLOCK;
+static_assert(MIN_REPS % MAX_LOADS_PER_BATCH_SINGLE_BLOCK == 0, "loads per batch must divide the repetitions");
 
 
 template <uint32_t LoadsPerBatch>
 __global__ void sharedReadBandwidthKernel(uint32_t* __restrict__ dst, uint64_t* __restrict__ timingResult, uint32_t numElements, size_t reps)
 {
-    LOADS_PER_BATCH_CHECK(LoadsPerBatch, MAX_LOADS_PER_BATCH);
+    CHECK_LOADS_PER_BATCH(LoadsPerBatch, MAX_LOADS_PER_BATCH_SINGLE_BLOCK);
     const uint32_t blockStride = blockDim.x; // read once, on AMD the "memory" clobber of the asm would reload it in every iteration
 
     extern __shared__ uint32v4 memory[];
@@ -58,11 +58,29 @@ __global__ void sharedReadBandwidthKernel(uint32_t* __restrict__ dst, uint64_t* 
 }
 
 
+// The kernel instance for a number of loads per batch
+static auto sharedReadBandwidthKernelFor(uint32_t loadsPerBatch)
+{
+    switch (loadsPerBatch)
+    {
+        case 1:    return sharedReadBandwidthKernel<1>;
+        case 2:    return sharedReadBandwidthKernel<2>;
+        case 4:    return sharedReadBandwidthKernel<4>;
+        case 8:    return sharedReadBandwidthKernel<8>;
+        case 16:   return sharedReadBandwidthKernel<16>;
+        case 32:   return sharedReadBandwidthKernel<32>;
+        case 64:   return sharedReadBandwidthKernel<64>;
+        case 128:  return sharedReadBandwidthKernel<128>;
+    }
+    throw std::invalid_argument("Unsupported number of loads per batch: " + std::to_string(loadsPerBatch));
+}
+
+
 // One block, timed inside the kernel with the constant-rate timer, so the launch overhead is not measured
 static std::tuple<double, double> sharedReadBandwidthLauncher(uint32_t arraySizeBytes, uint32_t numThreads, uint32_t loadsPerBatch, size_t reps)
 {
     const uint32_t numElements = arraySizeBytes / sizeof(uint32v4);
-    const auto kernel = withLoadsPerBatch(loadsPerBatch, [](auto n) { return sharedReadBandwidthKernel<decltype(n)::value>; });
+    const auto kernel = sharedReadBandwidthKernelFor(loadsPerBatch);
 
     uint32_t *d_dstArr = util::allocateGPUMemory<uint32_t>(numThreads);
     uint64_t *d_timingResult = util::allocateGPUMemory<uint64_t>(1);

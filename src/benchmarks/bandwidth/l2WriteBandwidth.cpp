@@ -5,7 +5,6 @@
 #include <vector>
 
 static constexpr auto WARMUP_REPS = 512;
-static constexpr auto MS_PER_SECOND = 1000.0; // ms
 
 
 // Writes the array with all blocks; every rep starts at the data of the next block
