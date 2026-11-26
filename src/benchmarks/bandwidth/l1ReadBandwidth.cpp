@@ -1,8 +1,15 @@
 #include "benchmarks/benchmark.hpp"
 #include "benchmarks/bandwidth/loadBatch.hpp"
+#include "benchmarks/bandwidth/bandwidthSweep.hpp"
 #include "utils/util.hpp"
 
 #include <vector>
+#include <cstdlib>
+#include <string>
+#include <algorithm>
+#include <cctype>
+#include <limits>
+#include <stdexcept>
 
 static constexpr auto WARMUP_REPS = 128;
 static_assert(MIN_REPS % MAX_LOADS_PER_BATCH_SINGLE_BLOCK == 0 && WARMUP_REPS % MAX_LOADS_PER_BATCH_SINGLE_BLOCK == 0, "loads per batch must divide the repetitions");
@@ -108,9 +115,21 @@ static std::tuple<double, double> l1ReadBandwidthLauncher(size_t arraySizeBytes,
     uint32_t *d_dstArr = util::allocateGPUMemory<uint32_t>(numThreads);
     uint64_t *d_timingResult = util::allocateGPUMemory<uint64_t>(1);
 
-    const double timeS = timeSingleBlockKernel(d_timingResult, WARMUP_REPS, reps, stream, [&](size_t r) {
-        kernel<<<1, numThreads, 0, stream>>>(d_dstArr, d_srcArr, d_timingResult, numElements, r);
-    });
+    double timeS = 0.0;
+
+    // warm up; a block size that needs more registers than available does not launch
+    kernel<<<1, numThreads, 0, stream>>>(d_dstArr, d_srcArr, d_timingResult, numElements, WARMUP_REPS);
+    const hipError_t launchError = hipGetLastError();
+
+    if (launchError != hipErrorLaunchOutOfResources)
+    {
+        util::hipCheck(launchError);
+
+        kernel<<<1, numThreads, 0, stream>>>(d_dstArr, d_srcArr, d_timingResult, numElements, reps);
+        util::hipCheck(hipGetLastError());
+        util::hipCheck(hipStreamSynchronize(stream));
+        timeS = globalTimerSeconds(d_timingResult);
+    }
 
     util::hipCheck(hipFree(d_srcArr));
     util::hipCheck(hipFree(d_dstArr));
@@ -122,16 +141,56 @@ static std::tuple<double, double> l1ReadBandwidthLauncher(size_t arraySizeBytes,
 }
 
 
-namespace benchmark
+namespace benchmark 
 {
-    CacheBandwidthResult measureL1ReadBandwidthSweep(size_t arraySizeBytes)
+    CacheBandwidthResult measureL1ReadBandwidthSweep(size_t arraySizeBytes) 
     {
         // A single block, pinned to CU 0 on AMD
         hipStream_t stream = util::createStreamForCU(0);
 
-        CacheBandwidthResult result = sweepSingleBlockBandwidth(arraySizeBytes, [&](uint32_t numThreads, uint32_t loadsPerBatch, size_t reps) {
-            return l1ReadBandwidthLauncher(arraySizeBytes, numThreads, loadsPerBatch, reps, stream);
-        });
+        uint32_t minNumThreads = util::getWarpSize();
+        uint32_t maxNumThreads = util::getMaxThreadsPerBlock();
+        size_t minReps = MIN_REPS;
+        size_t maxReps = MAX_REPS;
+
+        CacheBandwidthResult result(arraySizeBytes, 1);
+
+        for (uint32_t numThreads = minNumThreads; numThreads <= maxNumThreads; numThreads *= 2)
+        {
+            std::vector<double> bandwidthResults;
+
+            result.threadsTested.push_back(numThreads);
+
+            for (size_t reps = minReps; reps <= maxReps; reps *= 2)
+            {
+                if (numThreads == minNumThreads)
+                {
+                    result.repsTested.push_back(reps);
+                }
+
+                double bestBandwidth = 0.0;
+
+                for (uint32_t loadsPerBatch = 1; loadsPerBatch <= MAX_LOADS_PER_BATCH_SINGLE_BLOCK; loadsPerBatch *= 2)
+                {
+                    auto [timeS, bandwidth] = l1ReadBandwidthLauncher(arraySizeBytes, numThreads, loadsPerBatch, reps, stream);
+
+                    bestBandwidth = std::max(bestBandwidth, bandwidth);
+
+                    if (bandwidth > result.measuredBandwidth)
+                    {
+                        result.measuredBandwidth = bandwidth;
+                        result.time = timeS;
+                        result.numThreads = numThreads;
+                        result.numReps = reps;
+                        result.loadsPerBatch = loadsPerBatch;
+                    }
+                }
+
+                bandwidthResults.push_back(bestBandwidth);
+            }
+
+            result.bandwidthGridGiBs.push_back(bandwidthResults);
+        }
 
         util::hipCheck(hipStreamDestroy(stream));
 

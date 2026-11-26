@@ -1,8 +1,14 @@
 #include "benchmarks/benchmark.hpp"
 #include "benchmarks/bandwidth/loadBatch.hpp"
+#include "benchmarks/bandwidth/bandwidthSweep.hpp"
 #include "utils/util.hpp"
 
 #include <vector>
+#include <cstdlib>
+#include <string>
+#include <algorithm>
+#include <cctype>
+#include <limits>
 
 static constexpr auto WARMUP_REPS = 128;
 
@@ -60,9 +66,21 @@ static std::tuple<double, double> l1WriteBandwidthLauncher(size_t arraySizeBytes
     uint32v4 *d_dstArr = util::allocateGPUMemory<uint32v4>(numElements);
     uint64_t *d_timingResult = util::allocateGPUMemory<uint64_t>(1);
 
-    const double timeS = timeSingleBlockKernel(d_timingResult, WARMUP_REPS, reps, stream, [&](size_t r) {
-        l1WriteBandwidthKernel<<<1, numThreads, 0, stream>>>(d_dstArr, d_timingResult, numElements, r);
-    });
+    double timeS = 0.0;
+
+    // warm up; a block size that needs more registers than available does not launch
+    l1WriteBandwidthKernel<<<1, numThreads, 0, stream>>>(d_dstArr, d_timingResult, numElements, WARMUP_REPS);
+    const hipError_t launchError = hipGetLastError();
+
+    if (launchError != hipErrorLaunchOutOfResources)
+    {
+        util::hipCheck(launchError);
+
+        l1WriteBandwidthKernel<<<1, numThreads, 0, stream>>>(d_dstArr, d_timingResult, numElements, reps);
+        util::hipCheck(hipGetLastError());
+        util::hipCheck(hipStreamSynchronize(stream));
+        timeS = globalTimerSeconds(d_timingResult);
+    }
 
     util::hipCheck(hipFree(d_dstArr));
     util::hipCheck(hipFree(d_timingResult));
@@ -73,16 +91,48 @@ static std::tuple<double, double> l1WriteBandwidthLauncher(size_t arraySizeBytes
 }
 
 
-namespace benchmark
+namespace benchmark 
 {
-    CacheBandwidthResult measureL1WriteBandwidthSweep(size_t arraySizeBytes)
+    CacheBandwidthResult measureL1WriteBandwidthSweep(size_t arraySizeBytes) 
     {
         // A single block, pinned to CU 0 on AMD
         hipStream_t stream = util::createStreamForCU(0);
 
-        CacheBandwidthResult result = sweepSingleBlockBandwidth(arraySizeBytes, [&](uint32_t numThreads, uint32_t, size_t reps) {
-            return l1WriteBandwidthLauncher(arraySizeBytes, numThreads, reps, stream);
-        }, 1);
+        uint32_t minNumThreads = util::getWarpSize();
+        uint32_t maxNumThreads = util::getMaxThreadsPerBlock();
+        size_t minReps = MIN_REPS;
+        size_t maxReps = MAX_REPS;
+
+        CacheBandwidthResult result(arraySizeBytes, 1);
+
+        for (uint32_t numThreads = minNumThreads; numThreads <= maxNumThreads; numThreads *= 2)
+        {
+            std::vector<double> bandwidthResults;
+
+            result.threadsTested.push_back(numThreads);
+
+            for (size_t reps = minReps; reps <= maxReps; reps *= 2)
+            {
+                if (numThreads == minNumThreads)
+                {
+                    result.repsTested.push_back(reps);
+                }
+
+                auto [timeS, bandwidth] = l1WriteBandwidthLauncher(arraySizeBytes, numThreads, reps, stream);
+                
+                bandwidthResults.push_back(bandwidth);
+
+                if (bandwidth > result.measuredBandwidth)
+                {
+                    result.measuredBandwidth = bandwidth;
+                    result.time = timeS;
+                    result.numThreads = numThreads;
+                    result.numReps = reps;
+                }
+            }
+
+            result.bandwidthGridGiBs.push_back(bandwidthResults);
+        }
 
         util::hipCheck(hipStreamDestroy(stream));
 

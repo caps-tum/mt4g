@@ -1,8 +1,13 @@
 #include "benchmarks/benchmark.hpp"
 #include "benchmarks/bandwidth/loadBatch.hpp"
+#include "benchmarks/bandwidth/bandwidthSweep.hpp"
 #include "utils/util.hpp"
 
 #include <vector>
+#include <cstdlib>
+#include <string>
+#include <algorithm>
+#include <stdexcept>
 
 static constexpr auto WARMUP_REPS = 128;
 static_assert(MIN_REPS % MAX_LOADS_PER_BATCH_SINGLE_BLOCK == 0 && WARMUP_REPS % MAX_LOADS_PER_BATCH_SINGLE_BLOCK == 0, "loads per batch must divide the repetitions");
@@ -89,9 +94,21 @@ static std::tuple<double, double> textureReadBandwidthLauncher(size_t arraySizeB
 
     hipTextureObject_t tex = util::createTextureObject<int4>(d_srcArr, numElementsPadded);
 
-    const double timeS = timeSingleBlockKernel(d_timingResult, WARMUP_REPS, reps, 0, [&](size_t r) {
-        kernel<<<1, numThreads>>>(tex, d_dstArr, d_timingResult, numElements, r);
-    });
+    double timeS = 0.0;
+
+    // warm up; a block size that needs more registers than available does not launch
+    kernel<<<1, numThreads>>>(tex, d_dstArr, d_timingResult, numElements, WARMUP_REPS);
+    const hipError_t launchError = hipGetLastError();
+
+    if (launchError != hipErrorLaunchOutOfResources)
+    {
+        util::hipCheck(launchError);
+
+        kernel<<<1, numThreads>>>(tex, d_dstArr, d_timingResult, numElements, reps);
+        util::hipCheck(hipGetLastError());
+        util::hipCheck(hipStreamSynchronize(0));
+        timeS = globalTimerSeconds(d_timingResult);
+    }
 
     util::hipCheck(hipDestroyTextureObject(tex));
     util::hipCheck(hipFree(d_srcArr));
@@ -110,9 +127,51 @@ namespace benchmark
     {
         CacheBandwidthResult measureTextureReadBandwidthSweep(size_t arraySizeBytes)
         {
-            return sweepSingleBlockBandwidth(arraySizeBytes, [&](uint32_t numThreads, uint32_t loadsPerBatch, size_t reps) {
-                return textureReadBandwidthLauncher(arraySizeBytes, numThreads, loadsPerBatch, reps);
-            });
+            uint32_t minNumThreads = util::getWarpSize();
+            uint32_t maxNumThreads = util::getMaxThreadsPerBlock();
+            size_t minReps = MIN_REPS;
+            size_t maxReps = MAX_REPS;
+
+            CacheBandwidthResult result(arraySizeBytes, 1);
+
+            for (uint32_t numThreads = minNumThreads; numThreads <= maxNumThreads; numThreads *= 2)
+            {
+                std::vector<double> bandwidthResults;
+
+                result.threadsTested.push_back(numThreads);
+
+                for (size_t reps = minReps; reps <= maxReps; reps *= 2)
+                {
+                    if (numThreads == minNumThreads)
+                    {
+                        result.repsTested.push_back(reps);
+                    }
+
+                    double bestBandwidth = 0.0;
+
+                    for (uint32_t loadsPerBatch = 1; loadsPerBatch <= MAX_LOADS_PER_BATCH_SINGLE_BLOCK; loadsPerBatch *= 2)
+                    {
+                        auto [timeS, bandwidth] = textureReadBandwidthLauncher(arraySizeBytes, numThreads, loadsPerBatch, reps);
+
+                        bestBandwidth = std::max(bestBandwidth, bandwidth);
+
+                        if (bandwidth > result.measuredBandwidth)
+                        {
+                            result.measuredBandwidth = bandwidth;
+                            result.time = timeS;
+                            result.numThreads = numThreads;
+                            result.numReps = reps;
+                            result.loadsPerBatch = loadsPerBatch;
+                        }
+                    }
+
+                    bandwidthResults.push_back(bestBandwidth);
+                }
+
+                result.bandwidthGridGiBs.push_back(bandwidthResults);
+            }
+
+            return result;
         }
     }
 }

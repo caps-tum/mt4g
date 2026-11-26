@@ -1,15 +1,24 @@
 #include "benchmarks/benchmark.hpp"
 #include "benchmarks/bandwidth/loadBatch.hpp"
+#include "benchmarks/bandwidth/bandwidthSweep.hpp"
 #include "utils/util.hpp"
 
 #include <vector>
+#include <map>
+#include <numeric>
+#include <optional>
+#include <tuple>
+#include <limits>
+#include <algorithm>
+#include <stdexcept>
+#include <string>
 
-static constexpr auto SIZE_DOWN = DEFAULT_SIZE_DOWN_FACTOR; // Factor
-static constexpr auto WARMUP_REPS = 4; // warmup passes for the sweep (large working set)
+static constexpr auto SIZE_DOWN = DEFAULT_SIZE_DOWN_FACTOR;// Factor
+static constexpr auto WARMUP_REPS = 4;// warmup passes for the sweep (large working set)
 
-// Mirrors the L2 bandwidth sweep: reads a working set that is much larger
-// than the last level cache, so the traffic is served from main memory,
-// while varying the block and thread count.
+// Mirrors the L2 bandwidth sweep: re-reads a working set that is much larger
+// than the last level cache `reps` times so the traffic is served from main
+// memory, while varying the block and thread count.
 template <uint32_t LoadsPerBatch>
 __global__ void mainMemoryReadBandwidthSweepKernel(uint32_t* __restrict__ dst, const uint32v4* __restrict__ src, size_t n, size_t reps)
 {
@@ -45,15 +54,13 @@ static auto mainMemoryReadBandwidthSweepKernelFor(uint32_t loadsPerBatch)
 }
 
 
-static std::tuple<double, double> mainMemoryReadBandwidthSweepLauncher(size_t arraySizeBytes, uint32_t numBlocks, uint32_t numThreads, uint32_t loadsPerBatch, size_t reps, util::AllocatorType allocType)
-{
-    const size_t numElements = arraySizeBytes / sizeof(uint32v4);
+static std::tuple<double, double> mainMemoryReadBandwidthSweepLauncher(size_t arraySizeBytes, uint32_t numBlocks, uint32_t numThreads, uint32_t loadsPerBatch, size_t reps, util::AllocatorType allocType) {
     const auto kernel = mainMemoryReadBandwidthSweepKernelFor(loadsPerBatch);
 
-    uint32v4* d_srcArr = util::allocateMemory<uint32v4>(numElements, allocType);
+    uint32v4* d_srcArr = util::allocateMemory<uint32v4>(arraySizeBytes / sizeof(uint32v4), allocType);
     uint32_t* d_dstArr = util::allocateGPUMemory<uint32_t>(numThreads);
 
-    kernel<<<numBlocks, numThreads>>>(d_dstArr, d_srcArr, numElements, WARMUP_REPS);
+    kernel<<<numBlocks, numThreads>>>(d_dstArr, d_srcArr, arraySizeBytes / sizeof(uint32v4), WARMUP_REPS);
     util::hipCheck(hipGetLastError());
 
     auto start = util::createHipEvent();
@@ -61,7 +68,7 @@ static std::tuple<double, double> mainMemoryReadBandwidthSweepLauncher(size_t ar
 
     util::hipCheck(hipDeviceSynchronize());
     util::hipCheck(hipEventRecord(start));
-    kernel<<<numBlocks, numThreads>>>(d_dstArr, d_srcArr, numElements, reps);
+    kernel<<<numBlocks, numThreads>>>(d_dstArr, d_srcArr, arraySizeBytes / sizeof(uint32v4), reps);
     util::hipCheck(hipGetLastError());
     util::hipCheck(hipEventRecord(end));
     util::hipCheck(hipDeviceSynchronize());
@@ -89,8 +96,63 @@ namespace benchmark {
         // over-reports bandwidth, so main memory uses one pass over a ~1 GiB set.
         size_t arraySizeBytes = util::min(mainMemorySizeBytes / SIZE_DOWN, static_cast<size_t>(1) * 1024 * 1024 * 1024);
 
-        return sweepMultiBlockBandwidth(arraySizeBytes, {1}, [&](uint32_t numBlocks, uint32_t numThreads, uint32_t loadsPerBatch, size_t reps) {
-            return mainMemoryReadBandwidthSweepLauncher(arraySizeBytes, numBlocks, numThreads, loadsPerBatch, reps, allocType);
-        });
+        CacheBandwidthResult result(arraySizeBytes, 0);
+        initMultiBlockGrid(result, 1, 1); // single streaming pass (see note above)
+
+        const size_t numBlockSteps = result.blocksTested.size();
+        const size_t numThreadSteps = result.threadsTested.size();
+
+        // Lowest thread count worth measuring; used as an index into threadsTested.
+        // Once a thread sweep terminates, this and lower counts are skipped for lower blocks.
+        size_t lowestThreadIndex = 0;
+
+        // Search block counts and thread counts from highest to lowest.
+        for (size_t bi = numBlockSteps; bi-- > 0; )
+        {
+            const uint32_t numBlocks = result.blocksTested[bi];
+            double maxBandwidthThisBlock = 0.0;
+
+            for (size_t ti = numThreadSteps; ti-- > lowestThreadIndex; )
+            {
+                const uint32_t numThreads = result.threadsTested[ti];
+
+                double bestThisThread = 0.0;
+
+                for (uint32_t loadsPerBatch = 1; loadsPerBatch <= MAX_LOADS_PER_BATCH_MULTIPLE_BLOCKS; loadsPerBatch *= 2)
+                {
+                    auto [timeS, bandwidth] = mainMemoryReadBandwidthSweepLauncher(arraySizeBytes, numBlocks, numThreads, loadsPerBatch, 1, allocType);
+
+                    bestThisThread = std::max(bestThisThread, bandwidth);
+
+                    if (bandwidth > result.measuredBandwidth)
+                    {
+                        result.measuredBandwidth = bandwidth;
+                        result.time = timeS;
+                        result.numThreads = numThreads;
+                        result.numBlocks = numBlocks;
+                        result.numReps = 1;
+                        result.loadsPerBatch = loadsPerBatch;
+                    }
+                }
+
+                result.bandwidth3D[bi][ti][0] = bestThisThread;
+
+                // A >=25% drop from the best BW ends this thread sweep
+                // and skips this and lower thread counts for remaining blocks.
+                if (maxBandwidthThisBlock > 0.0 &&
+                    bestThisThread <= BANDWIDTH_EARLY_TERMINATION_FACTOR * maxBandwidthThisBlock)
+                {
+                    lowestThreadIndex = ti + 1;
+                    break;
+                }
+
+                if (bestThisThread > maxBandwidthThisBlock)
+                {
+                    maxBandwidthThisBlock = bestThisThread;
+                }
+            }
+        }
+
+        return result;
     }
 }

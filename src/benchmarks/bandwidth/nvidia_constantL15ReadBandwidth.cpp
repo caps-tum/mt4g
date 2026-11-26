@@ -197,14 +197,7 @@ namespace benchmark
             size_t minReps = MIN_REPS;
             size_t maxReps = MAX_REPS;
 
-            CacheBandwidthResult result{};
-            result.measuredBandwidth = 0.0;
-            result.dataBytes = arraySizeBytes;
-            result.cycles = 0;
-            result.time = 0.0;
-            result.numThreads = 0;
-            result.numBlocks = 1;
-            result.numReps = 0;
+            CacheBandwidthResult result(arraySizeBytes, 1);
 
             if (maxNumThreads < minNumThreads) {
                 std::cerr << "WARNING: Constant L1.5 Read Bandwidth working set too small for a full warp, skipping" << std::endl;

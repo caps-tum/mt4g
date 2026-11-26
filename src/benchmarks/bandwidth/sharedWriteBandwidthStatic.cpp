@@ -1,11 +1,13 @@
 #include "benchmarks/benchmark.hpp"
 #include "benchmarks/bandwidth/loadBatch.hpp"
+#include "benchmarks/bandwidth/bandwidthSweep.hpp"
 #include "utils/util.hpp"
 
 #include <vector>
+#include <numeric>
 
 static constexpr auto SIZE = 32 * KiB;
-static constexpr auto NUM_ELEMENTS = SIZE / sizeof(uint32v4);
+static constexpr auto NUM_ELEMENTS = SIZE / 16;
 static constexpr auto WARMUP_REPS = 128;
 
 
@@ -66,9 +68,21 @@ static std::tuple<double, double> sharedWriteBandwidthStaticLauncher(uint32_t nu
 {
     uint64_t *d_timingResult = util::allocateGPUMemory<uint64_t>(1);
 
-    const double timeS = timeSingleBlockKernel(d_timingResult, WARMUP_REPS, reps, 0, [&](size_t r) {
-        sharedWriteBandwidthStaticKernel<<<1, numThreads>>>(d_timingResult, r);
-    });
+    double timeS = 0.0;
+
+    // warm up; a block size that needs more registers than available does not launch
+    sharedWriteBandwidthStaticKernel<<<1, numThreads>>>(d_timingResult, WARMUP_REPS);
+    const hipError_t launchError = hipGetLastError();
+
+    if (launchError != hipErrorLaunchOutOfResources)
+    {
+        util::hipCheck(launchError);
+
+        sharedWriteBandwidthStaticKernel<<<1, numThreads>>>(d_timingResult, reps);
+        util::hipCheck(hipGetLastError());
+        util::hipCheck(hipStreamSynchronize(0));
+        timeS = globalTimerSeconds(d_timingResult);
+    }
 
     util::hipCheck(hipFree(d_timingResult));
 
@@ -77,13 +91,45 @@ static std::tuple<double, double> sharedWriteBandwidthStaticLauncher(uint32_t nu
     return {timeS, timeS > 0.0 ? dataGiB / timeS : 0.0};
 }
 
-
-namespace benchmark
-{
-    CacheBandwidthResult measureSharedWriteBandwidthStaticSweep()
+namespace benchmark {
+    CacheBandwidthResult measureSharedWriteBandwidthStaticSweep() 
     {
-        return sweepSingleBlockBandwidth(SIZE, [&](uint32_t numThreads, uint32_t, size_t reps) {
-            return sharedWriteBandwidthStaticLauncher(numThreads, reps);
-        }, 1);
+        uint32_t minNumThreads = util::getWarpSize();
+        uint32_t maxNumThreads = util::getMaxThreadsPerBlock();
+        size_t minReps = MIN_REPS;
+        size_t maxReps = MAX_REPS;
+
+        CacheBandwidthResult result(SIZE, 1);
+
+        for (uint32_t numThreads = minNumThreads; numThreads <= maxNumThreads; numThreads *= 2)
+        {
+            std::vector<double> bandwidthResults;
+
+            result.threadsTested.push_back(numThreads);
+
+            for (size_t reps = minReps; reps <= maxReps; reps *= 2)
+            {
+                if (numThreads == minNumThreads)
+                {
+                    result.repsTested.push_back(reps);
+                }
+
+                auto [timeS, bandwidth] = sharedWriteBandwidthStaticLauncher(numThreads, reps);
+                
+                bandwidthResults.push_back(bandwidth);
+
+                if (bandwidth > result.measuredBandwidth)
+                {
+                    result.measuredBandwidth = bandwidth;
+                    result.time = timeS;
+                    result.numThreads = numThreads;
+                    result.numReps = reps;
+                }
+            }
+
+            result.bandwidthGridGiBs.push_back(bandwidthResults);
+        }
+
+        return result;
     }
 }

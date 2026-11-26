@@ -1,8 +1,17 @@
 #include "benchmarks/benchmark.hpp"
 #include "benchmarks/bandwidth/loadBatch.hpp"
+#include "benchmarks/bandwidth/bandwidthSweep.hpp"
 #include "utils/util.hpp"
 
 #include <vector>
+#include <map>
+#include <numeric>
+#include <optional>
+#include <iostream>
+#include <algorithm>
+#include <limits>
+#include <stdexcept>
+#include <string>
 
 static constexpr auto WARMUP_REPS = 512;
 
@@ -44,24 +53,27 @@ static auto l2ReadBandwidthKernelFor(uint32_t loadsPerBatch)
 }
 
 
-static std::tuple<double, double> l2ReadBandwidthLauncher(size_t arraySizeBytes, uint32_t numBlocks, uint32_t numThreads, uint32_t loadsPerBatch, size_t reps)
-{
-    const size_t numElements = arraySizeBytes / sizeof(uint32v4);
+static std::tuple<double, double> l2ReadBandwidthLauncher(size_t arraySizeBytes, uint32_t numBlocks, uint32_t numThreads, uint32_t loadsPerBatch, size_t reps) 
+{ 
     const auto kernel = l2ReadBandwidthKernelFor(loadsPerBatch);
 
-    uint32v4 *d_srcArr = util::allocateGPUMemory<uint32v4>(numElements);
+    // Initialize device Arrays
+    // sizeof(uint32v4) = 16 bytes -> allows us to load 4 integers with one instruction -> probability 
+    // of the bandwidth being limited by the memory bandwidth rather than compute is considerably higher
+    uint32v4 *d_srcArr = util::allocateGPUMemory<uint32v4>(arraySizeBytes / sizeof(uint32v4));
     uint32_t *d_dstArr = util::allocateGPUMemory<uint32_t>(numThreads);
 
     // warm up L2
-    kernel<<<numBlocks, numThreads>>>(d_dstArr, d_srcArr, numElements, WARMUP_REPS);
+    kernel<<<numBlocks, numThreads>>>(d_dstArr, d_srcArr, arraySizeBytes / sizeof(uint32v4), WARMUP_REPS);
     util::hipCheck(hipGetLastError());
-
+    
+    // Use events to measure timings
     auto start = util::createHipEvent();
     auto end = util::createHipEvent();
 
     util::hipCheck(hipDeviceSynchronize());
     util::hipCheck(hipEventRecord(start));
-    kernel<<<numBlocks, numThreads>>>(d_dstArr, d_srcArr, numElements, reps);
+    kernel<<<numBlocks, numThreads>>>(d_dstArr, d_srcArr, arraySizeBytes / sizeof(uint32v4), reps);
     util::hipCheck(hipGetLastError());
     util::hipCheck(hipEventRecord(end));
     util::hipCheck(hipDeviceSynchronize());
@@ -70,25 +82,85 @@ static std::tuple<double, double> l2ReadBandwidthLauncher(size_t arraySizeBytes,
 
     util::hipCheck(hipEventDestroy(start));
     util::hipCheck(hipEventDestroy(end));
+
     util::hipCheck(hipFree(d_srcArr));
     util::hipCheck(hipFree(d_dstArr));
 
-    const double dataGiB = (double) arraySizeBytes * reps / (1 * GiB);
-    const double timeS = elapsedMs / MS_PER_SECOND;
-
+    double dataGiB = (double) arraySizeBytes * reps / (1 * GiB); // Convert to GiB
+    double timeS = elapsedMs / MS_PER_SECOND;
+    
     return {timeS, dataGiB / timeS};
 }
 
-
 namespace benchmark {
-    CacheBandwidthResult measureL2ReadBandwidthSweep(size_t l2SizeBytes)
+    CacheBandwidthResult measureL2ReadBandwidthSweep(size_t l2SizeBytes) 
     {
         util::hipDeviceReset();
 
         const size_t arraySizeBytes = l2SizeBytes * 0.8; // 80% L2 size, L1 is bypassed
 
-        return sweepMultiBlockBandwidth(arraySizeBytes, cacheBandwidthReps(), [&](uint32_t numBlocks, uint32_t numThreads, uint32_t loadsPerBatch, size_t reps) {
-            return l2ReadBandwidthLauncher(arraySizeBytes, numBlocks, numThreads, loadsPerBatch, reps);
-        });
+        CacheBandwidthResult result(arraySizeBytes, 0);
+        initMultiBlockGrid(result, MIN_REPS, MAX_REPS);
+
+        const size_t numBlockSteps = result.blocksTested.size();
+        const size_t numThreadSteps = result.threadsTested.size();
+        const size_t numRepSteps = result.repsTested.size();
+
+        // Lowest thread count worth measuring; used as an index into threadsTested.
+        // Once a thread sweep terminates, this and lower counts are skipped for lower blocks.
+        size_t lowestThreadIndex = 0;
+
+        // Search block counts and thread counts from highest to lowest.
+        for (size_t bi = numBlockSteps; bi-- > 0; )
+        {
+            const uint32_t numBlocks = result.blocksTested[bi];
+            double maxBandwidthThisBlock = 0.0;
+
+            for (size_t ti = numThreadSteps; ti-- > lowestThreadIndex; )
+            {
+                const uint32_t numThreads = result.threadsTested[ti];
+                double bestThisThread = 0.0;
+
+                for (size_t ri = 0; ri < numRepSteps; ++ri)
+                {
+                    const size_t reps = result.repsTested[ri];
+
+                    double bestThisCell = 0.0;
+
+                    for (uint32_t loadsPerBatch = 1; loadsPerBatch <= MAX_LOADS_PER_BATCH_MULTIPLE_BLOCKS; loadsPerBatch *= 2)
+                    {
+                        auto [timeS, bandwidth] = l2ReadBandwidthLauncher(arraySizeBytes, numBlocks, numThreads, loadsPerBatch, reps);
+
+                        bestThisCell = std::max(bestThisCell, bandwidth);
+
+                        if (bandwidth > result.measuredBandwidth)
+                        {
+                            result.measuredBandwidth = bandwidth;
+                            result.time = timeS;
+                            result.numThreads = numThreads;
+                            result.numBlocks = numBlocks;
+                            result.numReps = reps;
+                            result.loadsPerBatch = loadsPerBatch;
+                        }
+                    }
+
+                    result.bandwidth3D[bi][ti][ri] = bestThisCell;
+                    bestThisThread = std::max(bestThisThread, bestThisCell);
+                }
+
+                // A >=25% drop from the best BW ends this thread sweep
+                // and skips this and lower thread counts for remaining blocks.
+                if (maxBandwidthThisBlock > 0.0 &&
+                    bestThisThread <= BANDWIDTH_EARLY_TERMINATION_FACTOR * maxBandwidthThisBlock)
+                {
+                    lowestThreadIndex = ti + 1;
+                    break;
+                }
+
+                maxBandwidthThisBlock = std::max(maxBandwidthThisBlock, bestThisThread);
+            }
+        }
+
+        return result;
     }
 }

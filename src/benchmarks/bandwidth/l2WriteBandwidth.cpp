@@ -1,8 +1,14 @@
 #include "benchmarks/benchmark.hpp"
 #include "benchmarks/bandwidth/loadBatch.hpp"
+#include "benchmarks/bandwidth/bandwidthSweep.hpp"
 #include "utils/util.hpp"
 
 #include <vector>
+#include <map>
+#include <numeric>
+#include <optional>
+#include <algorithm>
+#include <limits>
 
 static constexpr auto WARMUP_REPS = 512;
 
@@ -33,22 +39,21 @@ __global__ void l2WriteBandwidthKernel(uint32v4* __restrict__ dst, size_t n, siz
     }
 }
 
-static std::tuple<double, double> l2WriteBandwidthLauncher(size_t arraySizeBytes, uint32_t numBlocks, uint32_t numThreads, size_t reps)
-{
-    const size_t numElements = arraySizeBytes / sizeof(uint32v4);
-
-    uint32v4 *d_dstArr = util::allocateGPUMemory<uint32v4>(numElements);
+static std::tuple<double, double> l2WriteBandwidthLauncher(size_t arraySizeBytes, uint32_t numBlocks, uint32_t numThreads, size_t reps) 
+{ 
+    uint32v4 *d_dstArr = util::allocateGPUMemory<uint32v4>(arraySizeBytes / sizeof(uint32v4));
 
     // warm up L2
-    l2WriteBandwidthKernel<<<numBlocks, numThreads>>>(d_dstArr, numElements, WARMUP_REPS);
+    l2WriteBandwidthKernel<<<numBlocks, numThreads>>>(d_dstArr, arraySizeBytes / sizeof(uint32v4), WARMUP_REPS);
     util::hipCheck(hipGetLastError());
-
+    
+    // Use events to measure timings
     auto start = util::createHipEvent();
     auto end = util::createHipEvent();
 
     util::hipCheck(hipDeviceSynchronize());
     util::hipCheck(hipEventRecord(start));
-    l2WriteBandwidthKernel<<<numBlocks, numThreads>>>(d_dstArr, numElements, reps);
+    l2WriteBandwidthKernel<<<numBlocks, numThreads>>>(d_dstArr, arraySizeBytes / sizeof(uint32v4), reps);
     util::hipCheck(hipGetLastError());
     util::hipCheck(hipEventRecord(end));
     util::hipCheck(hipDeviceSynchronize());
@@ -58,23 +63,74 @@ static std::tuple<double, double> l2WriteBandwidthLauncher(size_t arraySizeBytes
     util::hipCheck(hipEventDestroy(start));
     util::hipCheck(hipEventDestroy(end));
     util::hipCheck(hipFree(d_dstArr));
-
-    const double dataGiB = (double) arraySizeBytes * reps / (1 * GiB);
-    const double timeS = elapsedMs / MS_PER_SECOND;
-
+    
+    double dataGiB = (double) arraySizeBytes * reps / (1 * GiB); // Convert to GiB
+    double timeS = elapsedMs / MS_PER_SECOND;
+    
     return {timeS, dataGiB / timeS};
 }
 
-
 namespace benchmark {
-    CacheBandwidthResult measureL2WriteBandwidthSweep(size_t l2SizeBytes)
+    CacheBandwidthResult measureL2WriteBandwidthSweep(size_t l2SizeBytes) 
     {
         util::hipDeviceReset();
 
         const size_t arraySizeBytes = l2SizeBytes * 0.8; // 80% L2 size, L1 is bypassed
 
-        return sweepMultiBlockBandwidth(arraySizeBytes, cacheBandwidthReps(), [&](uint32_t numBlocks, uint32_t numThreads, uint32_t, size_t reps) {
-            return l2WriteBandwidthLauncher(arraySizeBytes, numBlocks, numThreads, reps);
-        }, 1);
+        CacheBandwidthResult result(arraySizeBytes, 0);
+        initMultiBlockGrid(result, MIN_REPS, MAX_REPS);
+
+        const size_t numBlockSteps = result.blocksTested.size();
+        const size_t numThreadSteps = result.threadsTested.size();
+        const size_t numRepSteps = result.repsTested.size();
+
+        // Lowest thread count worth measuring; used as an index into threadsTested.
+        // Once a thread sweep terminates, this and lower counts are skipped for lower blocks.
+        size_t lowestThreadIndex = 0;
+
+        // Search block counts and thread counts from highest to lowest.
+        for (size_t bi = numBlockSteps; bi-- > 0; )
+        {
+            const uint32_t numBlocks = result.blocksTested[bi];
+            double maxBandwidthThisBlock = 0.0;
+
+            for (size_t ti = numThreadSteps; ti-- > lowestThreadIndex; )
+            {
+                const uint32_t numThreads = result.threadsTested[ti];
+                double bestThisThread = 0.0;
+
+                for (size_t ri = 0; ri < numRepSteps; ++ri)
+                {
+                    const size_t reps = result.repsTested[ri];
+
+                    auto [timeS, bandwidth] = l2WriteBandwidthLauncher(arraySizeBytes, numBlocks, numThreads, reps);
+
+                    result.bandwidth3D[bi][ti][ri] = bandwidth;
+                    bestThisThread = std::max(bestThisThread, bandwidth);
+
+                    if (bandwidth > result.measuredBandwidth)
+                    {
+                        result.measuredBandwidth = bandwidth;
+                        result.time = timeS;
+                        result.numThreads = numThreads;
+                        result.numBlocks = numBlocks;
+                        result.numReps = reps;
+                    }
+                }
+
+                // A >=25% drop from the best BW ends this thread sweep
+                // and skips this and lower thread counts for remaining blocks.
+                if (maxBandwidthThisBlock > 0.0 &&
+                    bestThisThread <= BANDWIDTH_EARLY_TERMINATION_FACTOR * maxBandwidthThisBlock)
+                {
+                    lowestThreadIndex = ti + 1;
+                    break;
+                }
+
+                maxBandwidthThisBlock = std::max(maxBandwidthThisBlock, bestThisThread);
+            }
+        }
+
+        return result;
     }
 }
