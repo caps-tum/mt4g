@@ -1,4 +1,6 @@
 #include "benchmarks/benchmark.hpp"
+#include "benchmarks/bandwidth/loadBatch.hpp"
+#include "benchmarks/bandwidth/bandwidthSweep.hpp"
 #include "utils/util.hpp"
 
 #include <vector>
@@ -11,45 +13,31 @@
 static constexpr auto WARMUP_REPS = 512;
 
 
-static constexpr auto MS_PER_SECOND = 1000.0;// ms
+// Writes the array with all blocks; every rep starts at the data of the next block
+__global__ void l2WriteBandwidthKernel(uint32v4* __restrict__ dst, size_t n, size_t reps)
+{
+    // read once, on AMD the "memory" clobber of the asm would reload them in every iteration
+    const size_t blockStride = blockDim.x;
+    const size_t gridStride = static_cast<size_t>(gridDim.x) * blockStride;
+    const uint32_t tid = static_cast<uint32_t>(blockIdx.x * blockStride + threadIdx.x);
+    const uint32v4 data = {tid, tid + 1, tid + 2, tid + 3};
 
-__global__ void l2WriteBandwidthKernel(uint32v4* __restrict__ dst, size_t n, size_t reps) {
-    uint32_t tid = static_cast<uint32_t>(blockIdx.x * blockDim.x + threadIdx.x);
-    uint32_t stride = static_cast<uint32_t>(gridDim.x * blockDim.x);
+    for (size_t j = 0; j < reps; ++j)
+    {
+        const size_t first = ((blockIdx.x + j) * blockStride + threadIdx.x) % gridStride;
 
-    uint32v4 dummy = { tid, tid + 1, tid + 2, tid + 3 }; 
-
-    for (size_t j = 0; j < reps; ++j) {
-        tid = (((blockIdx.x + j) * blockDim.x) + threadIdx.x) % stride;
-        
-        for (size_t i = tid; i < n; i += stride) {
+        for (size_t i = first; i < n; i += gridStride)
+        {
+            #ifdef __HIP_PLATFORM_AMD__
+            __asm__ volatile ("flat_store_dwordx4 %0, %1\n\t" : : "v"(dst + i), "v"(data) : "memory");
+            #endif
 
             #ifdef __HIP_PLATFORM_NVIDIA__
-            asm volatile(
-                "st.global.v4.u32 [%0], {%1,%2,%3,%4};\n"
-                :
-                : "l"(dst + i) // uint32v4*
-                , "r"(dummy.x) // int
-                , "r"(dummy.y) // int
-                , "r"(dummy.z) // int
-                , "r"(dummy.w) // int
-            );
+            __asm__ volatile ("st.global.v4.u32 [%0], {%1,%2,%3,%4};\n\t" : : "l"(dst + i), "r"(data.x), "r"(data.y), "r"(data.z), "r"(data.w) : "memory");
             #endif
-
-            #ifdef __HIP_PLATFORM_AMD__
-            asm volatile(
-                "flat_store_dwordx4 %0, %1\n"
-                :
-                : "v"(dst + i) // uint32v4*
-                , "v"(dummy) // uint32v4
-                : "memory"
-            );
-            #endif
-
         }
     }
 }
-
 
 static std::tuple<double, double> l2WriteBandwidthLauncher(size_t arraySizeBytes, uint32_t numBlocks, uint32_t numThreads, size_t reps) 
 { 
@@ -57,6 +45,7 @@ static std::tuple<double, double> l2WriteBandwidthLauncher(size_t arraySizeBytes
 
     // warm up L2
     l2WriteBandwidthKernel<<<numBlocks, numThreads>>>(d_dstArr, arraySizeBytes / sizeof(uint32v4), WARMUP_REPS);
+    util::hipCheck(hipGetLastError());
     
     // Use events to measure timings
     auto start = util::createHipEvent();
@@ -65,6 +54,7 @@ static std::tuple<double, double> l2WriteBandwidthLauncher(size_t arraySizeBytes
     util::hipCheck(hipDeviceSynchronize());
     util::hipCheck(hipEventRecord(start));
     l2WriteBandwidthKernel<<<numBlocks, numThreads>>>(d_dstArr, arraySizeBytes / sizeof(uint32v4), reps);
+    util::hipCheck(hipGetLastError());
     util::hipCheck(hipEventRecord(end));
     util::hipCheck(hipDeviceSynchronize());
 
@@ -87,48 +77,12 @@ namespace benchmark {
 
         const size_t arraySizeBytes = l2SizeBytes * 0.8; // 80% L2 size, L1 is bypassed
 
-        uint32_t minThreads = util::getWarpSize();
-        uint32_t maxThreads = util::getMaxThreadsPerBlock();
-
-        uint32_t minBlocks = util::getNumberOfComputeUnits();
-        uint32_t maxBlocks = util::getNumberOfComputeUnits() * util::getMaxBlocksPerMultiProcessor();
-
-        size_t minReps = MIN_REPS;
-        size_t maxReps = MAX_REPS;
-
-        CacheBandwidthResult result{};
-        result.measuredBandwidth = 0.0;
-        result.dataBytes = arraySizeBytes;
-        result.cycles = 0;
-        result.time = 0.0;
-        result.numThreads = 0;
-        result.numBlocks = 0;
-        result.numReps = 0;
-
-        // Precompute full block/thread/rep axes for CSV alignment.
-        // Sweep runs descending; axes remain ascending for unchanged grid layout.
-        for (uint32_t numBlocks = minBlocks; numBlocks <= maxBlocks; numBlocks *= 2)
-        {
-            result.blocksTested.push_back(numBlocks);
-        }
-        for (uint32_t numThreads = minThreads; numThreads <= maxThreads; numThreads *= 2)
-        {
-            result.threadsTested.push_back(numThreads);
-        }
-        for (size_t reps = minReps; reps <= maxReps; reps *= 2)
-        {
-            result.repsTested.push_back(reps);
-        }
+        CacheBandwidthResult result(arraySizeBytes, 0);
+        initMultiBlockGrid(result, MIN_REPS, MAX_REPS);
 
         const size_t numBlockSteps = result.blocksTested.size();
         const size_t numThreadSteps = result.threadsTested.size();
         const size_t numRepSteps = result.repsTested.size();
-        // NaN marks configurations skipped by early termination, distinguishing them from
-        // genuine 0 GiB/s measurements.
-        const double UNMEASURED = std::numeric_limits<double>::quiet_NaN();
-
-        result.bandwidth3D.assign(numBlockSteps, std::vector<std::vector<double>>(
-            numThreadSteps, std::vector<double>(numRepSteps, UNMEASURED)));
 
         // Lowest thread count worth measuring; used as an index into threadsTested.
         // Once a thread sweep terminates, this and lower counts are skipped for lower blocks.

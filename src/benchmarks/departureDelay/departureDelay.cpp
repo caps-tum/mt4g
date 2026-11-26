@@ -8,7 +8,6 @@
 #include <optional>
 
 
-static constexpr auto MS_PER_SECOND = 1000.0;// ms
 static constexpr auto ROUNDS = DEFAULT_ROUNDS;// rounds
 static constexpr auto SCRATCH_SIZE = DEFAULT_SCRATCH_SIZE;
 

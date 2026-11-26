@@ -1,113 +1,123 @@
 #include "benchmarks/benchmark.hpp"
+#include "benchmarks/bandwidth/loadBatch.hpp"
+#include "benchmarks/bandwidth/bandwidthSweep.hpp"
 #include "utils/util.hpp"
 
 #include <vector>
 #include <cstdlib>
 #include <string>
+#include <algorithm>
+#include <stdexcept>
 
-static constexpr auto WARMUP_REPS = 8;
+static constexpr auto WARMUP_REPS = 128;
+static_assert(MIN_REPS % MAX_LOADS_PER_BATCH_SINGLE_BLOCK == 0 && WARMUP_REPS % MAX_LOADS_PER_BATCH_SINGLE_BLOCK == 0, "loads per batch must divide the repetitions");
 
 
-
-// Texture cache read bandwidth benchmark for a single SM. Mirrors the L1 benchmark 
-// but measures the texture fetch path (tex1Dfetch) instead of normal global loads.
-__global__ void textureReadBandwidthKernel([[maybe_unused]] hipTextureObject_t tex, uint32_t* __restrict__ dst, uint64_t* __restrict__ timing_result, size_t elementsPerThread, size_t reps)
+#ifdef __HIP_PLATFORM_NVIDIA__
+// Like the NVIDIA L1 batch, but through the texture path (tex1Dfetch).
+// All four components are used, otherwise the fetch is narrowed to one component.
+template <uint32_t LoadsPerBatch>
+__device__ __forceinline__ uint32_t nvidiaTextureLoadBatch(hipTextureObject_t tex, size_t index)
 {
-    const uint32_t tid = threadIdx.x;
-    const size_t base = static_cast<size_t>(tid) * elementsPerThread;
-
     uint32_t dummy = 0;
 
-    // Warm up the texture / unified cache
-    for (size_t rep = 0; rep < WARMUP_REPS; ++rep)
+    #pragma unroll
+    for (uint32_t k = 0; k < LoadsPerBatch; ++k)
     {
-        for (size_t i = 0; i < elementsPerThread; ++i)
-        {
-            #ifdef __HIP_PLATFORM_NVIDIA__
-            int4 loaded = tex1Dfetch<int4>(tex, static_cast<int>(base + i));
-            dummy ^= static_cast<uint32_t>(loaded.x);
-            #endif
-        }
+        const int4 loaded = tex1Dfetch<int4>(tex, static_cast<int>(index + k * (BATCH_STRIDE_BYTES / sizeof(int4))));
+        dummy ^= static_cast<uint32_t>(loaded.x ^ loaded.y ^ loaded.z ^ loaded.w);
     }
 
-    uint64_t start = 0, end = 0;
+    return dummy;
+}
+#endif
+
+
+template <uint32_t LoadsPerBatch>
+__global__ void textureReadBandwidthKernel([[maybe_unused]] hipTextureObject_t tex, uint32_t* __restrict__ dst, uint64_t* __restrict__ timingResult, size_t numElements, size_t reps)
+{
+    CHECK_LOADS_PER_BATCH(LoadsPerBatch, MAX_LOADS_PER_BATCH_SINGLE_BLOCK);
+    const uint32_t blockStride = blockDim.x;
+
+    uint32_t dummy = 0;
+    uint64_t start = 0;
 
     __syncthreads();
-
-    if (tid == 0)
-    {
-        #ifdef __HIP_PLATFORM_NVIDIA__
-        __asm__ volatile (
-            "mov.u64 %0, %%clock64;\n\t"
-            : "=l"(start)
-            :
-            : "memory"
-        );
-        #endif
-    }
-
+    if (threadIdx.x == 0) { start = __globaltimer(); }
     __syncthreads();
 
-    for (size_t rep = 0; rep < reps; ++rep)
+    for (size_t rep = 0; rep < reps; rep += LoadsPerBatch)
     {
-        for (size_t i = 0; i < elementsPerThread; ++i)
+        for (size_t i = threadIdx.x; i < numElements; i += blockStride)
         {
             #ifdef __HIP_PLATFORM_NVIDIA__
-            int4 loaded = tex1Dfetch<int4>(tex, static_cast<int>(base + i));
-            dummy ^= static_cast<uint32_t>(loaded.x);
+            dummy ^= nvidiaTextureLoadBatch<LoadsPerBatch>(tex, i);
             #endif
         }
     }
 
     __syncthreads();
+    if (threadIdx.x == 0) { *timingResult = __globaltimer() - start; }
 
-    if (tid == 0)
-    {
-        #ifdef __HIP_PLATFORM_NVIDIA__
-        __asm__ volatile (
-            "mov.u64 %0, %%clock64;\n\t"
-            : "=l"(end)
-            :
-            : "memory"
-        );
-        #endif
-
-        *timing_result = end - start;
-    }
-
-    dst[tid] = dummy; // prevent dead code elimination
+    dst[threadIdx.x] = dummy; // prevent dead code elimination
 }
 
 
-static std::tuple<uint64_t, double, double> textureReadBandwidthLauncher(size_t arraySizeBytes, uint32_t numThreads, size_t reps)
+// The kernel instance for a number of loads per batch
+static auto textureReadBandwidthKernelFor(uint32_t loadsPerBatch)
 {
-    size_t totalElements = arraySizeBytes / sizeof(int4);
-    size_t elementsPerThread = totalElements / numThreads;
+    switch (loadsPerBatch)
+    {
+        case 1:    return textureReadBandwidthKernel<1>;
+        case 2:    return textureReadBandwidthKernel<2>;
+        case 4:    return textureReadBandwidthKernel<4>;
+        case 8:    return textureReadBandwidthKernel<8>;
+        case 16:   return textureReadBandwidthKernel<16>;
+        case 32:   return textureReadBandwidthKernel<32>;
+        case 64:   return textureReadBandwidthKernel<64>;
+        case 128:  return textureReadBandwidthKernel<128>;
+    }
+    throw std::invalid_argument("Unsupported number of loads per batch: " + std::to_string(loadsPerBatch));
+}
 
-    int4 *d_srcArr = util::allocateGPUMemory<int4>(totalElements);
+
+// One block, timed inside the kernel with the constant-rate timer, so the launch overhead is not measured
+static std::tuple<double, double> textureReadBandwidthLauncher(size_t arraySizeBytes, uint32_t numThreads, uint32_t loadsPerBatch, size_t reps)
+{
+    const size_t numElements = arraySizeBytes / sizeof(int4);
+    const size_t numElementsPadded = (arraySizeBytes + BATCH_PADDING_BYTES) / sizeof(int4);
+    const auto kernel = textureReadBandwidthKernelFor(loadsPerBatch);
+
+    int4 *d_srcArr = util::allocateGPUMemory<int4>(numElementsPadded);
     uint32_t *d_dstArr = util::allocateGPUMemory<uint32_t>(numThreads);
     uint64_t *d_timingResult = util::allocateGPUMemory<uint64_t>(1);
 
-    hipTextureObject_t tex = util::createTextureObject<int4>(d_srcArr, totalElements);
+    hipTextureObject_t tex = util::createTextureObject<int4>(d_srcArr, numElementsPadded);
 
-    // Run the kernel
-    textureReadBandwidthKernel<<<1, numThreads>>>(tex, d_dstArr, d_timingResult, elementsPerThread, reps);
+    double timeS = 0.0;
 
-    // Get the timings from the device
-    std::vector<uint64_t> timingResult = util::copyFromDevice<uint64_t>(d_timingResult, 1);
+    // warm up; a block size that needs more registers than available does not launch
+    kernel<<<1, numThreads>>>(tex, d_dstArr, d_timingResult, numElements, WARMUP_REPS);
+    const hipError_t launchError = hipGetLastError();
+
+    if (launchError != hipErrorLaunchOutOfResources)
+    {
+        util::hipCheck(launchError);
+
+        kernel<<<1, numThreads>>>(tex, d_dstArr, d_timingResult, numElements, reps);
+        util::hipCheck(hipGetLastError());
+        util::hipCheck(hipStreamSynchronize(0));
+        timeS = globalTimerSeconds(d_timingResult);
+    }
 
     util::hipCheck(hipDestroyTextureObject(tex));
     util::hipCheck(hipFree(d_srcArr));
     util::hipCheck(hipFree(d_dstArr));
     util::hipCheck(hipFree(d_timingResult));
 
-    // calculate the bandwidth
-    double gpuClockHz = util::getClockRateKHz() * 1000.0;
-    double dataGiB = (double) arraySizeBytes * reps / (1 * GiB);
-    double timeS = (double) timingResult[0] / gpuClockHz;
+    const double dataGiB = (double) arraySizeBytes * reps / (1 * GiB);
 
-    // return (cycles, time in seconds, measured bandwidth)
-    return {timingResult[0], timeS, dataGiB / timeS};
+    return {timeS, timeS > 0.0 ? dataGiB / timeS : 0.0};
 }
 
 
@@ -122,14 +132,7 @@ namespace benchmark
             size_t minReps = MIN_REPS;
             size_t maxReps = MAX_REPS;
 
-            CacheBandwidthResult result{};
-            result.measuredBandwidth = 0.0;
-            result.dataBytes = arraySizeBytes;
-            result.cycles = 0;
-            result.time = 0.0;
-            result.numThreads = 0;
-            result.numBlocks = 1;
-            result.numReps = 0;
+            CacheBandwidthResult result(arraySizeBytes, 1);
 
             for (uint32_t numThreads = minNumThreads; numThreads <= maxNumThreads; numThreads *= 2)
             {
@@ -144,18 +147,25 @@ namespace benchmark
                         result.repsTested.push_back(reps);
                     }
 
-                    auto [cycles, timeS, bandwidth] = textureReadBandwidthLauncher(arraySizeBytes, numThreads, reps);
+                    double bestBandwidth = 0.0;
 
-                    bandwidthResults.push_back(bandwidth);
-
-                    if (bandwidth > result.measuredBandwidth)
+                    for (uint32_t loadsPerBatch = 1; loadsPerBatch <= MAX_LOADS_PER_BATCH_SINGLE_BLOCK; loadsPerBatch *= 2)
                     {
-                        result.measuredBandwidth = bandwidth;
-                        result.cycles = cycles;
-                        result.time = timeS;
-                        result.numThreads = numThreads;
-                        result.numReps = reps;
+                        auto [timeS, bandwidth] = textureReadBandwidthLauncher(arraySizeBytes, numThreads, loadsPerBatch, reps);
+
+                        bestBandwidth = std::max(bestBandwidth, bandwidth);
+
+                        if (bandwidth > result.measuredBandwidth)
+                        {
+                            result.measuredBandwidth = bandwidth;
+                            result.time = timeS;
+                            result.numThreads = numThreads;
+                            result.numReps = reps;
+                            result.loadsPerBatch = loadsPerBatch;
+                        }
                     }
+
+                    bandwidthResults.push_back(bestBandwidth);
                 }
 
                 result.bandwidthGridGiBs.push_back(bandwidthResults);

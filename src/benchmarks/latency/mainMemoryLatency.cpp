@@ -7,6 +7,7 @@
 #include <optional>
 #include <iostream>
 #include <stdexcept>
+#include <utility>
 
 static constexpr auto SAMPLE_SIZE = 2048;// 2048 Loads should suffice to rule out random flukes
 static constexpr auto WARMUP_HOPS = SAMPLE_SIZE;
@@ -16,7 +17,7 @@ static constexpr auto DEFAULT_STRIDE = 256;// used if no cache line size is repo
 // The chain stays in a window of this size before moving on: few pages for the TLB, but still many DRAM rows per bank
 static constexpr auto CHASE_WINDOW_SIZE = 8 * MiB;
 
-__global__ void mainMemoryLatencyKernel(uint32_t *pChaseArray, uint32_t *timingResults) {
+__global__ void mainMemoryLatencyKernel(uint32_t *pChaseArray, uint32_t *timingResults, uint64_t *clockCalibration) {
     uint32_t index = 0;
     __shared__ uint64_t s_timings[SAMPLE_SIZE];
 
@@ -24,6 +25,9 @@ __global__ void mainMemoryLatencyKernel(uint32_t *pChaseArray, uint32_t *timingR
     for (uint32_t i = 0; i < WARMUP_HOPS; ++i) {
         index = __forceBypassAllCacheReads(pChaseArray, index);
     }
+
+    const uint64_t wallClockStart = __globaltimer();
+    const uint64_t cyclesStart = __timer();
 
     // Do not load from the CU cache or L2.
     for (uint32_t i = 0; i < SAMPLE_SIZE; ++i) {
@@ -34,9 +38,16 @@ __global__ void mainMemoryLatencyKernel(uint32_t *pChaseArray, uint32_t *timingR
         s_timings[i] = end - start;
     }
 
+    const uint64_t cyclesEnd = __timer();
+    const uint64_t wallClockEnd = __globaltimer();
+
     for (uint32_t i = 0; i < SAMPLE_SIZE; ++i) {
         timingResults[i] = s_timings[i];
     }
+
+    // cycles and constant-rate timer ticks of the measurement, for the clock during it
+    clockCalibration[0] = static_cast<uint32_t>(cyclesEnd - cyclesStart); // %clock on NVIDIA has 32 bits
+    clockCalibration[1] = wallClockEnd - wallClockStart;
 
     // final index, checked on the host
     timingResults[SAMPLE_SIZE] = index;
@@ -91,8 +102,9 @@ static size_t chaseArraySizeBytes(std::optional<size_t> lastLevelCacheSizeBytes)
     return util::max(MIN_ARRAY_SIZE, LLC_SIZE_FACTOR * lastLevelCacheSizeBytes.value_or(0));
 }
 
-std::vector<uint32_t> mainMemoryLatencyLauncher(size_t arraySizeBytes, size_t strideBytes,
-                                                util::AllocatorType allocType) {
+// Returns the timings and the core clock in MHz during the measurement
+std::pair<std::vector<uint32_t>, double> mainMemoryLatencyLauncher(size_t arraySizeBytes, size_t strideBytes,
+                                                                   util::AllocatorType allocType) {
     util::hipDeviceReset(); 
 
     std::vector<uint32_t> hostChaseArray = util::generateRandomizedPChaseArray(arraySizeBytes, strideBytes, CHASE_WINDOW_SIZE);
@@ -119,9 +131,10 @@ std::vector<uint32_t> mainMemoryLatencyLauncher(size_t arraySizeBytes, size_t st
     util::hipCheck(hipFree(d_evictionSink));
 
     uint32_t *d_timingResults = util::allocateGPUMemory(SAMPLE_SIZE + 1);
+    uint64_t *d_clockCalibration = util::allocateGPUMemory<uint64_t>(2);
 
     util::hipCheck(hipDeviceSynchronize());
-    mainMemoryLatencyKernel<<<1, 1>>>(d_pChaseArray, d_timingResults);
+    mainMemoryLatencyKernel<<<1, 1>>>(d_pChaseArray, d_timingResults, d_clockCalibration);
 
     std::vector<uint32_t> timingResultBuffer = util::copyFromDevice(d_timingResults, SAMPLE_SIZE + 1);
 
@@ -132,9 +145,13 @@ std::vector<uint32_t> mainMemoryLatencyLauncher(size_t arraySizeBytes, size_t st
         throw std::runtime_error("Main memory latency: the GPU did not follow the p-chase chain, the measurement is invalid");
     }
 
+    std::vector<uint64_t> clockCalibration = util::copyFromDevice(d_clockCalibration, 2);
+    const double clockMHz = util::measuredClockMHz(clockCalibration[0], clockCalibration[1]);
+
     util::freeMemory(d_pChaseArray, allocType);
     util::hipCheck(hipFree(d_timingResults));
-    return timingResultBuffer;
+    util::hipCheck(hipFree(d_clockCalibration));
+    return {timingResultBuffer, clockMHz};
 }
 
 namespace benchmark {
@@ -142,7 +159,11 @@ namespace benchmark {
     CacheLatencyResult measureMainMemoryLatency(util::AllocatorType allocType, std::optional<size_t> cacheLineSizeBytes,
                                                 std::optional<size_t> lastLevelCacheSizeBytes) {
 
-        auto timings = mainMemoryLatencyLauncher(chaseArraySizeBytes(lastLevelCacheSizeBytes), chaseStrideBytes(cacheLineSizeBytes), allocType);
+        auto [timings, clockMHz] = mainMemoryLatencyLauncher(chaseArraySizeBytes(lastLevelCacheSizeBytes), chaseStrideBytes(cacheLineSizeBytes), allocType);
+        if (clockMHz < 0.9 * util::getClockRateKHz() / 1000.0) {
+            std::cout << "[Main Memory] The GPU ran at " << clockMHz << " MHz during the latency measurement, below its peak clock of "
+                      << util::getClockRateKHz() / 1000 << " MHz" << std::endl;
+        }
 
         CacheLatencyResult result {
             timings,
@@ -153,7 +174,8 @@ namespace benchmark {
             timings.size(),
             SAMPLE_SIZE,
             CYCLE,
-            PCHASE
+            PCHASE,
+            clockMHz
         };
 
         return result;

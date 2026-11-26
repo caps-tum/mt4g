@@ -4,20 +4,10 @@
 
 namespace benchmark {
     /**
-     * @brief Measure achievable L1 read bandwidth of a single CU (one block), sweeping threads and reps.
+     * @brief Measure achievable L1 read bandwidth of a single CU / SM (one block), sweeping threads, reps and loads per batch.
      *
      * @param arraySizeBytes Size of the array in bytes used for the test.
      * @return Bandwidth in GiB/s and the optimal configuration.
      */
     CacheBandwidthResult measureL1ReadBandwidthSweep(size_t arraySizeBytes);
-
-    namespace amd {
-        /**
-         * @brief Measure achievable L1 read bandwidth on AMD GPUs with a single block pinned to one CU, sweeping threads and reps.
-         *
-         * @param arraySizeBytes Size of the array in bytes used for the test.
-         * @return Bandwidth in GiB/s and the optimal configuration.
-         */
-        CacheBandwidthResult measureL1ReadBandwidthSweep(size_t arraySizeBytes);
-    }
 }
